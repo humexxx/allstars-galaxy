@@ -40,10 +40,17 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+  InputGroupText,
+} from "@/components/ui/input-group";
 import { Mono, Text } from "@/components/ui/typography";
 
 import { createPlanAction, updatePlanAction } from "@/app/actions/finance-plans";
 import { cn } from "@/lib/utils";
+import { PLAN_COLORS } from "@/lib/finance/plan-colors";
 import {
   createFinancePlanSchema,
   type CreateFinancePlanData,
@@ -66,6 +73,8 @@ type PlanFormProps = {
    *  their zone: a new plan starts in THEIR month. `new Date()` read in UTC
    *  started an evening plan in Costa Rica a month late. */
   today?: Date;
+  /** A new plan's colour: the first palette slot the user's plans leave free. */
+  defaultColor?: string;
 };
 
 // The month input holds a "YYYY-MM" string; the schema's z.coerce.date()
@@ -76,13 +85,7 @@ function toMonthInputValue(date: Date): string {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-const COLORS = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
-];
+const COLORS = PLAN_COLORS;
 
 // 60% is the recommended starting point for new plans — aggressive enough to
 // meaningfully shorten the debt timeline without starving savings.
@@ -107,12 +110,13 @@ export function PlanForm({
   current,
   investmentMethods,
   today,
+  defaultColor,
 }: PlanFormProps): React.ReactElement {
   const router = useRouter();
-  const [includePortfolio, setIncludePortfolio] = useState(
-    plan?.includePortfolio ?? false
-  );
-  const [color, setColor] = useState(plan?.color ?? COLORS[0]);
+  // No longer a choice on screen (2026-11-08): a plan keeps what it has, and
+  // a new one counts the portfolio.
+  const includePortfolio = plan?.includePortfolio ?? true;
+  const [color, setColor] = useState<string>(plan?.color ?? defaultColor ?? COLORS[0]);
 
   // Surplus acceleration: stored as numeric string 0..1 in the DB. We convert to
   // an integer 0..100 for the slider UX.
@@ -140,6 +144,20 @@ export function PlanForm({
   const [investMethodId, setInvestMethodId] = useState<string>(
     plan?.autoInvestMethodId ?? investmentMethods[0]?.id ?? ""
   );
+  // Where the invested remainder grows: a portfolio method's ROI, or a
+  // monthly return the user sets (typed as a percentage, stored as a decimal).
+  const [investTarget, setInvestTarget] = useState<"method" | "custom">(
+    plan?.autoInvestCustomRate != null ? "custom" : "method"
+  );
+  const [customRatePct, setCustomRatePct] = useState<string>(
+    plan?.autoInvestCustomRate != null
+      ? String(Math.round(parseFloat(plan.autoInvestCustomRate) * 1_000_000) / 10_000)
+      : ""
+  );
+  const customRate = Number(customRatePct);
+  const customRateValid =
+    customRatePct.trim() !== "" && Number.isFinite(customRate) && customRate >= 0 && customRate <= 100;
+  const investReady = investTarget === "custom" ? customRateValid : !!investMethodId;
 
   // An existing plan's balance fields hold where it stands TODAY. Frozen at
   // mount, like the form's own defaults: a figure is an edit when it differs
@@ -175,7 +193,12 @@ export function PlanForm({
 
   const onSubmit = async (data: CreateFinancePlanData): Promise<void> => {
     const surplusValue = accelerate ? (surplusPct / 100).toFixed(4) : "0";
-    const investValue = autoInvest && investMethodId ? (investPct / 100).toFixed(4) : "0";
+    if (autoInvest && investTarget === "custom" && !customRateValid) {
+      toast.error("Enter a monthly return between 0 and 100%.");
+      return;
+    }
+    const investing = autoInvest && investReady;
+    const investValue = investing ? (investPct / 100).toFixed(4) : "0";
     const payload = {
       ...data,
       name: data.name.trim(),
@@ -184,7 +207,9 @@ export function PlanForm({
       surplusToDebtsPercent: surplusValue,
       debtStrategy: strategy,
       autoInvestPercent: investValue,
-      autoInvestMethodId: autoInvest && investMethodId ? investMethodId : null,
+      autoInvestMethodId: investing && investTarget === "method" ? investMethodId : null,
+      autoInvestCustomRate:
+        investing && investTarget === "custom" ? (customRate / 100).toFixed(6) : null,
       color,
     };
 
@@ -289,7 +314,7 @@ export function PlanForm({
               </Field>
               <Field className="gap-2" data-invalid={!!errors.initialSavings || undefined}>
                 <FieldLabel htmlFor="plan-savings">
-                  {plan ? "Savings today" : "Initial savings"}
+                  {plan ? "Cash today" : "Initial cash"}
                 </FieldLabel>
                 <Input
                   id="plan-savings"
@@ -346,25 +371,6 @@ export function PlanForm({
                   ))}
                 </ToggleGroup>
               </Field>
-              <Field
-                orientation="horizontal"
-                className="justify-between rounded-lg border p-3 sm:col-span-2"
-              >
-                <FieldContent>
-                  <FieldLabel htmlFor="plan-include-portfolio" className="cursor-pointer">
-                    Include current portfolio in net worth
-                  </FieldLabel>
-                  <FieldDescription>
-                    Adds your live portfolio value to the projection&apos;s net worth line.
-                  </FieldDescription>
-                </FieldContent>
-                <Switch
-                  id="plan-include-portfolio"
-                  checked={includePortfolio}
-                  onCheckedChange={setIncludePortfolio}
-                />
-              </Field>
-
               <Field
                 className="gap-2 sm:col-span-2"
                 data-invalid={!!errors.confirmationDayOfMonth || undefined}
@@ -500,8 +506,9 @@ export function PlanForm({
           <CardTitle as="h2">Auto-invest</CardTitle>
           <CardDescription>
             After surplus → debts runs, route part of what&apos;s left into a compounding
-            investments bucket modelled against an investment method&apos;s monthly ROI.
-            The investments balance grows every month and counts toward your net worth.
+            investments bucket — at a portfolio method&apos;s monthly ROI, or at a return
+            you set for any other investment. It grows every month and counts toward
+            your net worth (on the dashboard, inside Portfolio).
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
@@ -547,6 +554,59 @@ export function PlanForm({
               </div>
             </div>
 
+            <FieldSet className="gap-3">
+              <FieldLegend variant="label" className="mb-3">
+                Invest into
+              </FieldLegend>
+              <RadioGroup
+                value={investTarget}
+                onValueChange={(v) => setInvestTarget(v as "method" | "custom")}
+                className="grid gap-2 sm:grid-cols-2"
+              >
+                <label
+                  htmlFor="invest-target-method"
+                  className="flex cursor-pointer items-start gap-3 rounded-lg border p-3"
+                >
+                  <RadioGroupItem id="invest-target-method" value="method" className="mt-0.5" />
+                  <div>
+                    <Text variant="body" weight="medium">Portfolio method</Text>
+                    <Text variant="small">Grows at the method&apos;s monthly ROI.</Text>
+                  </div>
+                </label>
+                <label
+                  htmlFor="invest-target-custom"
+                  className="flex cursor-pointer items-start gap-3 rounded-lg border p-3"
+                >
+                  <RadioGroupItem id="invest-target-custom" value="custom" className="mt-0.5" />
+                  <div>
+                    <Text variant="body" weight="medium">Custom return</Text>
+                    <Text variant="small">Any other investment, at a monthly return you set.</Text>
+                  </div>
+                </label>
+              </RadioGroup>
+            </FieldSet>
+
+            {investTarget === "custom" ? (
+              <Field className="gap-2" data-invalid={(autoInvest && !customRateValid) || undefined}>
+                <FieldLabel htmlFor="plan-invest-custom-rate">Monthly return</FieldLabel>
+                <InputGroup>
+                  <InputGroupInput
+                    id="plan-invest-custom-rate"
+                    inputMode="decimal"
+                    placeholder="1"
+                    value={customRatePct}
+                    onChange={(e) => setCustomRatePct(e.target.value)}
+                    aria-invalid={(autoInvest && !customRateValid) || undefined}
+                  />
+                  <InputGroupAddon align="inline-end">
+                    <InputGroupText>%/mo</InputGroupText>
+                  </InputGroupAddon>
+                </InputGroup>
+                <FieldDescription>
+                  1 means 1% a month (about 12.7% a year), compounded on the bucket.
+                </FieldDescription>
+              </Field>
+            ) : (
             <Field className="gap-2">
               <FieldLabel htmlFor="plan-invest-method">Investment method</FieldLabel>
               <Select value={investMethodId} onValueChange={setInvestMethodId}>
@@ -577,6 +637,7 @@ export function PlanForm({
                 hidden from your real portfolio.
               </FieldDescription>
             </Field>
+            )}
 
             <Field
               className="gap-2"
@@ -599,7 +660,7 @@ export function PlanForm({
               />
               <FieldDescription>
                 {plan
-                  ? "Where the plan has the investments bucket today. Changing it restates the opening balances as of today, like Savings today."
+                  ? "Where the plan has the investments bucket today. Changing it restates the opening balances as of today, like Cash today."
                   : "What the investments bucket holds on the day you create the plan."}
               </FieldDescription>
             </Field>

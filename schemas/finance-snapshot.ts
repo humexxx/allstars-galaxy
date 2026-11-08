@@ -8,6 +8,7 @@ export const financeSnapshotSourceSchema = z.enum([
   "system_cron",
   "confirmation",
   "manual",
+  "movement",
 ]);
 
 export type FinanceSnapshotSource = z.infer<typeof financeSnapshotSourceSchema>;

@@ -1,10 +1,11 @@
 "use client";
 
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
+  Area,
   CartesianGrid,
+  ComposedChart,
   Line,
-  LineChart,
   ReferenceLine,
   XAxis,
   YAxis,
@@ -35,20 +36,66 @@ import {
   formatCurrency,
   formatCurrencyCompact,
   formatSignedCurrency,
+  moneySign,
 } from "@/lib/utils/format";
+import { formatProjectionMonth } from "@/lib/utils/date";
 import type { ChartConfig } from "@/types/chart";
 import type { FinancePlan } from "@/types/finance";
 
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
+import { dashboardSeries } from "./dashboard-finance-series";
+import { splitEasedStroke, STAGGER_MS, sweepEasing, SWEEP_MS } from "./dashboard-motion";
+
+/**
+ * The parts wear the dashboard card's colours here too, so a colour means the
+ * same thing on every finance chart: net worth green, the portfolio cyan,
+ * debt red.
+ */
+const NET_WORTH = dashboardSeries("netWorth").color;
+const PORTFOLIO = dashboardSeries("investments").color;
+const DEBT = dashboardSeries("debt").color;
+const OWED = dashboardSeries("receivables").color;
+const CASH = dashboardSeries("savings").color;
+
+// recharts types `animationEasing` as the named curves only, but its
+// animator (react-smooth) takes any t → progress function.
+type Easing = "ease-out";
+const asEasing = (fn: (t: number) => number): Easing => fn as unknown as Easing;
+
+/**
+ * Where a series' fade starts, as a share of the chart's height: at the
+ * series' own peak. The fades span the whole chart (so a series' past and
+ * projection share one shade across today); started at the chart's top
+ * instead, a series far below it — debt under a growing net worth — got only
+ * the faint end of its fade.
+ */
+function fadeStart(values: readonly (number | null | undefined)[], top: number, bottom: number): string {
+  const finite = values.filter((v): v is number => v != null && Number.isFinite(v));
+  if (finite.length === 0 || top <= bottom) return "0%";
+  const peak = Math.max(...finite);
+  return `${Math.min(100, Math.max(0, ((top - peak) / (top - bottom)) * 100))}%`;
+}
+
 // Format projection dates in UTC — the projection generates months at UTC
 // midnight, so any local timezone with a negative offset would shift the
 // formatted month back a day and show e.g. "Apr" for a "May 2026" bucket.
-const MONTH_FORMATTER = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  year: "2-digit",
+const LONG_MONTH = new Intl.DateTimeFormat("en-US", {
+  month: "long",
+  year: "numeric",
   timeZone: "UTC",
 });
+const TODAY_DAY = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+/** A plan point's own day: each is the balance on the anchor day ("Oct 5, 2026"). */
+const POINT_DAY = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+/** Axis month: "Nov ’26" (see `formatProjectionMonth`). */
+const MONTH_FORMATTER = { format: formatProjectionMonth };
 
 
 // Stable chart config — the line stroke is overridden per-plan inside the
@@ -186,6 +233,9 @@ type ChartRow = {
   pastValue: number | null;
   futureValue: number | null;
   rawValue: number;
+  /** See `ChartPoint.skipped`. */
+  skipped?: boolean;
+  savings?: number;
   totalDebt?: number;
   investments?: number;
   /** Base plan's net worth at this period (scenario ghost line). */
@@ -194,13 +244,20 @@ type ChartRow = {
   portfolioPast: number | null;
   portfolioFuture: number | null;
   portfolioRaw: number | null;
+  /** Debt still owed, split past/future: it falls to zero as it is paid. */
+  debtPast: number | null;
+  debtFuture: number | null;
+  /** Still owed to the user, inside net worth; split past/future like debt. */
+  receivables?: number;
+  owedPast: number | null;
+  owedFuture: number | null;
 };
 
 // Custom tooltip. The past (solid) and future (dashed) series OVERLAP at the
 // boundary index (today) to keep the line continuous, so that point would show
 // "Net worth" twice with the default content. We instead read the underlying
 // data row ONCE and render: Net worth always, Debt only when > 0, Investments
-// only when > 0. Debt/investments ride along on the row but are NOT plotted.
+// only when > 0. The bucket of investments rides along unplotted.
 function PointTooltip(props: {
   active?: boolean;
   payload?: Array<{ value: number | null; payload: ChartRow }>;
@@ -213,8 +270,10 @@ function PointTooltip(props: {
   if (!row) return null;
 
   const debt = row.totalDebt ?? 0;
-  const investments = row.investments ?? 0;
-  const portfolio = row.portfolioRaw;
+  // The plotted portfolio line already holds what the Portfolio card adds up
+  // (the plan's own investments and the managed margin); adding the
+  // investments again counted them twice.
+  const portfolioTotal = row.portfolioRaw ?? row.investments ?? 0;
   const ghost = row.ghostValue;
   const delta = ghost != null ? row.rawValue - ghost : null;
 
@@ -228,28 +287,26 @@ function PointTooltip(props: {
           value={formatMoneyFull(row.rawValue)}
           valueClass={row.rawValue < 0 ? "text-destructive" : "text-success"}
         />
-        {debt > 0 && (
+        {/* Our own investments plus the managed margin (positions less what
+            is owed to the investors): negative while the positions are worth
+            less than the promise. */}
+        {moneySign(portfolioTotal) !== 0 && (
           <TooltipRow
-            swatch="var(--destructive)"
-            label="Debt"
-            value={formatMoneyFull(debt)}
-            valueClass="text-destructive"
-          />
-        )}
-        {investments > 0 && (
-          <TooltipRow
-            swatch="var(--success)"
-            label="Investments"
-            value={formatMoneyFull(investments)}
-            valueClass="text-success"
-          />
-        )}
-        {portfolio != null && portfolio > 0 && (
-          <TooltipRow
-            swatch="var(--chart-4)"
+            swatch={PORTFOLIO}
             label="Portfolio"
-            value={formatMoneyFull(portfolio)}
+            value={formatMoneyFull(portfolioTotal)}
+            valueClass={portfolioTotal < 0 ? "text-destructive" : undefined}
           />
+        )}
+        {/* Never under zero (see `shownCash`). */}
+        {moneySign(row.savings ?? 0) > 0 && (
+          <TooltipRow swatch={CASH} label="Cash" value={formatMoneyFull(row.savings ?? 0)} />
+        )}
+        {(row.receivables ?? 0) > 0 && (
+          <TooltipRow swatch={OWED} label="Owed to you" value={formatMoneyFull(row.receivables ?? 0)} />
+        )}
+        {debt > 0 && (
+          <TooltipRow swatch={DEBT} label="Debt" value={formatMoneyFull(debt)} valueClass="text-destructive" />
         )}
         {ghost != null && delta != null && (
           <TooltipRow
@@ -269,7 +326,7 @@ type DotRenderProps = {
   cx?: number;
   cy?: number;
   index?: number;
-  payload?: { idx?: number };
+  payload?: { idx?: number; skipped?: boolean };
 };
 
 // Pulsing "you are here" marker for today's point: a solid dot with an
@@ -311,9 +368,15 @@ function TodayPulseDot({
 type ChartPoint = {
   date: Date;
   netWorth: number;
-  /** Carried for the hover tooltip only — NOT plotted as lines. */
+  /** Drawn as its own falling line when any debt is in range. */
   totalDebt?: number;
+  /** Owed to the user, inside `netWorth`: drawn like debt, as on the dashboard. */
+  receivables?: number;
+  /** Carried for the hover tooltip only. */
   investments?: number;
+  savings?: number;
+  /** A period never confirmed: on the axis, no dot, figures interpolated. */
+  skipped?: boolean;
 };
 
 type ProjectionChartProps = {
@@ -332,16 +395,17 @@ type ProjectionChartProps = {
    *  moves over the chart, and `null` when it leaves. Lets the page preview
    *  that period's figures elsewhere (e.g. the sidebar cards). */
   onHoverIndex?: (idx: number | null) => void;
-  /** Fires with the clicked point's index. Hover previews a period; this is the
-   *  commit — the page opens a dialog for it. Omit to leave the chart
-   *  read-only (no pointer cursor). */
+  /** Fires with the clicked point's index: the page shows that period. Omit to
+   *  leave the chart read-only (no pointer cursor). */
   onSelectIndex?: (idx: number) => void;
+  /** The point the page shows, marked with a vertical line. */
+  selectedIndex?: number | null;
   /** Base plan's net worth aligned per point (scenario ghost line). Nulls skip
    *  the point. Omit to render no ghost. */
   ghostValues?: (number | null)[];
   /** Tooltip label for the ghost series (the base plan's name). */
   ghostLabel?: string;
-  /** Portfolio value aligned per point (own series in var(--chart-4)). Nulls
+  /** Portfolio value aligned per point (its own cyan series). Nulls
    *  skip the point. Omit to render no portfolio series. */
   portfolioValues?: (number | null)[];
   /** Net-worth milestones to annotate, from the user's global preference.
@@ -368,6 +432,7 @@ export const ProjectionChart = memo(function ProjectionChart({
   heightClass = "h-80",
   onHoverIndex,
   onSelectIndex,
+  selectedIndex = null,
   ghostValues,
   ghostLabel,
   portfolioValues,
@@ -384,10 +449,13 @@ export const ProjectionChart = memo(function ProjectionChart({
     lastHoverRef.current = idx;
     onHoverIndex?.(idx);
   };
-  // Line color follows the plan's chosen colour token so users can tell their
-  // plans apart at a glance. Falls back to the chart-1 token when the plan
-  // doesn't have one set yet.
-  const lineColor = color || "var(--chart-1)";
+  // Net worth is green on a plan's own page, as on the dashboard; a plan's
+  // colour (its identity among plans) is for the list and compare charts.
+  const lineColor = color || NET_WORTH;
+  const reducedMotion = usePrefersReducedMotion();
+  // Gradient ids, unique per chart: two charts on a page must not share them.
+  const gradientId = useId().replace(/:/g, "");
+  const fillOf = (series: "net" | "portfolio" | "debt" | "owed"): string => `url(#${gradientId}-${series})`;
 
   // Build the per-point split between past (solid) and future (dashed). We use
   // a numeric x-axis (each row's `idx` is its x coordinate) so milestone
@@ -395,7 +463,17 @@ export const ProjectionChart = memo(function ProjectionChart({
   // instead of snapping to the nearest data point. That avoids two milestones
   // collapsing onto the same month when both cross between the same pair of
   // points.
-  const { data, crossings, yTicks } = useMemo(() => {
+  const { data, crossings, yTicks, hasDebt, hasOwed } = useMemo(() => {
+    // Debt is what is still owed, so it falls to zero as it is paid; money owed
+    // to the user falls the same way as it is paid back. Either draws its last
+    // $0 beside the payment that cleared it, then stops: a line along zero for
+    // years would read as something still owed.
+    const debts = points.map((p) => p.totalDebt ?? 0);
+    const owed = points.map((p) => p.receivables ?? 0);
+    const drawnAt = (values: number[], i: number): boolean =>
+      moneySign(values[i]) !== 0 ||
+      (i > 0 && moneySign(values[i - 1]) !== 0) ||
+      (i < values.length - 1 && moneySign(values[i + 1]) !== 0);
     const rows: ChartRow[] = points.map((p, i) => {
       const value = Number(p.netWorth.toFixed(2));
       const isPast = i < pastCount;
@@ -404,18 +482,29 @@ export const ProjectionChart = memo(function ProjectionChart({
       // Portfolio rides its own line, split past/future like net worth, with
       // the same boundary overlap so the series stays continuous.
       const portfolio = portfolioValues?.[i] ?? null;
-      const monthLabel = MONTH_FORMATTER.format(p.date);
+      // Today shares its month with that month's checkpoint, so it is named
+      // by its day.
+      const monthLabel =
+        isBoundary && todayLabel ? TODAY_DAY.format(p.date) : MONTH_FORMATTER.format(p.date);
+      const debt = drawnAt(debts, i) ? debts[i] : null;
+      const owedNow = drawnAt(owed, i) ? owed[i] : null;
       return {
         idx: i,
         monthLabel,
-        tooltipLabel: isBoundary && todayLabel ? todayLabel : monthLabel,
+        tooltipLabel:
+          isBoundary && todayLabel
+            ? todayLabel
+            : p.skipped
+              ? `${POINT_DAY.format(p.date)} · not confirmed`
+              : POINT_DAY.format(p.date),
+        skipped: p.skipped,
         // pastValue and futureValue overlap at the boundary to keep the line
         // visually continuous when one rendered series ends and the other
         // begins.
         pastValue: isPast || isBoundary ? value : null,
         futureValue: isFuture || isBoundary ? value : null,
         rawValue: value,
-        // Tooltip-only extras (never plotted).
+        savings: p.savings,
         totalDebt: p.totalDebt,
         investments: p.investments,
         ghostValue: ghostValues?.[i] ?? null,
@@ -423,6 +512,11 @@ export const ProjectionChart = memo(function ProjectionChart({
         portfolioFuture:
           portfolio != null && (isFuture || isBoundary) ? portfolio : null,
         portfolioRaw: portfolio,
+        debtPast: isPast || isBoundary ? debt : null,
+        debtFuture: isFuture || isBoundary ? debt : null,
+        receivables: p.receivables,
+        owedPast: isPast || isBoundary ? owedNow : null,
+        owedFuture: isFuture || isBoundary ? owedNow : null,
       };
     });
 
@@ -440,10 +534,22 @@ export const ProjectionChart = memo(function ProjectionChart({
     }));
 
     // Every plotted series counts toward the axis, as it does for recharts.
-    const plotted = rows.flatMap((r) => [r.rawValue, r.ghostValue, r.portfolioRaw]);
+    const plotted = rows.flatMap((r) => [
+      r.rawValue,
+      r.ghostValue,
+      r.portfolioRaw,
+      r.debtPast ?? r.debtFuture,
+      r.owedPast ?? r.owedFuture,
+    ]);
     const ticks = niceTicks(plotted.filter((v): v is number => v !== null));
 
-    return { data: rows, crossings: cross, yTicks: ticks };
+    return {
+      data: rows,
+      crossings: cross,
+      yTicks: ticks,
+      hasDebt: debts.some((d) => moneySign(d) !== 0),
+      hasOwed: owed.some((d) => moneySign(d) !== 0),
+    };
   }, [points, pastCount, ghostValues, portfolioValues, milestones, todayLabel]);
 
   const xMax = Math.max(0, data.length - 1);
@@ -481,7 +587,9 @@ export const ProjectionChart = memo(function ProjectionChart({
     const Dot = (props: DotRenderProps) => {
       const { cx, cy, payload, index } = props;
       const key = `dot-${isFutureSeries ? "f" : "p"}-${index ?? "x"}`;
-      if (cx == null || cy == null) return <g key={key} />;
+      // A period never confirmed has no figures of its own: the line just
+      // runs through it.
+      if (cx == null || cy == null || payload?.skipped) return <g key={key} />;
       const isToday = markToday && payload?.idx === pastCount;
       if (isToday) {
         return isFutureSeries ? (
@@ -499,8 +607,35 @@ export const ProjectionChart = memo(function ProjectionChart({
   const last = data.at(-1);
   const today = data[pastCount];
 
+  // The draw-in, on the dashboard card's clock: the portfolio sweeps in, debt
+  // after it, then net worth draws as one stroke — solid past, dashed projection — each half
+  // taking its slice of time and curve (see `splitEasedStroke`).
+  const stroke = splitEasedStroke(data.length > 1 ? pastCount / (data.length - 1) : 1, SWEEP_MS);
+  const lineBegin = STAGGER_MS * 2;
+  // Once, on mount: picking a point re-renders the chart, and replaying the
+  // draw-in on every click wiped the lines and drew them again.
+  const [intro, setIntro] = useState(true);
+  useEffect(() => {
+    const done = window.setTimeout(() => setIntro(false), lineBegin + SWEEP_MS + STAGGER_MS);
+    return () => window.clearTimeout(done);
+  }, [lineBegin]);
+  const draw = (half: "past" | "future" | "whole", begin: number) =>
+    reducedMotion || !intro
+      ? { isAnimationActive: false }
+      : half === "whole"
+        ? { isAnimationActive: true, animationBegin: begin, animationDuration: SWEEP_MS, animationEasing: asEasing(sweepEasing) }
+        : {
+            isAnimationActive: true,
+            animationBegin: begin + (half === "future" ? stroke.second.delay : 0),
+            animationDuration: half === "future" ? stroke.second.duration : stroke.first.duration,
+            animationEasing: asEasing(half === "future" ? stroke.second.easing : stroke.first.easing),
+          };
+
   return (
-    <div ref={containerRef} className="min-w-0">
+    // h-full so a `heightClass` of h-full reaches the card: with an auto-height
+    // wrapper the chart fell back to its 16:9 aspect and left the panel's
+    // bottom empty.
+    <div ref={containerRef} className="h-full min-w-0">
       {/* The line in words, for anyone who can't see it. */}
       {first && last && (
         <p className="sr-only">
@@ -512,7 +647,7 @@ export const ProjectionChart = memo(function ProjectionChart({
         </p>
       )}
       <ChartContainer config={config} className={cn(heightClass, "w-full")}>
-        <LineChart
+        <ComposedChart
           accessibilityLayer
           data={data}
           margin={CHART_MARGIN}
@@ -538,6 +673,33 @@ export const ProjectionChart = memo(function ProjectionChart({
             }
           }}
         >
+          {/* Each area fades from its colour to nothing at the baseline. The
+              gradients span the whole chart (userSpaceOnUse): stretched over
+              each half's own height, the past and the projection met at today
+              in two different shades. */}
+          <defs>
+            {(
+              [
+                ["net", lineColor, 0.28, data.map((r) => r.rawValue)],
+                ["portfolio", PORTFOLIO, 0.18, data.map((r) => r.portfolioRaw)],
+                ["debt", DEBT, 0.16, data.map((r) => r.debtPast ?? r.debtFuture)],
+                ["owed", OWED, 0.16, data.map((r) => r.owedPast ?? r.owedFuture)],
+              ] as const
+            ).map(([key, colour, opacity, values]) => (
+              <linearGradient
+                key={key}
+                id={`${gradientId}-${key}`}
+                gradientUnits="userSpaceOnUse"
+                x1="0"
+                y1={fadeStart(values, yTicks[yTicks.length - 1], yTicks[0])}
+                x2="0"
+                y2="100%"
+              >
+                <stop offset="0%" stopColor={colour} stopOpacity={opacity} />
+                <stop offset="100%" stopColor={colour} stopOpacity={0} />
+              </linearGradient>
+            ))}
+          </defs>
           {/* Horizontal-only grid (vertical={false}) matches the shadcn
               Line-Label example — the vertical milestone markers below carry
               the x-axis storytelling, so we don't double up. */}
@@ -568,6 +730,9 @@ export const ProjectionChart = memo(function ProjectionChart({
             strokeOpacity={0.2}
             strokeDasharray="2 2"
           />
+          {selectedIndex !== null && (
+            <ReferenceLine x={selectedIndex} stroke="currentColor" strokeOpacity={0.55} strokeWidth={1.5} />
+          )}
           {/* Milestone crossings — vertical dashed line at the EXACT fractional
               x where the trajectory hits the milestone. The numeric x-axis lets
               the line land between months so distinct milestones don't collide.
@@ -605,7 +770,7 @@ export const ProjectionChart = memo(function ProjectionChart({
               strokeOpacity={0.5}
               strokeWidth={1.5}
               strokeDasharray="3 3"
-              isAnimationActive={false}
+              {...draw("whole", lineBegin)}
               connectNulls
               dot={false}
               activeDot={false}
@@ -616,28 +781,94 @@ export const ProjectionChart = memo(function ProjectionChart({
               net worth is the (growing) portfolio. Solid past, dashed future,
               same convention as the net-worth line. */}
           {portfolioValues && (
-            <Line
+            <Area
               dataKey="portfolioPast"
               name="Portfolio"
               type="monotone"
-              stroke="var(--chart-4)"
+              stroke={PORTFOLIO}
               strokeWidth={1.5}
-              isAnimationActive={false}
+              fill={fillOf("portfolio")}
+              {...draw("past", 0)}
               connectNulls
               dot={false}
               activeDot={{ r: 4 }}
             />
           )}
           {portfolioValues && (
-            <Line
+            <Area
               dataKey="portfolioFuture"
               name="Portfolio"
               type="monotone"
-              stroke="var(--chart-4)"
+              stroke={PORTFOLIO}
               strokeWidth={1.5}
               strokeDasharray="6 4"
-              isAnimationActive={false}
+              fill={fillOf("portfolio")}
+              {...draw("future", 0)}
               connectNulls
+              dot={false}
+              activeDot={{ r: 4 }}
+            />
+          )}
+
+          {/* Debt — red, solid past and dashed projection, so the fall to
+              zero is the payoff. */}
+          {hasDebt && (
+            <Area
+              dataKey="debtPast"
+              name="Debt"
+              type="monotone"
+              stroke={DEBT}
+              strokeWidth={1.5}
+              fill={fillOf("debt")}
+              {...draw("past", STAGGER_MS)}
+              connectNulls={false}
+              dot={false}
+              activeDot={{ r: 4 }}
+            />
+          )}
+          {hasDebt && (
+            <Area
+              dataKey="debtFuture"
+              name="Debt"
+              type="monotone"
+              stroke={DEBT}
+              strokeWidth={1.5}
+              strokeDasharray="6 4"
+              fill={fillOf("debt")}
+              {...draw("future", STAGGER_MS)}
+              connectNulls={false}
+              dot={false}
+              activeDot={{ r: 4 }}
+            />
+          )}
+
+          {/* Owed to you — the dashboard's purple, falling to zero as it is
+              paid back; solid past, dashed projection. */}
+          {hasOwed && (
+            <Area
+              dataKey="owedPast"
+              name="Owed to you"
+              type="monotone"
+              stroke={OWED}
+              strokeWidth={1.5}
+              fill={fillOf("owed")}
+              {...draw("past", STAGGER_MS)}
+              connectNulls={false}
+              dot={false}
+              activeDot={{ r: 4 }}
+            />
+          )}
+          {hasOwed && (
+            <Area
+              dataKey="owedFuture"
+              name="Owed to you"
+              type="monotone"
+              stroke={OWED}
+              strokeWidth={1.5}
+              strokeDasharray="6 4"
+              fill={fillOf("owed")}
+              {...draw("future", STAGGER_MS)}
+              connectNulls={false}
               dot={false}
               activeDot={{ r: 4 }}
             />
@@ -646,13 +877,34 @@ export const ProjectionChart = memo(function ProjectionChart({
           {/* Past — solid line + filled dots. The boundary point (today) renders
               a pulsing marker. Labels are reserved for milestone crossings above,
               so the dots stay clean. */}
-          <Line
+          {/* A soft glow under net worth — the dashboard card's highlight on
+              the number the chart is about. An Area without fill, so it is
+              revealed exactly as the net-worth area above it is. */}
+          {(["past", "future"] as const).map((half) => (
+            <Area
+              key={`glow-${half}`}
+              dataKey={half === "past" ? "pastValue" : "futureValue"}
+              type="monotone"
+              stroke={lineColor}
+              strokeWidth={8}
+              strokeOpacity={0.18}
+              fill="none"
+              {...draw(half, lineBegin)}
+              connectNulls={false}
+              dot={false}
+              activeDot={false}
+              legendType="none"
+              tooltipType="none"
+            />
+          ))}
+          <Area
             dataKey="pastValue"
             name="Net worth"
             type="monotone"
             stroke={lineColor}
             strokeWidth={2}
-            isAnimationActive={false}
+            fill={fillOf("net")}
+            {...draw("past", lineBegin)}
             connectNulls={false}
             dot={renderDot(false)}
             activeDot={{ r: 6 }}
@@ -660,19 +912,20 @@ export const ProjectionChart = memo(function ProjectionChart({
 
           {/* Future — dashed, same colour so the line still reads as one trend.
               Skips a dot at the boundary so the past series' pulse stands alone. */}
-          <Line
+          <Area
             dataKey="futureValue"
             name="Net worth"
             type="monotone"
             stroke={lineColor}
             strokeWidth={2}
             strokeDasharray="6 4"
-            isAnimationActive={false}
+            fill={fillOf("net")}
+            {...draw("future", lineBegin)}
             connectNulls={false}
             dot={renderDot(true)}
             activeDot={{ r: 6 }}
           />
-        </LineChart>
+        </ComposedChart>
       </ChartContainer>
     </div>
   );
@@ -724,7 +977,7 @@ function ComparePlansTooltip(props: {
 
   return (
     <div className="grid min-w-40 gap-1.5 rounded-lg border border-border/50 bg-popover px-2.5 py-1.5 text-xs shadow-xl">
-      <div className="font-medium">{String(row.month ?? "")}</div>
+      <div className="font-medium">{String(row.title ?? row.month ?? "")}</div>
       <div className="grid gap-1">
         {seriesByPlan.map(({ plan, key }) => {
           const value = row[`${key}Past`] ?? row[`${key}Future`];
@@ -739,13 +992,26 @@ function ComparePlansTooltip(props: {
             />
           );
         })}
+        {seriesByPlan.map(({ plan, key }) => {
+          const debt = Number(row[`${key}DebtPast`] ?? row[`${key}DebtFuture`] ?? 0);
+          if (!(debt > 0)) return null;
+          return (
+            <TooltipRow
+              key={`${key}Debt`}
+              swatch={DEBT}
+              label={seriesByPlan.length > 1 ? `Debt · ${plan.name}` : "Debt"}
+              value={formatMoneyFull(debt)}
+              valueClass="text-destructive"
+            />
+          );
+        })}
       </div>
     </div>
   );
 }
 
 /** What the comparison chart needs to know about a plan. */
-type ComparePlan = Pick<FinancePlan, "id" | "name" | "color">;
+type ComparePlan = Pick<FinancePlan, "id" | "name" | "color" | "isMain">;
 
 /** One plan's line: its timeline (real past + calibrated future). */
 export type CompareChartSeries = {
@@ -755,7 +1021,6 @@ export type CompareChartSeries = {
 
 type CompareChartProps = {
   series: CompareChartSeries[];
-  metric: "netWorth" | "totalDebt";
   /** The reader's calendar day — marks the solid/dashed boundary. */
   today: Date;
   /** Tailwind height class(es) for the chart container. Defaults to `h-96`. */
@@ -775,7 +1040,6 @@ type CompareChartProps = {
 
 export function ComparePlansChart({
   series,
-  metric,
   today,
   heightClass = "h-96",
   legendClassName,
@@ -783,6 +1047,17 @@ export function ComparePlansChart({
   months,
   pastMonths = 3,
 }: CompareChartProps) {
+  const reducedMotion = usePrefersReducedMotion();
+  const fillId = `${useId().replace(/:/g, "")}-emphasis`;
+  // True until the first draw-in has played (see `drawIn` below).
+  const [intro, setIntro] = useState(true);
+  useEffect(() => {
+    const done = window.setTimeout(() => setIntro(false), SWEEP_MS + STAGGER_MS * (series.length + 2));
+    return () => window.clearTimeout(done);
+    // Once, on mount: later prop changes redraw without animating.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const animate = intro && !reducedMotion;
   // Width drives how many month ticks fit (~72px per "May 27" label).
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState<number | null>(null);
@@ -799,7 +1074,7 @@ export function ComparePlansChart({
 
   // Every derived table below is O(periods × plans) and the parents re-render
   // on each focus change and metric switch, so it is computed once per input.
-  const { seriesByPlan, boundary, data, compareConfig, yAxisWidth, rowMonths } = useMemo(() => {
+  const { seriesByPlan, boundary, data, compareConfig, yAxisWidth, rowMonths, hasDebt, pastKey } = useMemo(() => {
     if (series.length === 0) {
       return {
         seriesByPlan: [],
@@ -808,6 +1083,8 @@ export function ComparePlansChart({
         compareConfig: {},
         yAxisWidth: 32,
         rowMonths: [] as Date[],
+        hasDebt: false,
+        pastKey: "",
       };
     }
     // Stable, CSS-safe series keys (series0, series1, …) rather than raw UUIDs.
@@ -819,15 +1096,42 @@ export function ComparePlansChart({
     // five months early, and took the window and "today" from the first plan.
     const { rows, boundary } = buildCompareRows(
       series.map((s, i) => ({ key: `series${i}`, timeline: s.timeline })),
-      metric,
+      "netWorth",
       today,
       months,
       pastMonths
     );
 
+    // The past is the user's one history, the same under every plan (each
+    // projects from the same real position today), so one series draws it:
+    // the plan being pointed at, so the past lights up with it instead of
+    // fading with the main plan; otherwise the main plan, or the first.
+    const pastKey = (
+      seriesByPlan.find(({ plan }) => plan.id === focusedPlanId) ??
+      seriesByPlan.find(({ plan }) => plan.isMain) ??
+      seriesByPlan[0]
+    ).key;
+
+    // Beside net worth, each plan's debt, as on a plan's own page: what is
+    // still owed, falling to zero. A paid-off debt draws its last $0 beside the
+    // payment that cleared it and stops. Same window, so the rows line up.
+    const debtRows = buildCompareRows(
+      series.map((s, i) => ({ key: `series${i}`, timeline: s.timeline })),
+      "totalDebt",
+      today,
+      months,
+      pastMonths
+    ).rows;
+    const owed = (i: number, key: string): boolean => (debtRows[i]?.values[key] ?? 0) > 0;
+    const debtAt = (i: number, key: string): number | null =>
+      owed(i, key) || owed(i - 1, key) || owed(i + 1, key) ? debtRows[i]?.values[key] ?? null : null;
+    const hasDebt = debtRows.some((_, i) => seriesByPlan.some(({ key }) => owed(i, key)));
+
     const data = rows.map((r, i) => {
       const row: Record<string, string | number | null> = {
         month: MONTH_FORMATTER.format(r.month),
+        // The tooltip's title: the month spelled out, or today itself.
+        title: i === boundary ? `Today · ${TODAY_DAY.format(today)}` : LONG_MONTH.format(r.month),
         // Carried so the dot renderer can spot today's row from the payload.
         idx: i,
       };
@@ -836,8 +1140,14 @@ export function ComparePlansChart({
         // the line stops instead of dropping to $0.
         const value = r.values[key] ?? null;
         // The boundary row carries BOTH keys so solid and dashed meet.
-        row[`${key}Past`] = boundary < 0 || i <= boundary ? value : null;
+        const past = boundary < 0 || i === boundary || (i < boundary && key === pastKey);
+        row[`${key}Past`] = past ? value : null;
         row[`${key}Future`] = boundary >= 0 && i >= boundary ? value : null;
+        if (hasDebt) {
+          const debt = debtAt(i, key);
+          row[`${key}DebtPast`] = past ? debt : null;
+          row[`${key}DebtFuture`] = boundary >= 0 && i >= boundary ? debt : null;
+        }
       }
       return row;
     });
@@ -849,16 +1159,18 @@ export function ComparePlansChart({
       const entry = { label: plan.name, color: plan.color };
       acc[`${key}Past`] = entry;
       acc[`${key}Future`] = entry;
+      acc[`${key}DebtPast`] = { label: "Debt", color: DEBT };
       return acc;
     }, {} as ChartConfig);
 
     // Sized to the widest tick actually drawn (see `yAxisWidthFor`).
     const yAxisWidth = yAxisWidthFor(
       data.flatMap((row) =>
-        seriesByPlan.map(({ key }) => {
-          const v = row[`${key}Past`] ?? row[`${key}Future`];
-          return v == null ? null : Number(v);
-        })
+        seriesByPlan.flatMap(({ key }) =>
+          [row[`${key}Past`] ?? row[`${key}Future`], row[`${key}DebtPast`] ?? row[`${key}DebtFuture`]].map((v) =>
+            v == null ? null : Number(v)
+          )
+        )
       )
     );
 
@@ -869,8 +1181,10 @@ export function ComparePlansChart({
       compareConfig,
       yAxisWidth,
       rowMonths: rows.map((r) => r.month),
+      hasDebt,
+      pastKey,
     };
-  }, [series, metric, today, months, pastMonths]);
+  }, [series, today, months, pastMonths, focusedPlanId]);
 
   const xTicks = useMemo(
     () =>
@@ -883,16 +1197,102 @@ export function ComparePlansChart({
 
   if (series.length === 0) return null;
 
+  // The draw-in, on the dashboard's clock, once: the shared past, then the
+  // debt, then each plan's projection in turn — every line one eased stroke,
+  // solid past and dashed future taking their slice of time and curve. Later
+  // renders (a focus, a horizon) redraw in place, or the rail would feel slow.
+  const stroke = splitEasedStroke(
+    boundary > 0 && data.length > 1 ? boundary / (data.length - 1) : 1,
+    SWEEP_MS
+  );
+  const drawIn = (half: "past" | "future", begin: number) =>
+    animate
+      ? {
+          isAnimationActive: true,
+          animationBegin: begin + (half === "future" ? stroke.second.delay : 0),
+          animationDuration: half === "future" ? stroke.second.duration : stroke.first.duration,
+          animationEasing: asEasing(half === "future" ? stroke.second.easing : stroke.first.easing),
+        }
+      : { isAnimationActive: false };
+  const planBegin = (i: number): number => STAGGER_MS * (1 + i);
+  // The emphasised series (the one pointed at, else the main plan) wears the
+  // soft fill a plan's own page gives net worth.
+  // The value range the chart spans, for where each fade starts. recharts
+  // rounds its axis to nice ticks, so this is a close floor, not exact.
+  const plotted = data.flatMap((r) =>
+    Object.entries(r)
+      .filter(([k, v]) => /^series\d+(Debt)?(Past|Future)$/.test(k) && typeof v === "number")
+      .map(([, v]) => v as number)
+  );
+  const valueTop = plotted.length ? Math.max(0, ...plotted) : 0;
+  const valueBottom = plotted.length ? Math.min(0, ...plotted) : 0;
+  const emphasisedKey = seriesByPlan.find(({ plan }) =>
+    focusedPlanId ? plan.id === focusedPlanId : plan.isMain
+  )?.key;
+
   return (
     <div ref={containerRef} className="min-w-0">
     <ChartContainer config={compareConfig} className={cn(heightClass, "w-full")}>
       {/* No left margin: the YAxis already reserves its own label gutter, so a
           margin on top of it is pure dead space. */}
-      <LineChart
+      <ComposedChart
         accessibilityLayer
         data={data}
         margin={{ left: 0, right: 4, top: 10, bottom: 0 }}
       >
+        {/* Every plan is an area fading to the baseline, as on the other
+            charts: the emphasised one fuller, the rest faint. The gradients
+            span the whole chart, so a series' past and projection share one
+            shade where they meet. */}
+        <defs>
+          {seriesByPlan.map(({ plan, key }) => {
+            const top =
+              key === emphasisedKey ? 0.24 : focusedPlanId && plan.id !== focusedPlanId ? 0.04 : 0.1;
+            return (
+              <linearGradient
+                key={key}
+                id={`${fillId}-${key}`}
+                gradientUnits="userSpaceOnUse"
+                x1="0"
+                y1={fadeStart(
+                  data.map((r) => (r[`${key}Past`] ?? r[`${key}Future`]) as number | null),
+                  valueTop,
+                  valueBottom
+                )}
+                x2="0"
+                y2="100%"
+              >
+                <stop offset="0%" stopColor={`var(--color-${key}Past)`} stopOpacity={top} />
+                <stop offset="100%" stopColor={`var(--color-${key}Past)`} stopOpacity={0} />
+              </linearGradient>
+            );
+          })}
+          {(
+            [
+              ["debt", 0.16],
+              ["debt-dim", 0.04],
+            ] as const
+          ).map(([id, top]) => (
+            <linearGradient
+              key={id}
+              id={`${fillId}-${id}`}
+              gradientUnits="userSpaceOnUse"
+              x1="0"
+              y1={fadeStart(
+                data.flatMap((r) =>
+                  seriesByPlan.map(({ key }) => (r[`${key}DebtPast`] ?? r[`${key}DebtFuture`]) as number | null)
+                ),
+                valueTop,
+                valueBottom
+              )}
+              x2="0"
+              y2="100%"
+            >
+              <stop offset="0%" stopColor={DEBT} stopOpacity={top} />
+              <stop offset="100%" stopColor={DEBT} stopOpacity={0} />
+            </linearGradient>
+          ))}
+        </defs>
         {/* Full grid here (unlike the single-plan chart above, which stays
             horizontal-only because its milestone markers already carry the x
             axis). Kept recessive — dashed and low opacity — so it reads as
@@ -923,63 +1323,121 @@ export function ComparePlansChart({
             render order, which we re-sort so the focused line paints on top —
             so the legend would reshuffle every time the pointer moved. */}
         <ChartLegend
-          payload={seriesByPlan.map(({ plan, key }) => ({
-            dataKey: `${key}Past`,
-            value: plan.name,
-            type: "line" as const,
-            color: plan.color,
-          }))}
+          payload={[
+            ...seriesByPlan.map(({ plan, key }) => ({
+              dataKey: `${key}Past`,
+              value: plan.name,
+              type: "line" as const,
+              color: plan.color,
+            })),
+            ...(hasDebt
+              ? [{ dataKey: `${pastKey}DebtPast`, value: "Debt", type: "line" as const, color: DEBT }]
+              : []),
+          ]}
           content={<ChartLegendContent className={legendClassName} />}
         />
-        {/* Recharts paints children in order, so the focused series has to go
-            last or the dimmed lines draw over the one we're highlighting. */}
-        {[...seriesByPlan]
-          .sort(
-            (a, b) =>
-              Number(a.plan.id === focusedPlanId) -
-              Number(b.plan.id === focusedPlanId)
-          )
-          .flatMap(({ plan, key }) => {
-            const dimmed =
-              focusedPlanId !== null && plan.id !== focusedPlanId;
+        {/* Debt underneath net worth: red as everywhere, thinner, dimmed with
+            its plan. */}
+        {hasDebt &&
+          seriesByPlan.flatMap(({ plan, key }) => {
+            const dimmed = focusedPlanId !== null && plan.id !== focusedPlanId;
             const shared = {
               type: "monotone" as const,
-              strokeWidth: dimmed ? 1.5 : focusedPlanId ? 3 : 2,
-              strokeOpacity: dimmed ? 0.22 : 1,
+              stroke: DEBT,
+              strokeWidth: 1.5,
+              strokeOpacity: dimmed ? 0.22 : 0.85,
               dot: false as const,
-              // Recharts animates on every prop change; re-running the 300ms
-              // draw-in each time the focus moves makes the rail feel laggy.
-              isAnimationActive: false,
+              // The hovered month's dot, as on net worth's line.
+              activeDot: { r: 4, fill: DEBT, strokeWidth: 0 },
               connectNulls: false,
+              legendType: "none" as const,
             };
+            // An area, as on a plan's own page: a red fade to the baseline —
+            // once, on the series that draws the past. Plans usually owe the
+            // same, and a fill per plan stacked from today on, so the red
+            // darkened at today. The others keep their line.
+            const fill = key === pastKey ? `url(#${fillId}-debt${dimmed ? "-dim" : ""})` : "none";
             return [
-              <Line
-                key={`${key}Past`}
-                dataKey={`${key}Past`}
-                stroke={`var(--color-${key}Past)`}
-                {...shared}
-                // "You are here" pulse where solid meets dashed — the same
-                // marker the single-plan chart uses. Only on the past series;
-                // the future one shares that row and would stack a second one.
-                dot={renderTodayDot(
-                  `var(--color-${key}Past)`,
-                  boundary,
-                  dimmed
-                )}
-              />,
-              // Dashed = projected. Kept out of the legend so each plan is
-              // named once.
-              <Line
-                key={`${key}Future`}
-                dataKey={`${key}Future`}
-                stroke={`var(--color-${key}Future)`}
-                legendType="none"
+              <Area key={`${key}DebtPast`} dataKey={`${key}DebtPast`} {...shared} fill={fill} {...drawIn("past", 0)} />,
+              <Area
+                key={`${key}DebtFuture`}
+                dataKey={`${key}DebtFuture`}
                 strokeDasharray="6 4"
                 {...shared}
+                fill={fill}
+                {...drawIn("future", 0)}
               />,
             ];
           })}
-      </LineChart>
+        {/* Recharts paints children in order, so the emphasised series (the
+            one pointed at, else the main plan) goes last, on top. */}
+        {[...seriesByPlan]
+          .sort((a, b) => {
+            const top = (p: ComparePlan): number => Number(focusedPlanId ? p.id === focusedPlanId : p.isMain);
+            return top(a.plan) - top(b.plan);
+          })
+          .flatMap(({ plan, key }) => {
+            const dimmed =
+              focusedPlanId !== null && plan.id !== focusedPlanId;
+            // With nothing pointed at, the main plan stands out: it is the one
+            // the user lives by, and it draws the shared past.
+            const emphasised = focusedPlanId ? plan.id === focusedPlanId : plan.isMain;
+            const order = seriesByPlan.findIndex((s) => s.key === key);
+            const shared = {
+              type: "monotone" as const,
+              strokeWidth: dimmed ? 1.5 : emphasised ? 3 : 2,
+              strokeOpacity: dimmed ? 0.22 : 1,
+              dot: false as const,
+              connectNulls: false,
+            };
+            const past = {
+              dataKey: `${key}Past`,
+              stroke: `var(--color-${key}Past)`,
+              ...shared,
+              ...drawIn("past", STAGGER_MS),
+              // "You are here" pulse where solid meets dashed — the same
+              // marker the single-plan chart uses. Once, on the series that
+              // draws the shared past: every plan is at the same point today,
+              // and one dot per plan stacked them, the last plan's on top.
+              dot: key === pastKey ? renderTodayDot(`var(--color-${key}Past)`, boundary, false) : (false as const),
+            };
+            // Dashed = projected. Kept out of the legend so each plan is
+            // named once.
+            const future = {
+              dataKey: `${key}Future`,
+              stroke: `var(--color-${key}Future)`,
+              legendType: "none" as const,
+              strokeDasharray: "6 4",
+              ...shared,
+              ...drawIn("future", planBegin(order)),
+            };
+            // A wide, faint copy under the emphasised line — the dashboard's
+            // net worth highlight — undashed, so the glow reads as one band.
+            const glow = (half: "Past" | "Future") => (
+              <Line
+                key={`${key}${half}Glow`}
+                dataKey={`${key}${half}`}
+                type="monotone"
+                stroke={`var(--color-${key}Past)`}
+                strokeWidth={8}
+                strokeOpacity={0.18}
+                strokeLinecap="round"
+                dot={false}
+                activeDot={false}
+                legendType="none"
+                connectNulls={false}
+                {...drawIn(half === "Past" ? "past" : "future", half === "Past" ? STAGGER_MS : planBegin(order))}
+              />
+            );
+            // Every plan an area; the emphasised one glows as well.
+            const fill = `url(#${fillId}-${key})`;
+            return [
+              ...(emphasised ? [glow("Past"), glow("Future")] : []),
+              <Area key={`${key}Past`} {...past} fill={fill} />,
+              <Area key={`${key}Future`} {...future} fill={fill} />,
+            ];
+          })}
+      </ComposedChart>
     </ChartContainer>
     </div>
   );

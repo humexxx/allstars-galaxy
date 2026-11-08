@@ -1,22 +1,21 @@
 import { describe, expect, it } from "vitest";
 
-import { densify } from "./table-rows";
+import { rowStepFor, sampleRows } from "./table-rows";
 import { projectPlan } from "./projection";
-import type { FinancePlan, FinancePlanDebt, FinancePlanIncome, ProjectionMonth } from "@/types/finance";
+import type { FinancePlan, FinancePlanDebt, FinancePlanIncome } from "@/types/finance";
 
 const U = (y: number, m: number, d = 1): Date => new Date(Date.UTC(y, m - 1, d));
 
 describe("F22: projection table", () => {
-  it("keeps the first 12 rows then REAL Decembers (not every 12th row)", () => {
-    // 40 rows from Jun 2026: the old rule kept rows 12, 24, 36 = May 2027,
-    // May 2028, May 2029 and called them year-ends.
-    const months = Array.from(
-      { length: 40 },
-      (_, i) => ({ monthOffset: i, date: U(2026, 6 + i) }) as unknown as ProjectionMonth
-    );
-    const kept = densify(months).map((m) => m.date.toISOString().slice(0, 7));
-    expect(kept.slice(12)).toEqual(["2027-12", "2028-12", "2029-09"]);
-    expect(kept.slice(0, 12)).toContain("2026-12");
+  it("spaces the rows by horizon: monthly to a year, then 2, 6 and 12 months apart", () => {
+    expect([6, 12, 24, 60, 120].map(rowStepFor)).toEqual([1, 1, 2, 6, 12]);
+  });
+
+  it("keeps the rows leading in, then today's period and every step after it", () => {
+    const months = Array.from({ length: 26 }, (_, i) => i);
+    // One closed period (index 0), today's at 1, two years every other month.
+    expect(sampleRows(months, 1, 2)).toEqual([0, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25]);
+    expect(sampleRows(months.slice(0, 5), 1, 1)).toEqual([0, 1, 2, 3, 4]);
   });
 
   it("'Debt pmt' (minimums + extra) makes a row reconcile with the savings column", () => {

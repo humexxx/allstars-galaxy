@@ -54,14 +54,17 @@ vi.mock("@/lib/finance/projection", async (importOriginal) => ({
 }));
 
 const getLatestConfirmationMock = vi.fn();
-const getLatestConfirmationsMock = vi.fn();
 const autoConfirmSkippedPeriodsMock = vi.fn();
 vi.mock("./finance-confirmation-service", () => ({
   getLatestConfirmation: (...args: unknown[]) =>
     getLatestConfirmationMock(...args),
-  getLatestConfirmations: (...args: unknown[]) => getLatestConfirmationsMock(...args),
   autoConfirmSkippedPeriods: (...args: unknown[]) =>
     autoConfirmSkippedPeriodsMock(...args),
+}));
+
+const getManagedMarginHistoryMock = vi.fn();
+vi.mock("./margin-service", () => ({
+  getManagedMarginHistory: (...args: unknown[]) => getManagedMarginHistoryMock(...args),
 }));
 
 import {
@@ -73,6 +76,7 @@ import {
   loadCalibratedView,
   loadPlanOverviews,
   restateOpeningBalances,
+  movesOn,
 } from "./finance-snapshot-service";
 import { alignTimelineToday, buildPlanTimeline, debtFreeMonthsFromNow } from "@/lib/finance/chart-series";
 import type {
@@ -94,6 +98,7 @@ function buildPlan(
     id: PLAN_ID,
     userId: USER_ID,
     name: "Test Plan",
+    isMain: true,
     description: null,
     startMonth: new Date(Date.UTC(2026, 0, 1)),
     monthsAhead: 12,
@@ -210,7 +215,6 @@ afterEach(() => {
   getAutoInvestRatesMock.mockReset();
   projectPlanMock.mockReset();
   getLatestConfirmationMock.mockReset();
-  getLatestConfirmationsMock.mockReset();
   autoConfirmSkippedPeriodsMock.mockReset();
   vi.useRealTimers();
 });
@@ -343,9 +347,18 @@ describe("createConfirmationSnapshot", () => {
     expect(childChain.values).toHaveBeenCalledOnce();
     const debtRows = childChain.values.mock.calls[0][0];
     expect(debtRows).toEqual([
-      { snapshotId: "snap-xyz", debtId: "d1", balance: "1000.00" },
-      { snapshotId: "snap-xyz", debtId: "d2", balance: "500.00" },
+      { snapshotId: "snap-xyz", debtId: "d1", debtKey: "d1", balance: "1000.00" },
+      { snapshotId: "snap-xyz", debtId: "d2", debtKey: "d2", balance: "500.00" },
     ]);
+  });
+
+  it("writes nothing for a what-if plan: history is the main plan's", async () => {
+    getPlanWithLinesMock.mockResolvedValueOnce(buildPlan({ isMain: false }));
+
+    const result = await createConfirmationSnapshot(PLAN_ID, USER_ID, new Date(Date.UTC(2026, 1, 15)));
+
+    expect(result).toEqual({ created: false });
+    expect(insertImpl).not.toHaveBeenCalled();
   });
 
   it("returns { created: false } when the plan cannot be loaded", async () => {
@@ -555,10 +568,11 @@ describe("getRecentMonthlySnapshots", () => {
     expect(result).toEqual([]);
   });
 
-  it("keeps only the most recent snapshot per calendar month and sorts ascending", async () => {
+  it("keeps each month's opening — its first snapshot — and sorts ascending", async () => {
     mockOwnershipOk();
-    // Rows come back desc by date (per the orderBy). Three are in May 2026 —
-    // only the newest should survive the per-month dedupe.
+    // Rows come back desc by date (per the orderBy). Three are in May 2026:
+    // the cron's later rows already carry May's own payments, so the first
+    // one is May's checkpoint.
     const may15 = new Date(Date.UTC(2026, 4, 15));
     const may10 = new Date(Date.UTC(2026, 4, 10));
     const may1 = new Date(Date.UTC(2026, 4, 1));
@@ -603,15 +617,38 @@ describe("getRecentMonthlySnapshots", () => {
       new Date(Date.UTC(2026, 5, 15))
     );
 
-    // Expect two months total (April + May), sorted ascending by date,
-    // with only May 15 representing May.
     expect(result).toHaveLength(2);
     expect(result[0].date).toEqual(apr20);
-    expect(result[1].date).toEqual(may15);
-    expect(result[1].savings).toBe(300);
-    expect(result[1].investments).toBe(400);
-    expect(result[1].totalDebt).toBe(50);
-    expect(result[1].netWorth).toBe(650);
+    expect(result[1].date).toEqual(may1);
+    expect(result[1].savings).toBe(280);
+    expect(result[1].investments).toBe(380);
+    expect(result[1].totalDebt).toBe(60);
+    expect(result[1].netWorth).toBe(600);
+  });
+
+  it("a confirmation is its period's checkpoint, however late in it", async () => {
+    mockOwnershipOk();
+    const oct30 = new Date(Date.UTC(2026, 9, 30));
+    const oct18 = new Date(Date.UTC(2026, 9, 18));
+    const oct5 = new Date(Date.UTC(2026, 9, 5));
+    selectImpl.mockReturnValueOnce(
+      makeSelectChain([
+        { source: "system_cron", date: oct30, savings: "0", investments: "0", totalDebt: "61705", netWorth: "-61705" },
+        { source: "confirmation", date: oct18, savings: "0", investments: "0", totalDebt: "61705", netWorth: "-61705" },
+        { source: "system_cron", date: oct5, savings: "0", investments: "640", totalDebt: "60270", netWorth: "-59630" },
+      ])
+    );
+
+    const result = await getRecentMonthlySnapshots(
+      PLAN_ID,
+      USER_ID,
+      3,
+      new Date(Date.UTC(2026, 10, 8)),
+      5
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ date: oct18, totalDebt: 61705, confirmed: true });
   });
 
   it("adds what is still owed to the user on each snapshot's day", async () => {
@@ -659,11 +696,33 @@ describe("getRecentMonthlySnapshots", () => {
     expect(result.map((r) => r.receivables)).toEqual([4000, 0]);
   });
 
+  it("adds the managed margin of each point's month to a past that recorded none", async () => {
+    mockOwnershipOk();
+    getPlanWithLinesMock.mockResolvedValueOnce(buildPlan({ includePortfolio: true }));
+    getManagedMarginHistoryMock.mockResolvedValueOnce([
+      { month: "2026-09", deployed: 4000, liability: 7300, ownPosition: 0, margin: -3300, invested: 6700 },
+      { month: "2026-10", deployed: 3000, liability: 7400, ownPosition: 0, margin: -4400, invested: 6700 },
+    ]);
+    selectImpl.mockReturnValueOnce(
+      makeSelectChain([
+        { date: new Date(Date.UTC(2026, 9, 5)), savings: "0", investments: "0", totalDebt: "100", netWorth: "-100", portfolioValue: null },
+        { date: new Date(Date.UTC(2026, 8, 5)), savings: "0", investments: "0", totalDebt: "100", netWorth: "-100", portfolioValue: null },
+      ])
+    );
+
+    const result = await getRecentMonthlySnapshots(PLAN_ID, USER_ID, 3, new Date(Date.UTC(2026, 10, 8)), 5);
+
+    expect(result.map((r) => [r.netWorth, r.portfolioValue, r.portfolioClaims])).toEqual([
+      [-100 + 4000 - 7300, 4000, 7300],
+      [-100 + 3000 - 7400, 3000, 7400],
+    ]);
+  });
+
   it("buckets by accounting PERIOD (anchorDay) so straddling snapshots collapse per period", async () => {
     mockOwnershipOk();
     // anchorDay=15 → periods are e.g. Feb 15–Mar 14, Mar 15–Apr 14. Feb 28 and
     // Mar 5 BOTH belong to the Feb-15 period and must collapse to one point
-    // (the latest, Mar 5). A calendar-month dedup would wrongly keep both.
+    // (the first, Feb 28). A calendar-month dedup would wrongly keep both.
     const mar5 = new Date(Date.UTC(2026, 2, 5));
     const feb28 = new Date(Date.UTC(2026, 1, 28));
     const apr20 = new Date(Date.UTC(2026, 3, 20)); // Apr 15 period
@@ -683,9 +742,9 @@ describe("getRecentMonthlySnapshots", () => {
       15
     );
 
-    // Two periods: Feb15 (represented by mar5) + Apr15 (apr20), ascending.
+    // Two periods: Feb15 (represented by feb28) + Apr15 (apr20), ascending.
     expect(result).toHaveLength(2);
-    expect(result[0].date).toEqual(mar5);
+    expect(result[0].date).toEqual(feb28);
     expect(result[1].date).toEqual(apr20);
   });
 
@@ -949,6 +1008,63 @@ describe("calibratePlan", () => {
     intervalMonths: 3,
     recurrenceStart: null,
   } as unknown as FinancePlanWithLines["expenses"][number];
+
+  it("gives a copy's debts the balances confirmed on the main plan's, matched by key", () => {
+    const debt = (id: string, debtKey: string | null, initialBalance: string) =>
+      ({ id, debtKey, name: id, initialBalance, recurrenceType: "monthly_day", recurrenceStart: null }) as never;
+    // The copy: the main plan's card under its own id, and a car the what-if adds.
+    const copy = buildPlan({ id: OTHER_PLAN_ID, isMain: false, debts: [debt("copy-card", "card", "9000"), debt("car", null, "20000")] });
+    const cal = calibratePlan(
+      copy,
+      conf({
+        debtConfirmations: [
+          { debtId: "card", debtKey: "card", confirmedBalance: "4200" },
+          // Read off a line since deleted: matched by its key alone.
+          { debtId: null, debtKey: "gone", confirmedBalance: "1" },
+        ] as never,
+      })
+    );
+    expect(cal.initialSavings).toBe("8000");
+    expect(cal.debts.map((d) => [d.id, d.initialBalance])).toEqual([
+      ["copy-card", "4200"],
+      ["car", "20000"],
+    ]);
+  });
+
+  it("projects across periods nobody confirmed: today carries every one since the last confirmation", async () => {
+    const { projectStateAt } = await actualEngine();
+    const line = (id: string, monthlyAmount: string, dayOfMonth: number) =>
+      ({
+        id, name: id, monthlyAmount, kind: "recurring", dayOfMonth, date: null,
+        recurrenceType: "monthly_day", weekOfMonth: null, dayOfWeek: null,
+        intervalMonths: null, recurrenceStart: null,
+      }) as never;
+    // Anchored on the 5th: confirmed on Sep 5 with $1,000, then the Sep and
+    // Oct periods went by unconfirmed (no auto rows any more). Pay $3,000 on
+    // the 25th, rent $1,000 on the 10th.
+    const plan = buildPlan({
+      confirmationDayOfMonth: 5,
+      monthsAhead: 24,
+      initialInvestments: "0",
+      incomes: [line("pay", "3000", 25)],
+      expenses: [line("rent", "1000", 10)],
+    });
+    const cal = calibratePlan(
+      plan,
+      conf({ confirmationMonth: "2026-09-05", confirmedSavings: "1000" })
+    );
+    const today = projectStateAt(
+      cal,
+      cal.incomes,
+      cal.expenses,
+      cal.debts,
+      { asOf: cal.asOf },
+      new Date(Date.UTC(2026, 10, 8))
+    );
+    // Sep 10 / Oct 10 rent, Sep 25 / Oct 25 pay — both skipped periods — and
+    // nothing yet in the Nov 5 one by the 8th: 1,000 + 2 × (3,000 − 1,000).
+    expect(today?.savings).toBeCloseTo(5000, 2);
+  });
 
   it("F3: pins an every-N-months line to the ORIGINAL start month", async () => {
     const { projectPlan } = await actualEngine();
@@ -1273,10 +1389,9 @@ describe("loadPlanOverviews: batched, same figures as the per-plan path", () => 
     snap(PLAN_ID, new Date(Date.UTC(2026, 8, 2)), "3900"),
     snap(B_ID, new Date(Date.UTC(2026, 7, 4)), "2000"),
   ];
-  // The single-plan query selects no plan id.
-  const rowsOf = (planId: string) =>
+  // History is the user's: every plan reads all of it.
+  const userRows = () =>
     historyRows
-      .filter((r) => r.planId === planId)
       .map((r) => ({
         date: r.date,
         savings: r.savings,
@@ -1289,10 +1404,9 @@ describe("loadPlanOverviews: batched, same figures as the per-plan path", () => 
     const { projectPlan } = await actualEngine();
     projectPlanMock.mockImplementation(projectPlan);
 
-    // The per-plan path, as the plan page runs it.
-    getLatestConfirmationMock.mockImplementation(async (id: string) =>
-      id === PLAN_ID ? confA : null
-    );
+    // The per-plan path, as the plan page runs it. The confirmation is the
+    // user's, so every plan calibrates from it.
+    getLatestConfirmationMock.mockImplementation(async () => confA);
     getAutoInvestRateMock.mockImplementation(async (p: { autoInvestMethodId: string | null }) =>
       p.autoInvestMethodId === "m1" ? 0.005 : 0
     );
@@ -1302,7 +1416,7 @@ describe("loadPlanOverviews: batched, same figures as the per-plan path", () => 
       const asOfFallback = base ? calibratePlan(base, null, { timeZone: "UTC" }).asOf ?? null : null;
       const view = await loadCalibratedView(plan, USER_ID, today, { timeZone: "UTC", asOfFallback });
       mockOwnershipOk();
-      selectImpl.mockReturnValueOnce(makeSelectChain(rowsOf(plan.id)));
+      selectImpl.mockReturnValueOnce(makeSelectChain(userRows()));
       const history = await getRecentMonthlySnapshots(
         plan.id,
         USER_ID,
@@ -1341,22 +1455,21 @@ describe("loadPlanOverviews: batched, same figures as the per-plan path", () => 
     selectImpl.mockReset();
 
     // The batched path.
-    getLatestConfirmationsMock.mockResolvedValueOnce(new Map([[PLAN_ID, confA]]));
+    getLatestConfirmationMock.mockResolvedValueOnce(confA);
     getAutoInvestRatesMock.mockResolvedValueOnce(new Map([["m1", 0.005]]));
     selectImpl.mockReturnValueOnce(makeSelectChain(historyRows));
 
     const overviews = await loadPlanOverviews(plans, USER_ID, today, "UTC");
 
     expect(overviews).toEqual(expected);
-    expect(getLatestConfirmationsMock).toHaveBeenCalledTimes(1);
-    expect(getLatestConfirmationsMock).toHaveBeenCalledWith([PLAN_ID, B_ID, OTHER_PLAN_ID]);
+    expect(getLatestConfirmationMock).toHaveBeenCalledTimes(1);
+    expect(getLatestConfirmationMock).toHaveBeenCalledWith(USER_ID);
     expect(getAutoInvestRatesMock).toHaveBeenCalledWith(["m1"]);
-    expect(getLatestConfirmationMock).not.toHaveBeenCalled();
     expect(getAutoInvestRateMock).not.toHaveBeenCalled();
     // One history query for every plan, and no ownership round trip.
     expect(selectImpl).toHaveBeenCalledTimes(1);
-    // Sanity: the confirmation and the auto-invest rate did reach plan A.
-    expect(overviews[0].today?.savings).not.toBe(expected[1].today?.savings);
+    // One past for every plan: the user's, bucketed by each plan's own anchor.
+    for (const o of overviews) expect(o.timeline.todayIndex).toBeGreaterThan(0);
   });
 
   it("refuses a plan that isn't the caller's without querying anything", async () => {
@@ -1364,13 +1477,30 @@ describe("loadPlanOverviews: batched, same figures as the per-plan path", () => 
       loadPlanOverviews([buildPlan({ userId: "someone-else" } as never)], USER_ID, today, "UTC")
     ).rejects.toThrow("Plan not found");
     expect(selectImpl).not.toHaveBeenCalled();
-    expect(getLatestConfirmationsMock).not.toHaveBeenCalled();
+    expect(getLatestConfirmationMock).not.toHaveBeenCalled();
   });
 
   it("no plans, no queries", async () => {
     await expect(loadPlanOverviews([], USER_ID, today, "UTC")).resolves.toEqual([]);
     expect(selectImpl).not.toHaveBeenCalled();
-    expect(getLatestConfirmationsMock).not.toHaveBeenCalled();
+    expect(getLatestConfirmationMock).not.toHaveBeenCalled();
     expect(getAutoInvestRatesMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("movesOn", () => {
+  const plan = {
+    startMonth: new Date(Date.UTC(2026, 0, 1)),
+    incomes: [
+      { id: "i", name: "Pay", monthlyAmount: "3000", kind: "recurring", dayOfMonth: 1, recurrenceType: "monthly_day" },
+    ],
+    expenses: [],
+    debts: [],
+    overrides: [],
+  } as unknown as Parameters<typeof movesOn>[0];
+
+  it("is true on a day money lands and false on a quiet one", () => {
+    expect(movesOn(plan, new Date(Date.UTC(2026, 10, 1)))).toBe(true);
+    expect(movesOn(plan, new Date(Date.UTC(2026, 10, 2)))).toBe(false);
   });
 });

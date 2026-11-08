@@ -18,7 +18,9 @@ export const roadPathFrequencyEnum = pgEnum("road_path_frequency", ["daily", "ev
 export const taskPriorityEnum = pgEnum("task_priority", ["low", "medium", "high"]);
 export const debtPaymentTypeEnum = pgEnum("debt_payment_type", ["fixed", "percent_of_balance"]);
 export const debtStrategyEnum = pgEnum("debt_strategy", ["avalanche", "snowball", "none"]);
-export const financeSnapshotSourceEnum = pgEnum("finance_snapshot_source", ["system_cron", "confirmation", "manual"]);
+// "movement": the plan's position on a day something moved (a paycheque, a
+// payment, an edit). Period history ignores them; the dashboard draws them.
+export const financeSnapshotSourceEnum = pgEnum("finance_snapshot_source", ["system_cron", "confirmation", "manual", "movement"]);
 // "user" = the human confirmed their real numbers. "auto" = the cron rolled the
 // baseline forward through a period the user left unconfirmed (best-estimate,
 // still re-promptable). Lets the UI flag auto rows and keeps the chart honest.
@@ -107,6 +109,11 @@ export const investmentMethods = pgTable(
     }),
     riskLevel: riskLevelEnum("risk_level").notNull(),
     monthlyRoi: numeric("monthly_roi", { precision: 7, scale: 4 }).notNull(),
+    // What the owner EXPECTS the capital to earn where they deploy it, as a
+    // percentage a month like `monthly_roi`. Private to the owner: clients only
+    // ever see and compound at `monthly_roi`. The owner's own plans project the
+    // assets this money bought at this rate; null holds them flat.
+    expectedMonthlyRoi: numeric("expected_monthly_roi", { precision: 7, scale: 4 }),
     // Disabled methods are hidden from portfolio transaction selectors but still
     // appear in finance plan auto-invest pickers (so they can be modelled as
     // hypothetical scenarios without being actively used).
@@ -506,6 +513,9 @@ export const financePlans = pgTable(
       () => investmentMethods.id,
       { onDelete: "set null" }
     ),
+    // A monthly return (decimal) of the user's own choosing for the auto-invest
+    // bucket. Set, it wins over the method; null means "use the method's ROI".
+    autoInvestCustomRate: numeric("auto_invest_custom_rate", { precision: 9, scale: 6 }),
     initialInvestments: numeric("initial_investments", { precision: 20, scale: 2 })
       .notNull()
       .default("0"),
@@ -551,6 +561,7 @@ export const financePlans = pgTable(
     check("finance_plans_savings_rate_chk", sql`${t.monthlySavingsRate} >= 0`),
     check("finance_plans_surplus_chk", sql`${t.surplusToDebtsPercent} >= 0 AND ${t.surplusToDebtsPercent} <= 1`),
     check("finance_plans_auto_invest_chk", sql`${t.autoInvestPercent} >= 0 AND ${t.autoInvestPercent} <= 1`),
+    check("finance_plans_auto_invest_custom_rate_chk", sql`${t.autoInvestCustomRate} IS NULL OR ${t.autoInvestCustomRate} >= 0`),
     check("finance_plans_confirmation_day_chk", sql`${t.confirmationDayOfMonth} >= 0 AND ${t.confirmationDayOfMonth} <= 28`),
   ]
 ).enableRLS();
@@ -670,9 +681,15 @@ export const financePlanExpenses = pgTable(
 ).enableRLS();
 
 /**
- * Snapshot of a finance plan's projected position at a point in time. Mirrors
- * the `portfolio_snapshots` shape (same column names, timestamp date, no UNIQUE
+ * Snapshot of the user's position at a point in time. Mirrors the
+ * `portfolio_snapshots` shape (same column names, timestamp date, no UNIQUE
  * constraint) so both subsystems share patterns and helpers can stay symmetric.
+ *
+ * History is the USER's, not a plan's: only the main plan writes it, every
+ * plan reads it as its past, and it outlives the plan that wrote it
+ * (`plan_id` only records which plan was main, and goes null when that plan
+ * is deleted). Rows with no `user_id` were written by code older than that
+ * and count only as the current main plan's — see `historyOf`.
  *
  * Multiple rows per (plan_id, date) are allowed on purpose — a snapshot taken
  * by the cron at 06:00 and another written when the user confirms balances at
@@ -682,9 +699,8 @@ export const financePlanSnapshots = pgTable(
   "finance_plan_snapshots",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    planId: uuid("plan_id")
-      .notNull()
-      .references(() => financePlans.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+    planId: uuid("plan_id").references(() => financePlans.id, { onDelete: "set null" }),
     // Timestamp (with TZ) just like portfolio_snapshots.date — same column name
     // and type so the two subsystems are interchangeable in tooling/queries.
     date: timestamp("date", { withTimezone: true }).notNull(),
@@ -692,12 +708,16 @@ export const financePlanSnapshots = pgTable(
     investments: numeric("investments", { precision: 20, scale: 2 }).notNull(),
     totalDebt: numeric("total_debt", { precision: 20, scale: 2 }).notNull(),
     netWorth: numeric("net_worth", { precision: 20, scale: 2 }).notNull(),
+    // The portfolio inside net_worth (live portfolio + managed assets), so the
+    // past can draw it; null on rows from before migration 0062.
+    portfolioValue: numeric("portfolio_value", { precision: 20, scale: 2 }),
     source: financeSnapshotSourceEnum("source").notNull().default("system_cron"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
     index("finance_plan_snapshots_plan_id_idx").on(t.planId),
     index("finance_plan_snapshots_date_idx").on(t.date),
+    index("finance_plan_snapshots_user_date_idx").on(t.userId, t.date),
   ]
 ).enableRLS();
 
@@ -715,9 +735,11 @@ export const financePlanSnapshotDebts = pgTable(
     snapshotId: uuid("snapshot_id")
       .notNull()
       .references(() => financePlanSnapshots.id, { onDelete: "cascade" }),
-    debtId: uuid("debt_id")
-      .notNull()
-      .references(() => financePlanDebts.id, { onDelete: "cascade" }),
+    // The debt as the plan held it; null once that line is deleted.
+    debtId: uuid("debt_id").references(() => financePlanDebts.id, { onDelete: "set null" }),
+    // The debt across plans (`finance_plan_debts.debt_key`): what a balance
+    // is matched to, so history survives the line it was read from.
+    debtKey: uuid("debt_key"),
     balance: numeric("balance", { precision: 20, scale: 2 }).notNull(),
   },
   (t) => [
@@ -731,14 +753,17 @@ export const financePlanSnapshotDebts = pgTable(
  * configured `confirmationDayOfMonth` to confirm their real savings,
  * investments and current debt balances. These numbers replace the
  * computed projection as the new baseline going forward (recalibration).
+ *
+ * The USER's, like the snapshots: confirmed on the main plan, they set the
+ * baseline of every plan (debts matched by `debt_key`), and `plan_id` only
+ * records which plan was main.
  */
 export const financePlanConfirmations = pgTable(
   "finance_plan_confirmations",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    planId: uuid("plan_id")
-      .notNull()
-      .references(() => financePlans.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+    planId: uuid("plan_id").references(() => financePlans.id, { onDelete: "set null" }),
     // The calendar day the balances describe: the reader's local day a user
     // confirmed on, or the period start an auto row records the opening of.
     // The name predates that (rows used to be keyed by month); a confirmation
@@ -755,6 +780,7 @@ export const financePlanConfirmations = pgTable(
   },
   (t) => [
     uniqueIndex("finance_plan_confirmations_plan_month_uniq").on(t.planId, t.confirmationMonth),
+    uniqueIndex("finance_plan_confirmations_user_month_uniq").on(t.userId, t.confirmationMonth),
     index("finance_plan_confirmations_plan_id_idx").on(t.planId),
     // No >= 0 check on confirmed_savings: a deficit is carried as negative
     // savings, and the auto-confirm cron records it as such.
@@ -773,9 +799,9 @@ export const financePlanDebtConfirmations = pgTable(
     confirmationId: uuid("confirmation_id")
       .notNull()
       .references(() => financePlanConfirmations.id, { onDelete: "cascade" }),
-    debtId: uuid("debt_id")
-      .notNull()
-      .references(() => financePlanDebts.id, { onDelete: "cascade" }),
+    debtId: uuid("debt_id").references(() => financePlanDebts.id, { onDelete: "set null" }),
+    // See finance_plan_snapshot_debts.debt_key.
+    debtKey: uuid("debt_key"),
     confirmedBalance: numeric("confirmed_balance", { precision: 20, scale: 2 }).notNull(),
   },
   (t) => [
@@ -793,6 +819,10 @@ export const financePlanDebts = pgTable(
       .notNull()
       .references(() => financePlans.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    // The same debt across plans: a copy keeps its source's key, so a
+    // confirmed balance reaches it in every plan. Null means the line's own
+    // id (every debt from before copies carried one) — see `debtKeyOf`.
+    debtKey: uuid("debt_key"),
     initialBalance: numeric("initial_balance", { precision: 20, scale: 2 })
       .notNull()
       .default("0"),

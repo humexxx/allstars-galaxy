@@ -9,15 +9,10 @@ import {
   useTransition,
 } from "react";
 import {
-  addMonths,
   eachDayOfInterval,
-  endOfMonth,
   endOfWeek,
-  isSameMonth,
   isToday,
-  startOfMonth,
   startOfWeek,
-  subMonths,
 } from "date-fns";
 import {
   ChevronLeft,
@@ -48,13 +43,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Eyebrow, Heading, Mono } from "@/components/ui/typography";
+import { Heading, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import { formatDay, formatDayRange, formatMonthLong } from "@/lib/utils/date";
 import {
@@ -100,6 +94,9 @@ type EntrySide = "income" | "expense" | "debt";
 /** The mutation callbacks reject on failure, having already reported it. */
 type PlanCalendarProps = {
   plan: FinancePlanWithLines;
+  /** The plan page's headline (net worth + the view switcher), drawn above the
+   *  calendar's own controls so every view opens the same way. */
+  header?: React.ReactNode;
   /** The projections behind the page (calibrated first, then the plan as
    *  written for earlier dates): debt chips show the payment they made. */
   projections?: readonly Projection[];
@@ -388,6 +385,7 @@ function applyOptimistic(
 
 export function PlanCalendar({
   plan,
+  header,
   projections = [],
   onAddIncome,
   onAddExpense,
@@ -397,9 +395,8 @@ export function PlanCalendar({
   onUpsertOverride,
   onDeleteOverride,
 }: PlanCalendarProps) {
-  // Open on the current month — that's the most actionable view ("what's
-  // happening this month?"). The "Plan start" button still jumps back to the
-  // plan's beginning when the user needs the long view.
+  // Open on the current period — the most actionable view ("what's happening
+  // this month?").
   // The cursor is a DAY inside the period to show. It used to be the 1st of the
   // month, which with an anchor day > 1 always belongs to the PREVIOUS period —
   // the calendar opened one period back and "Today" led there too.
@@ -407,55 +404,31 @@ export function PlanCalendar({
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
   }, []);
-  const planStartMonth = useMemo(() => {
-    const d = new Date(plan.startMonth);
-    return new Date(d.getFullYear(), d.getMonth(), 1);
-  }, [plan.startMonth]);
-
   const [cursor, setCursor] = useState<Date>(todayMonth);
-  const [viewMode, setViewMode] = useState<"anchored" | "month">("anchored");
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [dragOverDay, setDragOverDay] = useState<string | null>(null);
 
-  // Period anchor day. 0 (feature disabled) collapses to day=1 — equivalent
-  // to calendar months, which is the "Month" view anyway.
+  // Period anchor day. 0 (feature disabled) collapses to day=1 — calendar
+  // months.
   const anchorDay =
     plan.confirmationDayOfMonth > 0 ? plan.confirmationDayOfMonth : 1;
 
-  // Resolved "what to display": either a confirmation-day-anchored period
-  // (day N → day N-1 of next month) or the cursor's calendar month.
-  // `periodRangeFor` works in UTC; everything below (the week grid, the
-  // summary, the muted test) works in LOCAL days. Convert once here, or a
+  // The confirmation-day-anchored period on screen (day N → day N-1 of next
+  // month).
+  // `periodRangeFor` works in UTC; everything below (the week grid and
+  // the muted test) works in LOCAL days. Convert once here, or a
   // negative-offset zone shifts the whole period a day early and the period's
-  // last day renders greyed out with its entries missing from the totals.
+  // last day renders greyed out.
   const currentRange = useMemo<Period>(() => {
-    if (viewMode === "anchored") {
-      const r = periodRangeFor(
-        new Date(
-          Date.UTC(cursor.getFullYear(), cursor.getMonth(), cursor.getDate())
-        ),
-        anchorDay
-      );
-      return { start: utcToLocalDay(r.start), end: utcToLocalDay(r.end) };
-    }
-    return { start: startOfMonth(cursor), end: endOfMonth(cursor) };
-  }, [viewMode, cursor, anchorDay]);
-
-  const previousRange = useMemo<Period>(() => {
-    if (viewMode === "anchored") {
-      // One day before the period start lies in the previous period.
-      const s = currentRange.start;
-      const prevDate = new Date(Date.UTC(s.getFullYear(), s.getMonth(), s.getDate() - 1));
-      const r = periodRangeFor(prevDate, anchorDay);
-      return { start: utcToLocalDay(r.start), end: utcToLocalDay(r.end) };
-    }
-    const prevCursor = subMonths(cursor, 1);
-    return {
-      start: startOfMonth(prevCursor),
-      end: endOfMonth(prevCursor),
-    };
-  }, [viewMode, cursor, anchorDay, currentRange.start]);
+    const r = periodRangeFor(
+      new Date(
+        Date.UTC(cursor.getFullYear(), cursor.getMonth(), cursor.getDate())
+      ),
+      anchorDay
+    );
+    return { start: utcToLocalDay(r.start), end: utcToLocalDay(r.end) };
+  }, [cursor, anchorDay]);
 
   // Optimistic snapshot — every operation that touches the plan applies its
   // change here first, so chips jump to the new position the moment the user
@@ -486,7 +459,7 @@ export function PlanCalendar({
     [rangeStartMs, rangeEndMs]
   );
 
-  // dayMap + summary read from the OPTIMISTIC snapshot so the calendar
+  // dayMap reads from the OPTIMISTIC snapshot so the calendar
   // surface updates instantly on user actions, before the server roundtrip.
   // Handler closures below still read `plan.*` (canonical) when looking up
   // the parent record being acted on.
@@ -500,44 +473,7 @@ export function PlanCalendar({
     [days, optimisticPlan, debtPayments]
   );
 
-  // Summary for the displayed range and the one before it (month → month or
-  // period → period), so we can show a current-vs-prev delta per metric. Both
-  // views sum the same per-day entries, so a chip and the totals never
-  // disagree.
-  const summary = useMemo(() => {
-    const summarize = (range: Period) => {
-      const rangeDays = eachDayOfInterval({
-        start: range.start,
-        end: range.end,
-      });
-      const rangeMap = buildDayMap(rangeDays, optimisticPlan, debtPayments);
-      let income = 0;
-      let expense = 0;
-      let debt = 0;
-      for (const entries of rangeMap.values()) {
-        for (const e of entries) {
-          if (e.side === "income") income += e.amount;
-          else if (e.side === "expense") expense += e.amount;
-          else debt += e.amount;
-        }
-      }
-      return { income, expense, debt };
-    };
-
-    const curr = summarize(currentRange);
-    const prev = summarize(previousRange);
-    return {
-      curr,
-      prev,
-      currNet: curr.income - curr.expense - curr.debt,
-      prevNet: prev.income - prev.expense - prev.debt,
-    };
-  }, [currentRange, previousRange, optimisticPlan, debtPayments]);
-
-  const monthLabel =
-    viewMode === "anchored"
-      ? formatDayRange(currentRange.start, currentRange.end)
-      : formatMonthLong(cursor);
+  const monthLabel = formatDayRange(currentRange.start, currentRange.end);
 
   // The save failures propagate: the dialog stays open, and the caller has
   // already toasted.
@@ -908,107 +844,56 @@ export function PlanCalendar({
     // by the CALENDAR's width, not the viewport's. At 390px a cell is ~45px
     // wide and the full chip (grip, name, amount, menu) spilled into the
     // neighbouring days.
-    <Card className="@container/cal">
+    <Card className="@container/cal xl:h-full">
       <CardHeader className="gap-3">
+        {header}
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <Button
               variant="ghost"
-              size="icon"
-              aria-label={
-                viewMode === "anchored" ? "Previous period" : "Previous month"
-              }
+              size="icon-sm"
+              aria-label="Previous period"
               onClick={() => {
-                if (viewMode === "anchored") {
-                  const prevDay = new Date(currentRange.start);
-                  prevDay.setUTCDate(prevDay.getUTCDate() - 1);
-                  setCursor(prevDay);
-                } else {
-                  setCursor((c) => addMonths(c, -1));
-                }
+                const prevDay = new Date(currentRange.start);
+                prevDay.setUTCDate(prevDay.getUTCDate() - 1);
+                setCursor(prevDay);
               }}
             >
               <ChevronLeft />
             </Button>
             <Heading
-              level="h5"
+              level="h6"
               as="h2"
               aria-live="polite"
-              className="min-w-0 text-center sm:min-w-45"
+              className="min-w-0 text-center sm:min-w-40"
             >
               {monthLabel}
             </Heading>
             <Button
               variant="ghost"
-              size="icon"
-              aria-label={
-                viewMode === "anchored" ? "Next period" : "Next month"
-              }
+              size="icon-sm"
+              aria-label="Next period"
               onClick={() => {
-                if (viewMode === "anchored") {
-                  const nextDay = new Date(currentRange.end);
-                  nextDay.setUTCDate(nextDay.getUTCDate() + 1);
-                  setCursor(nextDay);
-                } else {
-                  setCursor((c) => addMonths(c, 1));
-                }
+                const nextDay = new Date(currentRange.end);
+                nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+                setCursor(nextDay);
               }}
             >
               <ChevronRight />
             </Button>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <ToggleGroup
-              type="single"
-              size="sm"
-              value={viewMode}
-              onValueChange={(v) => v && setViewMode(v as "anchored" | "month")}
-              aria-label="Calendar view mode"
-            >
-              <ToggleGroupItem value="anchored">Anchored</ToggleGroupItem>
-              <ToggleGroupItem value="month">Month</ToggleGroupItem>
-            </ToggleGroup>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCursor(planStartMonth)}
-            >
-              Plan start
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCursor(todayMonth)}
-            >
-              Today
-            </Button>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <span aria-hidden="true" className="inline-block size-2 rounded-full bg-success" />
-            Income
-          </span>
-          <span className="flex items-center gap-1">
-            <span aria-hidden="true" className="inline-block size-2 rounded-full bg-warning" />
-            Expense
-          </span>
-          <span className="flex items-center gap-1">
-            <span aria-hidden="true" className="inline-block size-2 rounded-full bg-destructive" />
-            Debt
-          </span>
-          <span className="ml-auto text-2xs italic text-muted-foreground/70 @2xl/cal:hidden">
-            Tap an entry for its options · tap a date to add one
-          </span>
-          <span className="ml-auto hidden text-2xs italic text-muted-foreground/70 @2xl/cal:inline">
-            Click an entry to edit · drag the ⋮ handle to move · “+N more” expands a day
-          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCursor(todayMonth)}
+          >
+            Today
+          </Button>
         </div>
       </CardHeader>
 
       {/* Narrow: the card's 24px gutters cost a seventh of a cell each. */}
-      <CardContent className="flex flex-col gap-3 px-3 @2xl/cal:px-6">
+      <CardContent className="flex flex-col gap-3 px-3 @2xl/cal:px-6 xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
         <div
           aria-hidden="true"
           className="grid grid-cols-7 gap-1 text-center text-2xs font-semibold uppercase tracking-wide text-muted-foreground"
@@ -1020,16 +905,13 @@ export function PlanCalendar({
           ))}
         </div>
 
-        <div className="grid grid-cols-7 gap-1">
+        {/* The weeks share whatever height the panel leaves (equal rows), so a
+            short month fills the card instead of ending above its bottom. */}
+        <div className="grid grid-cols-7 gap-1 xl:min-h-0 xl:flex-1 xl:auto-rows-fr">
           {days.map((day) => {
             const key = toISODate(day);
             const entries = dayMap.get(key) ?? NO_ENTRIES;
-            // In anchored mode, "muted" means outside the current period.
-            // In month mode it falls back to outside the cursor's month.
-            const muted =
-              viewMode === "anchored"
-                ? day < currentRange.start || day > currentRange.end
-                : !isSameMonth(day, cursor);
+            const muted = day < currentRange.start || day > currentRange.end;
             // Highlight the configured confirmation day in each rendered
             // calendar month — clamped to month-end so day-31 in February
             // shows on Feb 28/29.
@@ -1066,7 +948,6 @@ export function PlanCalendar({
           })}
         </div>
 
-        <MonthSummaryStrip summary={summary} />
       </CardContent>
 
       <LineFormDialog
@@ -1284,109 +1165,6 @@ function MoveRecurringPrompt({
   );
 }
 
-type MonthSummaryData = {
-  curr: { income: number; expense: number; debt: number };
-  prev: { income: number; expense: number; debt: number };
-  currNet: number;
-  prevNet: number;
-};
-
-// Strip above the calendar grid: 4 cards (Income / Expense / Debt / Net) with
-// the current month's value and a delta vs the previous month. Delta colour is
-// semantic (more income = good, more expense/debt = bad).
-function MonthSummaryStrip({ summary }: { summary: MonthSummaryData }) {
-  return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-      <SummaryTile
-        label="Income"
-        value={summary.curr.income}
-        delta={summary.curr.income - summary.prev.income}
-        biggerIsBetter
-      />
-      <SummaryTile
-        label="Expense"
-        value={summary.curr.expense}
-        delta={summary.curr.expense - summary.prev.expense}
-        biggerIsBetter={false}
-      />
-      <SummaryTile
-        label="Debt"
-        value={summary.curr.debt}
-        delta={summary.curr.debt - summary.prev.debt}
-        biggerIsBetter={false}
-      />
-      <SummaryTile
-        label="Net"
-        value={summary.currNet}
-        delta={summary.currNet - summary.prevNet}
-        biggerIsBetter
-        signedValue
-      />
-    </div>
-  );
-}
-
-function SummaryTile({
-  label,
-  value,
-  delta,
-  biggerIsBetter,
-  signedValue = false,
-}: {
-  label: string;
-  value: number;
-  delta: number;
-  biggerIsBetter: boolean;
-  /** When true (Net only), display the value with an explicit +/− sign. */
-  signedValue?: boolean;
-}) {
-  const deltaRounded = Math.round(delta * 100) / 100;
-  const direction =
-    Math.abs(deltaRounded) < 0.005 ? "flat" : deltaRounded > 0 ? "up" : "down";
-  // good = up && biggerIsBetter, or down && !biggerIsBetter.
-  const good =
-    direction === "up"
-      ? biggerIsBetter
-      : direction === "down"
-        ? !biggerIsBetter
-        : null;
-  const deltaColor =
-    good === null
-      ? "text-muted-foreground"
-      : good
-        ? "text-success"
-        : "text-destructive";
-  const arrow = direction === "up" ? "▲" : direction === "down" ? "▼" : "·";
-  const directionText =
-    direction === "up" ? "up" : direction === "down" ? "down" : "";
-
-  const displayValue = signedValue
-    ? formatSignedCurrency(value)
-    : formatCurrency(value);
-  const valueColor = signedValue
-    ? value >= 0
-      ? "text-success"
-      : "text-destructive"
-    : "";
-
-  return (
-    <div className="rounded-lg border p-2.5">
-      <Eyebrow size="sm" as="div">
-        {label}
-      </Eyebrow>
-      <Mono as="div" className={cn("mt-0.5 text-base font-semibold", valueColor)}>
-        {displayValue}
-      </Mono>
-      <Mono as="div" className={cn("text-2xs", deltaColor)}>
-        <span aria-hidden="true">{arrow}</span>{" "}
-        {direction === "flat"
-          ? "no change"
-          : `${directionText} ${formatCurrency(Math.abs(deltaRounded))} vs prev`}
-      </Mono>
-    </div>
-  );
-}
-
 type CalendarCellProps = {
   day: Date;
   isoKey: string;
@@ -1432,10 +1210,13 @@ const CalendarCell = memo(function CalendarCell({
   onDragEnterCell,
   onDragLeaveCell,
 }: CalendarCellProps) {
-  // Collapsed view shows up to 3 entries + overflow indicator. Expanded view
-  // shows every entry inside a scroll container.
-  const visible = isExpanded ? entries : entries.slice(0, 3);
+  // Collapsed, a day shows its one entry, or ONE summary chip for several
+  // ("3 entries" and the day's net): two chips side by side made the busy
+  // weeks twice as tall as the rest. Expanded, every entry, scrolling.
+  const visible = isExpanded || entries.length === 1 ? entries : [];
   const extra = isExpanded ? 0 : entries.length - visible.length;
+  const dayTotals = sumBySide(entries);
+  const dayNet = dayTotals.income - dayTotals.expense - dayTotals.debt;
   const dayLabel = formatDay(day);
 
   // Native HTML5 drop handlers — onDragOver must preventDefault to make the
@@ -1477,11 +1258,11 @@ const CalendarCell = memo(function CalendarCell({
         isAnchor && !muted && "border-warning/60 bg-warning/10",
         // Ring only: the cell's own border already draws the edge.
         isDragOver && "bg-primary/5 ring-1 ring-primary/50",
-        isExpanded ? "min-h-80" : "min-h-16 @2xl/cal:min-h-35"
+        isExpanded ? "min-h-80" : "min-h-12 @2xl/cal:min-h-20"
       )}
       data-date={isoKey}
     >
-      <div className="mb-1 flex items-center justify-between">
+      <div className="mb-0.5 flex items-center justify-between">
         {/* Today's date number lives inside a filled pill (Google / Apple
             calendar pattern) so it pops out from a quick scan. Other days
             stay as flat numerals. Colour is not the only signal: the markers
@@ -1552,16 +1333,26 @@ const CalendarCell = memo(function CalendarCell({
                 <button
                   type="button"
                   aria-expanded={false}
-                  aria-label={`Show ${extra} more on ${dayLabel}`}
+                  aria-label={`Show the ${extra} entries on ${dayLabel}`}
                   onClick={() => onToggleExpand(isoKey)}
-                  className="w-full cursor-pointer rounded px-1 text-left text-2xs text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[state=delayed-open]:bg-muted data-[state=instant-open]:bg-muted data-[state=delayed-open]:text-foreground data-[state=instant-open]:text-foreground"
+                  className="flex w-full min-w-0 cursor-pointer flex-col rounded bg-muted px-0.5 py-0.5 text-left text-2xs outline-none hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring @lg/cal:px-1 @2xl/cal:py-1"
                 >
-                  +{extra}
-                  <span className="hidden @lg/cal:inline"> more</span>
+                  <span className="truncate font-medium leading-tight">
+                    {extra}
+                    <span className="hidden @lg/cal:inline"> entries</span>
+                  </span>
+                  <Mono
+                    className={cn(
+                      "truncate leading-tight",
+                      moneySign(dayNet) >= 0 ? "text-success" : "text-destructive"
+                    )}
+                  >
+                    {formatSignedCurrency(dayNet)}
+                  </Mono>
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top" sideOffset={10} className="max-w-xs">
-                <HiddenEntriesTooltipBody allEntries={entries} />
+                <DayEntriesTooltipBody entries={entries} />
               </TooltipContent>
             </Tooltip>
           </li>
@@ -1738,21 +1529,18 @@ function chipPalette(side: EntrySide): string {
       : "bg-destructive/10 text-destructive";
 }
 
-// Listing of entries hidden behind "+N more" plus a per-side / net total for
-// the whole day. Showing the day's net gives the user a one-glance answer to
-// "is this day positive or negative?" without expanding the cell.
-function HiddenEntriesTooltipBody({ allEntries }: { allEntries: DayEntry[] }) {
-  const hidden = allEntries.slice(3);
-  const totals = sumBySide(allEntries);
+// The entries behind a day's summary chip, plus a per-side / net total for
+// the day: a one-glance answer to "is this day positive or negative?"
+// without expanding the cell.
+function DayEntriesTooltipBody({ entries }: { entries: DayEntry[] }) {
+  const totals = sumBySide(entries);
   const net = totals.income - totals.expense - totals.debt;
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="text-2xs opacity-80">
-        {hidden.length} more {hidden.length === 1 ? "entry" : "entries"} on this day
-      </div>
+      <div className="text-2xs opacity-80">{entries.length} entries on this day</div>
       <ul className="flex flex-col gap-0.5 text-2xs">
-        {hidden.map((e) => (
+        {entries.map((e) => (
           <li
             key={`${e.side}-${e.id}`}
             className="flex items-center justify-between gap-3"

@@ -38,9 +38,11 @@ import type {
 
 import { projectPlan, type ProjectOptions } from "@/lib/finance/projection";
 import type { OpeningRestatement } from "@/lib/finance/opening-balances";
+import { nextPlanColor } from "@/lib/finance/plan-colors";
 import { isoDay } from "@/lib/finance/schedule";
 
 import { getUserPortfolio, getPortfolioStats, getPortfolioAssets } from "./portfolio-service";
+import { getManagedAssets } from "./margin-service";
 import { ensureOwnedRow } from "./ownership";
 
 // ---------- helpers ----------
@@ -173,12 +175,11 @@ export async function createPlan(
     // Auto-set as main when the user has no plans yet. Keeps the
     // confirmation host / dashboard finance card pointed at something
     // useful from the very first plan onwards.
-    const [existing] = await tx
-      .select({ id: financePlans.id })
+    const existing = await tx
+      .select({ color: financePlans.color })
       .from(financePlans)
-      .where(eq(financePlans.userId, userId))
-      .limit(1);
-    const shouldBeMain = !existing;
+      .where(eq(financePlans.userId, userId));
+    const shouldBeMain = existing.length === 0;
 
     const [plan] = await tx
       .insert(financePlans)
@@ -195,9 +196,10 @@ export async function createPlan(
         debtStrategy: data.debtStrategy,
         autoInvestPercent: data.autoInvestPercent,
         autoInvestMethodId: data.autoInvestMethodId ?? null,
+        autoInvestCustomRate: data.autoInvestCustomRate ?? null,
         initialInvestments: data.initialInvestments,
         confirmationDayOfMonth: data.confirmationDayOfMonth,
-        color: data.color,
+        color: data.color ?? nextPlanColor(existing.map((p) => p.color)),
         balancesAsOf: today ? isoDay(today) : null,
         isMain: shouldBeMain,
       })
@@ -264,10 +266,16 @@ async function writeRestatement(
       ...extraDebts.map((d) => ({ debtId: d.id, balance: d.balance })),
     ];
     if (rows.length > 0) {
+      const keys = await tx
+        .select({ id: financePlanDebts.id, debtKey: financePlanDebts.debtKey })
+        .from(financePlanDebts)
+        .where(eq(financePlanDebts.planId, planId));
+      const keyById = new Map(keys.map((d) => [d.id, d.debtKey ?? d.id]));
       await tx.insert(financePlanDebtConfirmations).values(
         rows.map((row) => ({
           confirmationId: r.syncConfirmationId!,
           debtId: row.debtId,
+          debtKey: keyById.get(row.debtId) ?? row.debtId,
           confirmedBalance: row.balance,
         }))
       );
@@ -309,6 +317,7 @@ export async function updatePlan(
         debtStrategy: data.debtStrategy,
         autoInvestPercent: data.autoInvestPercent,
         autoInvestMethodId: data.autoInvestMethodId ?? null,
+        autoInvestCustomRate: data.autoInvestCustomRate ?? null,
         confirmationDayOfMonth: data.confirmationDayOfMonth,
         color: data.color,
         // undefined leaves the link untouched; null explicitly detaches.
@@ -426,14 +435,38 @@ export const getMainPlan = cache(async function getMainPlan(
   return plan ?? null;
 });
 
+type CloneOptions = { asScenario?: boolean };
+
 export async function clonePlan(
   userId: string,
   sourcePlanId: string,
   newName: string,
-  options: { asScenario?: boolean } = {}
+  options: CloneOptions = {}
 ): Promise<FinancePlan> {
+  return (await clonePlanWithLineIds(userId, sourcePlanId, newName, options)).plan;
+}
+
+/**
+ * `clonePlan`, also returning where each line went: `"income:<old id>"` →
+ * the copy's line id (likewise `expense:` and `debt:`), so a caller can change
+ * the copy's lines by the source's ids.
+ */
+export async function clonePlanWithLineIds(
+  userId: string,
+  sourcePlanId: string,
+  newName: string,
+  options: CloneOptions = {}
+): Promise<{ plan: FinancePlan; lineIds: ReadonlyMap<string, string> }> {
   const source = await getPlanWithLines(sourcePlanId, userId);
   if (!source) throw new Error("Plan not found");
+  // Its own line colour: a copy wearing its source's drew the two plans as one.
+  // Read fresh, not through the request cache: a plan created moments ago in
+  // the same request (the assistant's create then copy) must count.
+  const worn = await db
+    .select({ color: financePlans.color })
+    .from(financePlans)
+    .where(eq(financePlans.userId, userId));
+  const color = nextPlanColor(worn.map((p) => p.color));
 
   // One transaction: a clone either arrives whole (plan, lines AND the
   // per-month overrides pointing at them) or not at all.
@@ -453,11 +486,12 @@ export async function clonePlan(
         debtStrategy: source.debtStrategy,
         autoInvestPercent: source.autoInvestPercent,
         autoInvestMethodId: source.autoInvestMethodId,
+        autoInvestCustomRate: source.autoInvestCustomRate,
         initialInvestments: source.initialInvestments,
         // Keep the accounting-period anchor: without it the clone falls back to
         // day 1 and its periods drift out of alignment with the source plan.
         confirmationDayOfMonth: source.confirmationDayOfMonth,
-        color: source.color,
+        color,
         // Same balances, stated on the same day — the clone opens exactly
         // where its source does.
         balancesAsOf: source.balancesAsOf,
@@ -531,6 +565,8 @@ export async function clonePlan(
           source.debts.map((d) => ({
             planId: plan.id,
             name: d.name,
+            // The same debt in both plans: a confirmed balance reaches each.
+            debtKey: d.debtKey ?? d.id,
             initialBalance: d.initialBalance,
             monthlyInterestRate: d.monthlyInterestRate,
             monthlyPayment: d.monthlyPayment,
@@ -555,7 +591,7 @@ export async function clonePlan(
       await tx.insert(financePlanLineOverrides).values(overrides);
     }
 
-    return plan;
+    return { plan, lineIds: idMap };
   });
 }
 
@@ -1011,6 +1047,7 @@ export const getPortfolioWeightedMonthlyRoi = cache(async function getPortfolioW
  * 0 if none is linked. Used to compound the investments bucket during projection.
  */
 export async function getAutoInvestRate(plan: FinancePlan): Promise<number> {
+  if (plan.autoInvestCustomRate != null) return num(plan.autoInvestCustomRate);
   if (!plan.autoInvestMethodId) return 0;
   const [row] = await db
     .select({ monthlyRoi: investmentMethods.monthlyRoi })
@@ -1052,13 +1089,24 @@ export async function projectionOptionsFor(
   userId: string,
   prefetched: { autoInvestRate?: number } = {}
 ): Promise<ProjectOptions> {
-  const [portfolioValue, portfolioMonthlyGrowthRate, autoInvestRate] = await Promise.all([
+  const [ownValue, portfolioMonthlyGrowthRate, managed, autoInvestRate] = await Promise.all([
     plan.includePortfolio ? getPortfolioValueForUser(userId) : Promise.resolve(0),
     plan.includePortfolio ? getPortfolioWeightedMonthlyRoi(userId) : Promise.resolve(0),
+    // What the user holds with other people's money: the assets at market
+    // value, growing at the return the owner EXPECTS of them (each method's
+    // `expected_monthly_roi`), less what is owed to the investors, growing at
+    // the rate PROMISED to them — so net worth carries only the margin (the
+    // owner's call of 2026-11-08; until then it carried the whole value).
+    plan.includePortfolio ? getManagedAssets(userId) : Promise.resolve(null),
     prefetched.autoInvestRate ?? getAutoInvestRate(plan),
   ]);
+  const managedValue = managed?.value ?? 0;
   return {
-    portfolioValue,
+    portfolioValue: ownValue + managedValue,
+    portfolioHeldValue: managedValue,
+    portfolioHeldMonthlyGrowthRate: managed?.expectedMonthlyRate ?? 0,
+    portfolioClaims: managed?.owed ?? 0,
+    portfolioClaimsMonthlyRate: managed?.promisedMonthlyRate ?? 0,
     portfolioMonthlyGrowthRate,
     autoInvestRate,
     overrides: plan.overrides,

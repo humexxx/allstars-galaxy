@@ -1,0 +1,1 @@
+ALTER TYPE "public"."finance_snapshot_source" ADD VALUE 'movement';

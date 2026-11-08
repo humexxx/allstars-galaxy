@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { statToneClass } from "@/components/ui/stat-card";
 import { Eyebrow, Mono } from "@/components/ui/typography";
 import {
   DropdownMenu,
@@ -49,6 +49,8 @@ import {
   deletePlanAction,
   setMainPlanAction,
 } from "@/app/actions/finance-plans";
+import { CountUpCurrency } from "./count-up";
+import { DeltaChip } from "./delta-chip";
 import { PlanColorPicker } from "./plan-color-picker";
 import { runAction } from "@/lib/actions/run";
 import { cn } from "@/lib/utils";
@@ -58,6 +60,7 @@ import {
   summaryDebtFree,
   type PlanTimeline,
 } from "@/lib/finance/chart-series";
+import { changeBaseline, checkpointLabels } from "@/lib/finance/dashboard";
 import type { FinancePlan, PlanSummary } from "@/types/finance";
 
 const END_LABEL = new Intl.DateTimeFormat("en-US", {
@@ -78,27 +81,19 @@ const ComparePlansChart = dynamic(
 
 const CHART_HEIGHT = "h-64 sm:h-80 lg:h-115";
 
-type Metric = "netWorth" | "totalDebt";
-
-const METRIC_LABEL: Record<Metric, string> = {
-  netWorth: "Net worth",
-  totalDebt: "Total debt",
-};
-
-/** Horizon options, in periods. `0` means "as far as the projections run". */
+/** Horizon options, in periods. 10 years is as far as a plan projects. */
 const RANGES = [
+  { value: "3", label: "3 months" },
+  { value: "6", label: "6 months" },
   { value: "12", label: "12 months" },
-  { value: "24", label: "24 months" },
-  { value: "36", label: "3 years" },
   { value: "60", label: "5 years" },
-  { value: "0", label: "Full plan" },
+  { value: "120", label: "10 years" },
 ] as const;
 
-const DEFAULT_RANGE = "24";
+const DEFAULT_RANGE = "12";
 /** Periods before today kept in view, regardless of the horizon picked. */
 const PAST_MONTHS = 3;
 
-const POSITIVE = "text-success";
 const NEGATIVE = "text-destructive";
 
 /**
@@ -116,6 +111,7 @@ export function PlansWorkspace({
   summaries,
   timelines,
   today,
+  lastConfirmedDay = null,
 }: {
   plans: FinancePlan[];
   summaries: Record<string, PlanSummary>;
@@ -123,6 +119,8 @@ export function PlansWorkspace({
   timelines: Record<string, PlanTimeline>;
   /** The reader's calendar day — the chart's today boundary. */
   today: Date;
+  /** The user's last own confirmation (YYYY-MM-DD): net worth's change is from there. */
+  lastConfirmedDay?: string | null;
 }) {
   const [isPending, startTransition] = useTransition();
   // Deleting a row unmounts the menu that opened the dialog, so focus would
@@ -149,11 +147,10 @@ export function PlansWorkspace({
       setSelected((prev) => new Set([...prev, ...added]));
     }
   }
-  const [metric, setMetric] = useState<Metric>("netWorth");
   const [range, setRange] = useState<string>(DEFAULT_RANGE);
-  // "Full plan" draws every month any plan covers; the others window around
-  // today (PAST_MONTHS before it).
-  const months = Number(range) || undefined;
+  // The horizon runs ahead of today; the window also holds today's month and
+  // the PAST_MONTHS before it.
+  const months = Number(range) + PAST_MONTHS + 1;
   // Two sources of emphasis: pointing at a rail row (transient) and pinning one
   // via its colour swatch (sticky, and the only route on touch, where there is
   // no hover). A pin always wins over a hover.
@@ -161,6 +158,38 @@ export function PlansWorkspace({
   const [pinnedId, setPinnedId] = useState<string | null>(null);
   const focusedId = pinnedId ?? hoveredId;
   const focusedPlan = plans.find((p) => p.id === focusedId) ?? null;
+
+  // Net worth today leads the page, as on the dashboard: the user's real
+  // position (the same under every plan) against the last closed period.
+  const hero = useMemo(() => {
+    const main = plans.find((p) => p.isMain);
+    const timeline = main ? timelines[main.id] : undefined;
+    const now = timeline?.points[timeline.todayIndex];
+    if (!main || !timeline || !now) return null;
+    const baseline = changeBaseline(
+      timeline.points.slice(0, timeline.todayIndex).filter((p) => !p.skipped),
+      (p) => checkpointLabels(p.date).time,
+      (p) => checkpointLabels(p.date),
+      lastConfirmedDay
+    );
+    return {
+      netWorth: now.netWorth,
+      sinceClose: baseline ? now.netWorth - baseline.point.netWorth : null,
+      since: baseline?.since ?? null,
+    };
+  }, [plans, timelines, lastConfirmedDay]);
+
+  // Each plan's net worth at the end of the chosen horizon — the last month
+  // the chart draws — or at the plan's own end when it stops sooner.
+  const atHorizon = useMemo(() => {
+    const byPlan = new Map<string, { netWorth: number; date: Date }>();
+    for (const plan of plans) {
+      const timeline = timelines[plan.id];
+      const point = timeline?.points[Math.min(timeline.points.length - 1, timeline.todayIndex + Number(range))];
+      if (point) byPlan.set(plan.id, { netWorth: point.netWorth, date: point.date });
+    }
+    return byPlan;
+  }, [plans, timelines, range]);
 
   const filtered = useMemo(
     () =>
@@ -225,21 +254,44 @@ export function PlansWorkspace({
           on lg and the rail fills it (see the rail card). */}
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="min-w-0 lg:col-span-2">
-          <CardHeader className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2">
-              <CardTitle as="h2">Projection comparison</CardTitle>
-              {focusedPlan && (
-                <Badge variant="outline" className="min-w-0 text-muted-foreground">
-                  <span
-                    className="size-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: focusedPlan.color }}
-                    aria-hidden="true"
-                  />
-                  <span className="truncate">{focusedPlan.name}</span>
-                </Badge>
+          <CardHeader className="flex flex-wrap items-start justify-between gap-3">
+            <CardTitle as="h2" className="sr-only">
+              Projection comparison
+            </CardTitle>
+            <div className="flex min-w-0 flex-col gap-1">
+              {/* Fixed height: the focused plan's badge is taller than the
+                  eyebrow, and appearing on hover it pushed the figure down. */}
+              <div className="flex h-5 min-w-0 items-center gap-2">
+                <Eyebrow size="sm" as="div">
+                  Net worth
+                </Eyebrow>
+                {focusedPlan && (
+                  <Badge variant="outline" className="h-5 min-w-0 py-0 text-muted-foreground">
+                    <span
+                      className="size-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: focusedPlan.color }}
+                      aria-hidden="true"
+                    />
+                    <span className="truncate">{focusedPlan.name}</span>
+                  </Badge>
+                )}
+              </div>
+              {hero && (
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <Mono
+                    className={cn(
+                      "text-3xl font-semibold sm:text-4xl",
+                      statToneClass(moneySign(hero.netWorth) >= 0 ? "positive" : "negative")
+                    )}
+                  >
+                    <CountUpCurrency value={hero.netWorth} />
+                  </Mono>
+                  {hero.since && hero.sinceClose !== null && (
+                    <DeltaChip delta={hero.sinceClose} since={hero.since} />
+                  )}
+                </div>
               )}
             </div>
-            {/* Both controls at h-8, so the row has one height. */}
             <div className="flex flex-wrap items-center gap-2">
               <Select value={range} onValueChange={setRange}>
                 <SelectTrigger size="sm" className="w-38" aria-label="Horizon">
@@ -253,19 +305,6 @@ export function PlansWorkspace({
                   ))}
                 </SelectContent>
               </Select>
-              <ToggleGroup
-                type="single"
-                size="sm"
-                value={metric}
-                onValueChange={(v) => v && setMetric(v as Metric)}
-                aria-label="Metric"
-              >
-                {(Object.keys(METRIC_LABEL) as Metric[]).map((m) => (
-                  <ToggleGroupItem key={m} value={m}>
-                    {METRIC_LABEL[m]}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
             </div>
           </CardHeader>
           {/* The Card default of px-6 costs 48 of a 375px screen before a
@@ -283,7 +322,6 @@ export function PlansWorkspace({
               <ComparePlansChart
                 series={filtered}
                 today={today}
-                metric={metric}
                 heightClass={CHART_HEIGHT}
                 focusedPlanId={focusedId}
                 months={months}
@@ -316,6 +354,7 @@ export function PlansWorkspace({
             <ul className="flex flex-col gap-2">
               {plans.map((plan) => {
                 const s = summaries[plan.id];
+                const end = atHorizon.get(plan.id) ?? null;
                 const inChart = selected.has(plan.id);
                 return (
                   <li
@@ -362,30 +401,29 @@ export function PlansWorkspace({
                         <div className="mt-0.5 flex flex-col gap-0.5 text-xs text-muted-foreground">
                           <span className="flex flex-wrap items-baseline gap-x-1">
                             Net worth
+                            {/* Plain figures: the rail lists plans, and colour is
+                                kept for what needs a look — a negative end, debt
+                                past the horizon. */}
                             <Mono
-                              className={
-                                moneySign(s.endingNetWorth) > 0
-                                  ? POSITIVE
-                                  : moneySign(s.endingNetWorth) < 0
-                                    ? NEGATIVE
-                                    : undefined
-                              }
+                              className={cn(
+                                "text-foreground",
+                                moneySign(end?.netWorth ?? s.endingNetWorth) < 0 && NEGATIVE
+                              )}
                             >
-                              {formatCurrency(s.endingNetWorth)}
+                              {formatCurrency(end?.netWorth ?? s.endingNetWorth)}
                             </Mono>
-                            {/* Dated: each plan ends on its own horizon. */}
-                            {s.endDate && <span>at {END_LABEL.format(s.endDate)}</span>}
+                            {/* Dated: the horizon's last month, or the plan's
+                                own end when it stops sooner. */}
+                            {(end?.date ?? s.endDate) && (
+                              <span>at {END_LABEL.format(end?.date ?? s.endDate!)}</span>
+                            )}
                           </span>
                           {(() => {
                             const status = summaryDebtFree(s);
                             return (
                               <span
                                 className={
-                                  status.kind === "beyond-horizon"
-                                    ? NEGATIVE
-                                    : status.kind === "no-debt"
-                                      ? undefined
-                                      : POSITIVE
+                                  status.kind === "beyond-horizon" ? NEGATIVE : undefined
                                 }
                               >
                                 {status.kind === "beyond-horizon"

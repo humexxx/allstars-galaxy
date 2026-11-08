@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/format";
+import { periodHealthBand, type PeriodHealthBand } from "@/lib/finance/period-health";
 
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
@@ -21,31 +22,11 @@ type FinancialHealthDonutProps = {
   showFooter?: boolean;
 };
 
-const GREEN_THRESHOLD = 0.36;
-const YELLOW_THRESHOLD = 0.5;
-
-type Status = {
-  label: "Healthy" | "Caution" | "Stretched" | "No income";
-  tone: "positive" | "warning" | "negative" | "muted";
-  stroke: string;
-};
+type Status = { label: PeriodHealthBand["label"] | "No income"; color: string | null };
 
 function statusFor(ratio: number, hasIncome: boolean): Status {
-  if (!hasIncome)
-    return { label: "No income", tone: "muted", stroke: "currentColor" };
-  if (ratio < GREEN_THRESHOLD)
-    return { label: "Healthy", tone: "positive", stroke: "var(--success)" };
-  if (ratio < YELLOW_THRESHOLD)
-    return { label: "Caution", tone: "warning", stroke: "var(--warning)" };
-  return { label: "Stretched", tone: "negative", stroke: "var(--destructive)" };
+  return hasIncome ? periodHealthBand(ratio) : { label: "No income", color: null };
 }
-
-const TONE_TEXT: Record<Status["tone"], string> = {
-  positive: "text-success",
-  warning: "text-warning",
-  negative: "text-destructive",
-  muted: "text-muted-foreground",
-};
 
 export function FinancialHealthDonut({
   obligations,
@@ -149,7 +130,7 @@ export function FinancialHealthDonut({
             cy={cy}
             r={r}
             fill="none"
-            stroke={status.stroke}
+            stroke={status.color ?? "currentColor"}
             strokeWidth={stroke}
             strokeLinecap="round"
             strokeDasharray={circumference}
@@ -158,20 +139,16 @@ export function FinancialHealthDonut({
         </svg>
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center"
+          className={cn(
+            "pointer-events-none absolute inset-0 flex flex-col items-center justify-center",
+            !status.color && "text-muted-foreground"
+          )}
+          style={status.color ? { color: status.color } : undefined}
         >
-          <span
-            className={cn(
-              "font-mono font-bold leading-none tabular-nums",
-              percentClass,
-              TONE_TEXT[status.tone]
-            )}
-          >
+          <span className={cn("font-mono font-bold leading-none tabular-nums", percentClass)}>
             {displayedPercent}
           </span>
-          <span className={cn("text-2xs font-medium", TONE_TEXT[status.tone])}>
-            {status.label}
-          </span>
+          <span className="text-2xs font-medium">{status.label}</span>
         </div>
       </div>
       {showFooter && hasIncome && (

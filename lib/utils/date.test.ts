@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  formatProjectionMonth,
   calendarDayInTimeZone,
   earliestCalendarDay,
   endOfDayInTimeZone,
@@ -176,5 +177,12 @@ describe("endOfDayInTimeZone", () => {
     expect(endOfDayInTimeZone("2027-01-16", "Not/AZone").toISOString()).toBe(
       "2027-01-16T23:59:59.999Z"
     );
+  });
+});
+
+describe("formatProjectionMonth", () => {
+  it("marks the year so a month never reads as a day", () => {
+    expect(formatProjectionMonth(new Date(Date.UTC(2026, 10, 1)))).toBe("Nov ’26");
+    expect(formatProjectionMonth(new Date(Date.UTC(2027, 0, 1)))).toBe("Jan ’27");
   });
 });

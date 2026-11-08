@@ -104,19 +104,57 @@ function override(o: Partial<FinancePlanLineOverride>): FinancePlanLineOverride 
 }
 
 describe("today's position (projectStateAt)", () => {
-  it("F1: the period-end extra payment is not in today's debt (−$7,000, not −$4,200)", () => {
+  it("F1: the surplus goes to debt as soon as it lands, and net worth stays −$7,000", () => {
+    // Paid on the 1st, the period's surplus (2,800) used to sit as cash until
+    // the close and then drop into debt. It now leaves cash the day it lands.
     const p = plan({ startMonth: U(2026, 9), monthsAhead: 12, surplusToDebtsPercent: "1" });
     const incomes = [inc({ monthlyAmount: "3000", dayOfMonth: 1 })];
     const debts = [debt({ initialBalance: "10000", monthlyPayment: "200", dayOfMonth: 5 })];
     const today = projectStateAt(p, incomes, [], debts, {}, U(2026, 9, 10))!;
     expect(today.status).toBe("in-range");
-    expect(today.savings).toBe(2800);
-    expect(today.totalDebt).toBe(9800);
+    expect(today.savings).toBe(0);
+    expect(today.totalDebt).toBe(7000);
     expect(today.netWorth).toBe(-7000);
     // …and the period close agrees: nothing "drops" between today and the close.
     const close = projectPlan(p, incomes, [], debts).months[0];
     expect(close.netWorth).toBe(-7000);
     expect(close.totalDebt).toBe(7000);
+  });
+
+  it("keeps back what the rest of the period still has to pay before routing the surplus", () => {
+    // 3,000 lands on the 1st; rent of 1,000 is due on the 20th. On the 10th
+    // only 1,800 can go to the debt — 200 scheduled already left on the 5th.
+    const p = plan({ startMonth: U(2026, 9), monthsAhead: 12, surplusToDebtsPercent: "1" });
+    const incomes = [inc({ monthlyAmount: "3000", dayOfMonth: 1 })];
+    const expenses = [exp({ monthlyAmount: "1000", dayOfMonth: 20 })];
+    const debts = [debt({ initialBalance: "10000", monthlyPayment: "200", dayOfMonth: 5 })];
+    const today = projectStateAt(p, incomes, expenses, debts, {}, U(2026, 9, 10))!;
+    expect(today.savings).toBe(1000);
+    expect(today.totalDebt).toBe(8000);
+    const close = projectPlan(p, incomes, expenses, debts).months[0];
+    expect(close.totalDebt).toBe(8000);
+    expect(close.savings).toBe(0);
+  });
+
+  it("pays a card due later in the period as soon as the money lands", () => {
+    // Paid on the 1st, the card's 200 is due on the 20th: on the 10th it is
+    // already paid with the extra, and nothing is left in cash.
+    const p = plan({ startMonth: U(2026, 9), monthsAhead: 12, surplusToDebtsPercent: "1" });
+    const incomes = [inc({ monthlyAmount: "3000", dayOfMonth: 1 })];
+    const debts = [debt({ initialBalance: "10000", monthlyPayment: "200", dayOfMonth: 20 })];
+    const today = projectStateAt(p, incomes, [], debts, {}, U(2026, 9, 10))!;
+    expect(today.savings).toBe(0);
+    expect(today.totalDebt).toBe(7000);
+    expect(today.netWorth).toBe(-7000);
+  });
+
+  it("routes nothing before the money has landed", () => {
+    const p = plan({ startMonth: U(2026, 9), monthsAhead: 12, surplusToDebtsPercent: "1" });
+    const incomes = [inc({ monthlyAmount: "3000", dayOfMonth: 25 })];
+    const debts = [debt({ initialBalance: "10000", monthlyPayment: "200", dayOfMonth: 5 })];
+    const today = projectStateAt(p, incomes, [], debts, {}, U(2026, 9, 10))!;
+    // Only the scheduled 200 has left; the 2,800 extra waits for the 25th.
+    expect(today.totalDebt).toBe(9800);
   });
 
   it("accrues debt interest up to today (balance 10,000 at 2%, no payment yet on day 15 of 30)", () => {
@@ -355,6 +393,46 @@ describe("F7 / F28: strategy comparison", () => {
     const cmp = compareDebtStrategies(p, [], [], [d], opts);
     expect(chart.endingNetWorth).toBeCloseTo(62486.72, 2);
     expect(cmp.avalanche.endingNetWorth).toBeCloseTo(chart.endingNetWorth, 6);
+  });
+
+  it("grows only the user's own part of the portfolio; managed assets stay flat", () => {
+    // 10,000 of the user's own at 1%/month, plus 2,663.05 of other people's
+    // money held at market value: the 2,663.05 has no promised rate.
+    const p = plan({ monthsAhead: 12, includePortfolio: true });
+    const opts = { portfolioValue: 12663.05, portfolioHeldValue: 2663.05, portfolioMonthlyGrowthRate: 0.01 };
+    const last = projectPlan(p, [], [], [], opts).months.at(-1)!;
+    expect(last.portfolioValue).toBeCloseTo(2663.05 + 10000 * 1.01 ** 12, 0);
+  });
+
+  it("grows managed assets at the owner's expected return, apart from the user's own", () => {
+    // Own money at the promised 0.7%, managed assets at the expected 1%.
+    const p = plan({ monthsAhead: 12, includePortfolio: true });
+    const opts = {
+      portfolioValue: 12207.44,
+      portfolioHeldValue: 2207.44,
+      portfolioMonthlyGrowthRate: 0.007,
+      portfolioHeldMonthlyGrowthRate: 0.01,
+    };
+    const last = projectPlan(p, [], [], [], opts).months.at(-1)!;
+    expect(last.portfolioValue).toBeCloseTo(2207.44 * 1.01 ** 12 + 10000 * 1.007 ** 12, 0);
+  });
+  it("counts the managed money as its margin: the investors' claim comes off net worth", () => {
+    // $2,240 of assets bought with investors' money they are owed $7,540 for:
+    // the assets grow at the 1% expected, the claim at the 0.7% promised.
+    const p = plan({ monthsAhead: 12, includePortfolio: true });
+    const opts = {
+      portfolioValue: 2240,
+      portfolioHeldValue: 2240,
+      portfolioHeldMonthlyGrowthRate: 0.01,
+      portfolioClaims: 7540,
+      portfolioClaimsMonthlyRate: 0.007,
+    };
+    const months = projectPlan(p, [], [], [], opts).months;
+    const last = months.at(-1)!;
+    expect(last.portfolioValue).toBeCloseTo(2240 * 1.01 ** 12, 0);
+    expect(last.portfolioClaims).toBeCloseTo(7540 * 1.007 ** 12, 0);
+    expect(last.netWorth).toBeCloseTo(last.portfolioValue - last.portfolioClaims!, 2);
+    expect(months[0].netWorth).toBeLessThan(0);
   });
 });
 

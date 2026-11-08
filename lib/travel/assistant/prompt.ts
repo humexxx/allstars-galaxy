@@ -1,10 +1,6 @@
-import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 
-import { toolInputSchema } from "@/lib/ai/assistant/converse";
-import type { AiModel } from "@/lib/ai/models";
 import { idSchema } from "@/schemas/common";
-import { travelChangeSetSchema } from "@/schemas/travel-assistant";
 
 /**
  * Fixed text, so the prompt cache holds across every turn: today's date and
@@ -42,40 +38,3 @@ How to reply
 - Short and plain: a sentence or two, or a few lines starting with "-". No headings, tables or bold text. The proposal card already lists every change, so do not repeat it item by item.`;
 
 export const getTripInputSchema = z.object({ tripId: idSchema });
-
-/** The app's own tools, then the model's web search variant. */
-export function travelAssistantTools(model: AiModel): Anthropic.Beta.BetaToolUnion[] {
-  return [
-    ...TRAVEL_ASSISTANT_TOOLS,
-    { type: model.webSearch, name: "web_search", max_uses: 3 },
-  ];
-}
-
-export const TRAVEL_ASSISTANT_TOOLS: Anthropic.Beta.BetaTool[] = [
-  {
-    name: "list_trips",
-    description:
-      "The user's trips: id, title, destination, first and last day, currency. Use it to find a trip by name or date.",
-    input_schema: { type: "object", properties: {} },
-  },
-  {
-    name: "get_trip",
-    description:
-      "One trip in full: its fields, its members (id, name, email, fixed share), its photos (id, url, caption), its payments (id, who, amount, day) and every item with its id, dates, route, price and travellers.",
-    input_schema: toolInputSchema(getTripInputSchema),
-  },
-  {
-    name: "open_trip",
-    description:
-      "Open a trip's page for the user. Do it first whenever the conversation turns to a trip that is not the one they have open, so they see the trip you are talking about.",
-    input_schema: toolInputSchema(getTripInputSchema),
-  },
-  {
-    name: "propose_changes",
-    description:
-      "Propose creating, changing or deleting trips, items, members, photos and payments. The user sees the changes on the trip's page and applies or discards them; nothing is written until they apply. Changes run in order, so a create_trip can be followed by add_item, add_member, add_photo or add_payment entries that name its ref.",
-    input_schema: toolInputSchema(travelChangeSetSchema),
-    // A whole trip's plan is a large input; stream it as it is written.
-    eager_input_streaming: true,
-  },
-];

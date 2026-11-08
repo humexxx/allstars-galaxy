@@ -414,6 +414,41 @@
       "when": 1792462687957,
       "tag": "0058_acoustic_mercury",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1793760931836,
+      "tag": "0059_parallel_timeslip",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1793764250672,
+      "tag": "0060_complex_skullbuster",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1793924290014,
+      "tag": "0061_lucky_lady_mastermind",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1793927675569,
+      "tag": "0062_moaning_blazing_skull",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1793933483421,
+      "tag": "0063_quiet_spiral",
+      "breakpoints": true
     }
   ]
 }

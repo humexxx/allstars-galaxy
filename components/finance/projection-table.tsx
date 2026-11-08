@@ -1,7 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Plus } from "lucide-react";
+import { useMemo } from "react";
 
 import {
   Table,
@@ -11,26 +10,39 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Mono } from "@/components/ui/typography";
+import { shownCash } from "@/lib/finance/cash";
 import { cn } from "@/lib/utils";
-import { formatCurrency, formatSignedCurrency, moneySign } from "@/lib/utils/format";
-import { densify } from "@/lib/finance/table-rows";
+import {
+  formatCurrency,
+  formatSignedCurrency,
+  formatSignedPercent,
+  moneySign,
+} from "@/lib/utils/format";
+import { formatProjectionMonth } from "@/lib/utils/date";
+import { sampleRows } from "@/lib/finance/table-rows";
 import type { Projection } from "@/types/finance";
 
-// Anchor formatting in UTC because the projection generates dates at UTC
-// midnight. Local-timezone formatting would shift a month for users in
-// negative offsets (e.g. May 1 UTC renders as "Apr 30" in UTC-5/6).
-const MONTH_FORMATTER = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  year: "2-digit",
-  timeZone: "UTC",
-});
+import { dashboardSeries, type DashboardSeries } from "./dashboard-finance-series";
+import { SeriesSwatch } from "./series-swatch";
+
+/** A column heading keyed with its chart series, as the dashboard keys its figures. */
+function SeriesHead({ series, children }: { series: DashboardSeries; children: React.ReactNode }): React.ReactElement {
+  return (
+    <TableHead className="text-right">
+      <span className="inline-flex items-center gap-1.5">
+        <SeriesSwatch series={series} />
+        {children}
+      </span>
+    </TableHead>
+  );
+}
+
 
 type ProjectionTableProps = {
   projection: Projection;
@@ -41,51 +53,53 @@ type ProjectionTableProps = {
   startIndex?: number;
   /** Projection row of the period that contains today, highlighted. */
   currentIndex?: number;
+  /** Months between the rows from today's period on (see `rowStepFor`). */
+  rowStep?: number;
 };
 
-// How many extra months a single "Load more" click reveals beyond the
-// initial window. Kept at a clean year so the table grows in human-sized
-// chunks rather than arbitrary numbers.
-const LOAD_MORE_STEP = 12;
+/**
+ * How far a figure moved since the row before, as a share of where it was:
+ * the small line under the figures that matter. Null with nothing to compare
+ * against, or from zero.
+ */
+function changeOf(value: number, previous: number | undefined): number | null {
+  if (previous === undefined || Math.abs(previous) < 0.01) return null;
+  return ((value - previous) / Math.abs(previous)) * 100;
+}
+
+function Change({
+  pct,
+  goodWhen = "up",
+}: {
+  pct: number | null;
+  goodWhen?: "up" | "down";
+}): React.ReactElement | null {
+  if (pct === null || Math.abs(pct) < 0.05) return null;
+  const good = goodWhen === "up" ? pct > 0 : pct < 0;
+  return (
+    <Mono className={cn("block text-2xs font-normal", good ? "text-success" : "text-destructive")}>
+      {formatSignedPercent(pct, 1)}
+    </Mono>
+  );
+}
 
 export function ProjectionTable({
   projection,
   monthsToShow,
   startIndex = 0,
   currentIndex,
+  rowStep = 1,
 }: ProjectionTableProps) {
-  const [showAll, setShowAll] = useState(false);
-  // Extra months on top of the prop-supplied initial window. Reset whenever
-  // the parent changes the horizon (e.g. user picks a different preset on
-  // the projection card) so the extra doesn't carry over to a fresh range.
-  // Uses the "track-previous-prop in state" pattern recommended by React 19
-  // — see https://react.dev/learn/you-might-not-need-an-effect — instead of
-  // a useEffect, which would cascade a render.
-  const [extraMonths, setExtraMonths] = useState(0);
-  const [resetKey, setResetKey] = useState<{
-    monthsToShow?: number;
-    startIndex: number;
-    total: number;
-  }>({ monthsToShow, startIndex, total: projection.months.length });
-  if (
-    resetKey.monthsToShow !== monthsToShow ||
-    resetKey.startIndex !== startIndex ||
-    resetKey.total !== projection.months.length
-  ) {
-    setResetKey({ monthsToShow, startIndex, total: projection.months.length });
-    setExtraMonths(0);
-  }
 
-  // Rows start where the forecast header starts: the header names "Today" at
-  // `startIndex + pastCount`, so listing from the plan's first month put the
-  // table a year behind the figures above it on an old plan.
+  // The rows are the chart's horizon (the editor works out the window): the
+  // horizon picker above is the table's only control, so there is no "Load
+  // more" any more.
   const first = Math.max(0, Math.min(startIndex, projection.months.length - 1));
   const totalAvailable = projection.months.length - first;
-  const baseCount =
+  const effectiveCount =
     typeof monthsToShow === "number"
       ? Math.max(1, Math.min(monthsToShow, totalAvailable))
       : totalAvailable;
-  const effectiveCount = Math.min(baseCount + extraMonths, totalAvailable);
 
   const visibleMonths = useMemo(
     () => projection.months.slice(first, first + effectiveCount),
@@ -93,106 +107,28 @@ export function ProjectionTable({
   );
 
   const hasInvestments = visibleMonths.some((m) => m.investments > 0.01);
-  const isLongHorizon = visibleMonths.length > 24;
+  // Long horizons list a row every few months; the % lines then read the
+  // change since the row above.
   const rows = useMemo(
-    () => (showAll || !isLongHorizon ? visibleMonths : densify(visibleMonths)),
-    [visibleMonths, showAll, isLongHorizon]
+    () => sampleRows(visibleMonths, (currentIndex ?? first) - first, rowStep),
+    [visibleMonths, currentIndex, first, rowStep]
   );
 
-  // Show the "Load 12 more months" button as long as we haven't exhausted the
-  // projection's full horizon. The step is clamped against what's left so the
-  // last click can be shorter than 12 (e.g. 7 remaining → "Load 7 more").
-  const remaining = totalAvailable - effectiveCount;
-  const nextStep = Math.min(LOAD_MORE_STEP, remaining);
-
-  // Smooth-scroll to the first newly-revealed row after the user clicks
-  // "Load more". The ref captures the row offset BEFORE the state update;
-  // the layout effect runs after the new rows mount and animates the scroll
-  // container to the first row whose monthOffset is >= that snapshot.
-  // Falls back to the bottom of the container when no such row exists
-  // (densified mode: new content lives only at the tail as year-ends).
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const pendingScrollOffsetRef = useRef<number | null>(null);
-  useLayoutEffect(() => {
-    const targetOffset = pendingScrollOffsetRef.current;
-    if (targetOffset === null) return;
-    pendingScrollOffsetRef.current = null;
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    const tbody = container.querySelector("tbody");
-    if (!tbody) return;
-    // Find the first <tr> whose data-month-offset matches the first row that
-    // wasn't visible before the click.
-    let targetRow: HTMLElement | null = null;
-    for (const row of Array.from(tbody.children) as HTMLElement[]) {
-      const v = row.dataset.monthOffset;
-      if (v !== undefined && parseInt(v, 10) >= targetOffset) {
-        targetRow = row;
-        break;
-      }
-    }
-    if (targetRow) {
-      // Use getBoundingClientRect math so the calculation is independent of
-      // the offsetParent chain — `offsetTop` could be relative to the table
-      // or further up depending on intermediate positioning context.
-      const containerRect = container.getBoundingClientRect();
-      const rowRect = targetRow.getBoundingClientRect();
-      const theadHeight =
-        (container.querySelector("thead") as HTMLElement | null)?.offsetHeight ??
-        0;
-      const desired =
-        container.scrollTop + (rowRect.top - containerRect.top) - theadHeight;
-      container.scrollTo({
-        top: Math.max(0, desired),
-        behavior: "smooth",
-      });
-    } else {
-      // Densified case: no row with monthOffset ≥ snapshot exists in the
-      // visible array, so scroll to the bottom to reveal the new year-end
-      // markers that were appended.
-      container.scrollTo({
-        top: container.scrollHeight,
-        behavior: "smooth",
-      });
-    }
-  }, [rows]);
-
-  const handleLoadMore = () => {
-    // Snapshot the first-new-row offset BEFORE bumping state — after the
-    // re-render the layout effect uses this to decide where to scroll.
-    pendingScrollOffsetRef.current = effectiveCount;
-    setExtraMonths((v) => v + nextStep);
-  };
-
   return (
-    <div className="flex flex-col gap-2">
-      {isLongHorizon && (
-        <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-          <span>
-            {showAll
-              ? `Showing all ${visibleMonths.length} months`
-              : `Showing the first 12 months + each December (${rows.length} of ${visibleMonths.length})`}
-          </span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowAll((v) => !v)}
-          >
-            {showAll ? "Compact view" : "Show every month"}
-          </Button>
-        </div>
-      )}
-      <div className="rounded-lg border">
-        <div
-          ref={scrollContainerRef}
-          className="max-h-120 overflow-auto scroll-smooth"
-        >
-          {/* One step down from the primitive's text-sm: this table is a dense
-              wall of currency, and 14px numerals made every column shout. The
-              header steps with it so the grid still reads as one block. */}
-          <Table className="text-xs">
-            <TableHeader className="sticky top-0 bg-card">
+    // Fills the panel on desktop and scrolls inside it; the rounded box clips
+    // the sticky header, which used to paint over its corners.
+    <div className="flex flex-col gap-2 xl:h-full xl:min-h-0">
+      {/* As tall as its rows, never taller than the panel: a short horizon
+          ends where its last row does instead of an empty bordered box. */}
+      <div className="flex min-h-0 flex-col overflow-hidden rounded-lg border">
+        <div className="max-h-120 min-h-0 overflow-auto xl:max-h-none">
+          {/* Two steps down from the primitive's text-sm: this table is a dense
+              wall of currency, and the change lines under net worth, debt and
+              investments need the room. */}
+          {/* The box above scrolls both ways, so the header and the month
+              column stay pinned to it. */}
+          <Table className="text-2xs" containerClassName="overflow-visible">
+            <TableHeader className="sticky top-0 z-20 bg-card">
               <TableRow>
                 {/* Sticky: on a phone the table scrolls sideways, and without
                     the month every figure past the first columns was
@@ -248,14 +184,18 @@ export function ProjectionTable({
                     </TooltipContent>
                   </Tooltip>
                 </TableHead>
-                <TableHead className="text-right">Savings</TableHead>
-                {hasInvestments && <TableHead className="text-right">Investments</TableHead>}
-                <TableHead className="text-right">Total debt</TableHead>
-                <TableHead className="text-right">Net worth</TableHead>
+                <SeriesHead series={dashboardSeries("savings")}>Cash</SeriesHead>
+                {hasInvestments && <SeriesHead series={dashboardSeries("investments")}>Investments</SeriesHead>}
+                <SeriesHead series={dashboardSeries("debt")}>Total debt</SeriesHead>
+                <SeriesHead series={dashboardSeries("netWorth")}>Net worth</SeriesHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((m) => (
+              {rows.map((m, i) => {
+                // The row before, for the change lines: the previous row
+                // shown, or the period before the window for the first.
+                const prev = i > 0 ? rows[i - 1] : projection.months[first - 1];
+                return (
                 <TableRow
                   key={m.monthOffset}
                   data-month-offset={m.monthOffset}
@@ -268,7 +208,7 @@ export function ProjectionTable({
                       m.monthOffset === currentIndex ? "bg-muted" : "bg-card"
                     )}
                   >
-                    <Mono>{MONTH_FORMATTER.format(m.date)}</Mono>
+                    <Mono>{formatProjectionMonth(m.date)}</Mono>
                     {m.monthOffset === currentIndex && (
                       <span className="sr-only"> (current period, projected close)</span>
                     )}
@@ -313,56 +253,35 @@ export function ProjectionTable({
                       );
                     })()}
                   </TableCell>
-                  <TableCell
-                    className={cn(
-                      "text-right font-mono tabular-nums",
-                      moneySign(m.savings) < 0 && "text-destructive"
-                    )}
-                  >
-                    {formatCurrency(m.savings)}
+                  <TableCell className="text-right font-mono tabular-nums">
+                    {formatCurrency(shownCash(m.savings))}
                   </TableCell>
                   {hasInvestments && (
-                    <TableCell className="text-right font-mono tabular-nums text-primary">
+                    <TableCell className="text-right font-mono tabular-nums">
                       {formatCurrency(m.investments)}
+                      <Change pct={changeOf(m.investments, prev?.investments)} />
                     </TableCell>
                   )}
                   <TableCell className="text-right font-mono tabular-nums">
                     {formatCurrency(m.totalDebt)}
+                    <Change pct={changeOf(m.totalDebt, prev?.totalDebt)} goodWhen="down" />
                   </TableCell>
                   <TableCell
                     className={cn(
                       "text-right font-mono font-semibold tabular-nums",
-                      moneySign(m.netWorth) > 0 && "text-success",
                       moneySign(m.netWorth) < 0 && "text-destructive"
                     )}
                   >
                     {formatCurrency(m.netWorth)}
+                    <Change pct={changeOf(m.netWorth, prev?.netWorth)} />
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         </div>
       </div>
-      {remaining > 0 && (
-        // Footer button sits OUTSIDE the scroll container so it's always
-        // visible at the bottom of the table, regardless of how far the
-        // user has scrolled inside the table body.
-        <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-          <span>
-            Showing {effectiveCount} of {totalAvailable} months
-          </span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={handleLoadMore}
-          >
-            <Plus />
-            Load {nextStep} more {nextStep === 1 ? "month" : "months"}
-          </Button>
-        </div>
-      )}
     </div>
   );
 }

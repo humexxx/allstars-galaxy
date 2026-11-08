@@ -123,7 +123,7 @@ change one, change the others (the separator's `top-18` follows the breathing):
 | Sidebar nav row height / gap | `h-8` / `gap-0.5` | [`app-sidebar.tsx`](../components/app-sidebar.tsx) |
 | Sidebar width | `--sidebar-width: 12rem` (192px; shadcn's default is 16rem) | [`app/portal/layout.tsx`](../app/portal/layout.tsx) |
 | Sidebar separator | 1px `bg-sidebar-border` hairline, `top-18` to `bottom-6`, faded over its outer quarter at each end (`mask-y-from-75%`) | [`app-sidebar.tsx`](../components/app-sidebar.tsx) |
-| Plan panel (xl) | `h-[max(40rem,calc(100svh-11.5rem))]`: the screen less the header (3.5rem), the page's top padding + plan header row + gap (6rem) and its bottom padding (2rem) | [`plan-editor.tsx`](../components/finance/plan-editor.tsx), [`plans/[id]/loading.tsx`](../app/portal/plans/[id]/loading.tsx) |
+| Plan panel (xl) | `h-[max(40rem,calc(100svh-11.5rem))]`: the screen less the header (3.5rem), the page's top padding + plan header row + gap (6rem) and its bottom padding (2rem) | [`plan-editor.tsx`](../components/finance/plan-editor.tsx), [`plans/[id]/loading.tsx`](../app/portal/plans/[id]/loading.tsx); the trading journal reuses it ([`trading-journal-view.tsx`](../components/finance/trading/trading-journal-view.tsx), [`trading/loading.tsx`](../app/portal/trading/loading.tsx)) |
 
 The header has **no bottom border** — the shell reads as one flat surface (the
 shadcn-docs look). The sidebar is set off by a **hairline that starts where the

@@ -16,7 +16,7 @@ count and project at its own recent pace.
 - `/portal/plans/[id]` — plan detail + editor; `?view=table` / `?view=calendar` opens that Overview view (the switcher keeps it in the address via `history.replaceState`, so a reload stays put — `lib/finance/plan-view.ts`)
 - `/portal/plans/compare` — side-by-side scenario comparison
 - `/api/plans/assistant` — the plans assistant's chat, `POST`, streamed as NDJSON (`PlansAssistantEvent` per line); admins with `ANTHROPIC_API_KEY` only (`canUseAssistant`)
-- `/portal/trading` — the trading journal: the balance, then Calendar (each day's P&L, a trade held several days as a bar across them, a Week column), Analytics (equity curve, P&L by month / weekday / symbol / setup, the stats) and Trades (the list, deposits and withdrawals)
+- `/portal/trading` — the trading journal, laid out like a plan: one screen-tall panel (from `xl`) with the balance as its headline and a Calendar / Analytics / Trades switcher, and a column beside it for that view. Calendar: each day's P&L, a trade held several days as a bar across them, a Week column; beside it the month's figures and the picked day. Analytics: the equity curve and P&L by month and weekday; beside it the stats and P&L by symbol or setup. Trades: the list; beside it deposits and withdrawals. `?view=analytics` / `?view=trades` opens that view (`lib/finance/journal-view.ts`). An empty journal shows all of it at zero
 - `/api/trading/assistant` — the trading assistant's chat, `POST`, streamed as NDJSON (`TradingAssistantEvent` per line); admins with `ANTHROPIC_API_KEY` only
 
 ## Server actions — `/app/actions/`

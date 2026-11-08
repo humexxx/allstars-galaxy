@@ -122,7 +122,6 @@ import {
 import {
   alignTodayPoint,
   buildChartSeries,
-  dayBefore,
   describeDebtFree,
   forecastKpiPoints,
   formatDebtFree,
@@ -1511,25 +1510,20 @@ function ProjectionPanel({
         ? `Ended ${FORMATTER.format(todayState.periodStart)}`
         : `Today ${TODAY_LABEL.format(now)}`;
 
-  // Table rows: the projection periods the chart window covers — from the
-  // one its first checkpoint opens to the one its last checkpoint closes.
+  // Table rows: the horizon the picker names, from today's period — plus the
+  // closed periods before it the projection still has, as many as the chart
+  // shows of the past — so 12 mo is twelve months ahead, not whatever the
+  // chart's points happened to span.
   const tableRange = useMemo(() => {
-    const first = chartSeries.points[0];
-    const lastPoint = chartSeries.points[chartSeries.points.length - 1];
-    if (!first || !lastPoint) return { startIndex: 0, count: 0 };
-    const last = { date: chartSeries.points.length > 1 ? dayBefore(lastPoint.date) : lastPoint.date };
-    const startIndex = projection.months.findIndex(
-      (m) => periodIndexForDate(first.date, effAnchor, m.date) >= 0
+    const months = projection.months;
+    if (months.length === 0) return { startIndex: 0, count: 0 };
+    const todayIdx = Math.min(
+      months.length - 1,
+      Math.max(0, periodIndexForDate(months[0].date, effAnchor, now))
     );
-    if (startIndex < 0) return { startIndex: 0, count: 0 };
-    let endIndex = startIndex;
-    for (let i = startIndex; i < projection.months.length; i++) {
-      if (periodIndexForDate(last.date, effAnchor, projection.months[i].date) <= 0) {
-        endIndex = i;
-      }
-    }
-    return { startIndex, count: endIndex - startIndex + 1 };
-  }, [chartSeries.points, projection, effAnchor]);
+    const past = Math.min(todayIdx, Math.max(1, Math.round(horizonMonths * 0.25)));
+    return { startIndex: todayIdx - past, count: past + horizonMonths };
+  }, [projection, effAnchor, now, horizonMonths]);
 
 
   // The last closed period, for the "since" chip beside today's figure.
@@ -1675,12 +1669,7 @@ function ProjectionPanel({
             ) : (
               <Card className="xl:h-full">
                 <CardHeader className="gap-3">{forecastHeader(true)}</CardHeader>
-                <CardContent
-                  className={cn(
-                    "xl:min-h-0 xl:flex-1",
-                    view === "table" && "xl:overflow-y-auto"
-                  )}
-                >
+                <CardContent className="xl:min-h-0 xl:flex-1">
                   {view === "chart" && hasNoLines ? (
                     <EmptyState
                       icon={LineChart}

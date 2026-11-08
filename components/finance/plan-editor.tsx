@@ -158,6 +158,9 @@ type PeriodFigures = {
   livingExpenses: number;
   minDebtPayments: number;
   totalDebt: number;
+  /** Where the period's surplus goes: extra debt payments and investing. */
+  toDebt: number;
+  toInvestments: number;
 };
 
 // Chip label for the hovered period — UTC for the same reason as the chart's
@@ -345,10 +348,7 @@ export function PlanEditor({
   const extraDebtPayments = current?.extraDebtPayments ?? 0;
   // Fixed outflow: living + debt minimums — the gauge numerator.
   const fixedOutflow = livingExpenses + minDebtPayments;
-  const surplus = income - fixedOutflow;
   const investmentsContribution = Math.max(0, current?.investmentsContribution ?? 0);
-  const toWealth = surplus - extraDebtPayments;
-  const savingsContribution = Math.max(0, toWealth - investmentsContribution);
 
   // Debt NOW (day-aware, the same figure as the chart's today dot), not the
   // projected close of the period.
@@ -368,6 +368,8 @@ export function PlanEditor({
   const dFixedOutflow = dLivingExpenses + dMinDebtPayments;
   const dSurplus = dIncome - dFixedOutflow;
   const dTotalDebt = hoverFigures?.totalDebt ?? totalDebt;
+  const dToDebt = hoverFigures?.toDebt ?? extraDebtPayments;
+  const dToInvestments = hoverFigures?.toInvestments ?? investmentsContribution;
 
   // Current accounting PERIOD (anchor→anchor, e.g. day 5 ⇒ Apr 5 – May 4).
   const anchorDay = plan.confirmationDayOfMonth;
@@ -773,23 +775,10 @@ export function PlanEditor({
                       }
                     />
                   )}
-                  <StatRow
-                    label="Surplus"
-                    value={dSurplus}
-                    description="Income less fixed obligations, and where the rest goes."
-                    tone={moneySign(dSurplus) < 0 ? "negative" : undefined}
-                    hint={moneySign(dSurplus) < 0 ? "Spends more than it earns" : undefined}
-                    breakdown={
-                      <SurplusBreakdown
-                        income={income}
-                        livingExpenses={livingExpenses}
-                        minDebtPayments={minDebtPayments}
-                        surplus={surplus}
-                        toExtraDebt={extraDebtPayments}
-                        toInvestments={investmentsContribution}
-                        toSavings={savingsContribution}
-                      />
-                    }
+                  <SurplusSplit
+                    surplus={dSurplus}
+                    toDebt={dToDebt}
+                    toInvestments={dToInvestments}
                   />
                 </div>
               </CardContent>
@@ -1224,12 +1213,6 @@ type ProjectionPanelProps = {
   onOpenSetup?: () => void;
 };
 
-/** Green above zero, red below, plain at zero ($0.00 is not a gain). */
-function signTone(value: number): string | undefined {
-  const sign = moneySign(value);
-  return sign > 0 ? "text-success" : sign < 0 ? "text-destructive" : undefined;
-}
-
 const STRATEGY_LABEL: Record<DebtStrategy, string> = {
   avalanche: "Avalanche",
   snowball: "Snowball",
@@ -1492,6 +1475,8 @@ function ProjectionPanel({
         livingExpenses: m.expenses,
         minDebtPayments: m.scheduledDebtPayments,
         totalDebt: p.totalDebt ?? m.totalDebt,
+        toDebt: m.extraDebtPayments,
+        toInvestments: Math.max(0, m.investmentsContribution),
       };
     });
   }, [chartSeries.points, projection, pastProjection, anchorDay]);
@@ -2006,63 +1991,50 @@ function BreakdownList({
 }
 
 
-function SurplusBreakdown({
-  income,
-  livingExpenses,
-  minDebtPayments,
+/**
+ * What the period's surplus is spent on, under a hairline: extra payments on
+ * debt, investing, and what stays as cash. Named and keyed like the chart's
+ * series. A period that spends more than it earns has no surplus to split.
+ */
+function SurplusSplit({
   surplus,
-  toExtraDebt,
+  toDebt,
   toInvestments,
-  toSavings,
 }: {
-  income: number;
-  livingExpenses: number;
-  minDebtPayments: number;
   surplus: number;
-  toExtraDebt: number;
+  toDebt: number;
   toInvestments: number;
-  toSavings: number;
 }) {
-  const rows: { label: string; value: string; op?: string }[] = [
-    { label: "Income", value: formatCurrency(income) },
-    { label: "Living expenses", value: formatCurrency(livingExpenses), op: "−" },
-    { label: "Debt minimums", value: formatCurrency(minDebtPayments), op: "−" },
+  const lines = [
+    { series: dashboardSeries("debt"), value: toDebt },
+    { series: dashboardSeries("investments"), value: toInvestments },
+    { series: dashboardSeries("savings"), value: Math.max(0, surplus - toDebt - toInvestments) },
   ];
   return (
-    <div className="flex min-w-0 flex-col gap-3 text-sm">
-      <ul className="flex flex-col gap-1.5">
-        {rows.map((r) => (
-          <li key={r.label} className="flex items-baseline justify-between gap-4">
-            <span>
-              {r.op && <span className="mr-1 text-muted-foreground">{r.op}</span>}
-              {r.label}
-            </span>
-            <Mono>{r.value}</Mono>
-          </li>
-        ))}
-      </ul>
-      <div className="flex items-baseline justify-between gap-4 border-t pt-2 font-semibold">
-        <span>= Surplus</span>
-        <Mono className={signTone(surplus)}>
-          {formatCurrency(surplus)}
-        </Mono>
-      </div>
-      {moneySign(surplus) > 0 && (
-        <ul className="flex flex-col gap-1.5 border-t pt-2 text-muted-foreground">
-          <li className="flex items-baseline justify-between gap-4">
-            <span>→ Extra debt</span>
-            <Mono>{formatCurrency(toExtraDebt)}</Mono>
-          </li>
-          <li className="flex items-baseline justify-between gap-4">
-            <span>→ Investments</span>
-            <Mono>{formatCurrency(toInvestments)}</Mono>
-          </li>
-          <li className="flex items-baseline justify-between gap-4">
-            <span>→ Cash</span>
-            <Mono>{formatCurrency(toSavings)}</Mono>
-          </li>
-        </ul>
+    <div className="flex flex-col gap-1.5 border-t pt-3">
+      <Eyebrow size="sm" as="p">
+        Surplus goes to
+      </Eyebrow>
+      {moneySign(surplus) < 0 ? (
+        <Text variant="small" as="p" className="text-destructive">
+          Spends {formatCurrency(-surplus)} more than it earns
+        </Text>
+      ) : (
+        lines.map((l) => <SurplusSplitLine key={l.series.key} {...l} />)
       )}
+    </div>
+  );
+}
+
+function SurplusSplitLine({ series, value }: { series: DashboardSeries; value: number }) {
+  const animated = useAnimatedNumber(value);
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <Text variant="small" as="span" className="flex items-center gap-1.5">
+        <SeriesSwatch series={series} />
+        {series.label}
+      </Text>
+      <Mono className="text-sm">{formatCurrency(animated)}</Mono>
     </div>
   );
 }

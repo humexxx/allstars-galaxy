@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { buildPlanTimeline, type ChartPoint } from "./chart-series";
-import { buildDashboardFigures, changeBaseline, closeLabels, dashboardGoal } from "./dashboard";
+import { buildDashboardFigures, changeBaseline, checkpointLabels, dashboardGoal } from "./dashboard";
 import { projectPlan, projectStateAt } from "./projection";
 import type {
   FinancePlan,
@@ -63,11 +63,11 @@ describe("F11: dashboard card figures", () => {
     // The first point IS the Net worth tile (it was rounded to whole dollars).
     expect(fig.points[0].netWorth).toBe(Math.round(today!.netWorth * 100) / 100);
     expect(fig.points[0]).toMatchObject({ month: "Now", label: "Today" });
-    // Today is in Sep 2026; the 12th close is Sep 2027 — same month, so the
-    // label carries the year.
-    expect(fig.points[1].label).toBe("Oct 31, 2026");
-    expect(fig.points.at(-1)!.label).toBe("Sep 30, 2027");
-    expect(fig.points.at(-1)!.month).toBe("Sep");
+    // Today's own period closes first (today used to stand in for it); the
+    // labels carry the year, as the 12th close is a year on.
+    expect(fig.points[1].label).toBe("Sep 30, 2026");
+    expect(fig.points.at(-1)!.label).toBe("Aug 31, 2027");
+    expect(fig.points.at(-1)!.month).toBe("Aug");
   });
 
   it("money owed to you is a figure of its own, and the parts add up to net worth", () => {
@@ -142,10 +142,11 @@ describe("F11: dashboard card figures", () => {
     };
     const projection = projectPlan(plan, incomes, expenses, [], options);
     const today = projectStateAt(plan, incomes, expenses, [], options, now);
-    const [aug] = buildDashboardFigures(projection, today, [snapshot]).points;
+    // Dated Aug 1, the checkpoint is July's close.
+    const [jul] = buildDashboardFigures(projection, today, [snapshot]).points;
 
-    expect(aug).toMatchObject({
-      month: "Aug",
+    expect(jul).toMatchObject({
+      month: "Jul",
       savings: 3000,
       investments: 20700,
       receivables: 2300,
@@ -191,13 +192,13 @@ describe("dashboard card: period names and the headline goal", () => {
   const now = U(2026, 11, 3);
 
   it("names each point after the month its period closes in", () => {
-    // Anchored on the 5th, the period of Nov 3 runs Oct 5 – Nov 4. Named by
-    // its start, the next close read "Nov" right after "Now" (in November).
+    // Anchored on the 5th, the period of Nov 3 runs Oct 5 – Nov 4: the next
+    // close is its own, the next day.
     const projection = projectPlan(plan, incomes, [], debts, {});
     const today = projectStateAt(plan, incomes, [], debts, {}, now);
     const fig = buildDashboardFigures(projection, today, [], 5);
     expect(fig.points[0].month).toBe("Now");
-    expect(fig.points[1]).toMatchObject({ month: "Dec", label: "Dec 4, 2026" });
+    expect(fig.points[1]).toMatchObject({ month: "Nov", label: "Nov 4, 2026" });
   });
 
   it("heads with the debt-free date while there is debt", () => {
@@ -250,7 +251,7 @@ describe("dashboard card: movement days between the closes", () => {
     const fig = buildDashboardFigures(
       projection,
       today,
-      [close(7, 100), close(8, 200), close(9, 300)],
+      [close(8, 100), close(9, 200), close(10, 300)],
       5,
       [moved(6, 1, 1), moved(10, 1, 250), moved(11, 1, 350), moved(11, 3, 400)]
     );
@@ -271,14 +272,14 @@ describe("dashboard card: movement days between the closes", () => {
 });
 
 describe("changeBaseline: what net worth's change is measured from", () => {
-  // Periods anchored on the 5th, each point dated at its start and worth its close.
+  // Checkpoints on the 5th, each the balance on its day (see `ChartPoint`).
   const closes = [
-    { date: U(2026, 8, 5), netWorth: 10_000 }, // closes Sep 4
-    { date: U(2026, 9, 5), netWorth: 14_000 }, // closes Oct 4 — the position on Oct 5
-    { date: U(2026, 10, 5), netWorth: 23_600 }, // closes Nov 4, projected
+    { date: U(2026, 9, 5), netWorth: 10_000 }, // closes Sep 4
+    { date: U(2026, 10, 5), netWorth: 14_000 }, // the position on Oct 5, confirmed
+    { date: U(2026, 11, 5), netWorth: 23_600 }, // Nov 5, projected
   ];
-  const time = (p: (typeof closes)[number]): number => closeLabels(p.date, 5).time;
-  const label = (p: (typeof closes)[number]): { month: string; label: string } => closeLabels(p.date, 5);
+  const time = (p: (typeof closes)[number]): number => checkpointLabels(p.date).time;
+  const label = (p: (typeof closes)[number]): { month: string; label: string } => checkpointLabels(p.date);
 
   it("measures from the user's last confirmation, not the projected close after it", () => {
     const from = changeBaseline(closes, time, label, "2026-10-05");

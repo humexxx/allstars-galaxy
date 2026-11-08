@@ -123,6 +123,7 @@ import {
 import {
   alignTodayPoint,
   buildChartSeries,
+  dayBefore,
   describeDebtFree,
   forecastKpiPoints,
   formatDebtFree,
@@ -142,7 +143,7 @@ import type {
   StrategyComparison,
   TodayState,
 } from "@/types/finance";
-import { changeBaseline, closeLabels } from "@/lib/finance/dashboard";
+import { changeBaseline, checkpointLabels } from "@/lib/finance/dashboard";
 import { CountUpCurrency } from "./count-up";
 import { DeltaChip } from "./delta-chip";
 import { dashboardSeries, type DashboardSeries } from "./dashboard-finance-series";
@@ -1524,11 +1525,13 @@ function ProjectionPanel({
         ? `Ended ${FORMATTER.format(todayState.periodStart)}`
         : `Today ${TODAY_LABEL.format(now)}`;
 
-  // Table rows: the projection periods the chart window covers.
+  // Table rows: the projection periods the chart window covers — from the
+  // one its first checkpoint opens to the one its last checkpoint closes.
   const tableRange = useMemo(() => {
     const first = chartSeries.points[0];
-    const last = chartSeries.points[chartSeries.points.length - 1];
-    if (!first || !last) return { startIndex: 0, count: 0 };
+    const lastPoint = chartSeries.points[chartSeries.points.length - 1];
+    if (!first || !lastPoint) return { startIndex: 0, count: 0 };
+    const last = { date: chartSeries.points.length > 1 ? dayBefore(lastPoint.date) : lastPoint.date };
     const startIndex = projection.months.findIndex(
       (m) => periodIndexForDate(first.date, effAnchor, m.date) >= 0
     );
@@ -1547,8 +1550,8 @@ function ProjectionPanel({
   // Net worth's change: from the user's last confirmation, else the last close.
   const changeFrom = changeBaseline(
     chartSeries.points.slice(0, chartSeries.pastCount),
-    (p) => closeLabels(p.date, anchorDay).time,
-    (p) => closeLabels(p.date, anchorDay),
+    (p) => checkpointLabels(p.date).time,
+    (p) => checkpointLabels(p.date),
     lastConfirmedDay
   );
   const sinceClose = changeFrom && todayIsOnChart ? today - changeFrom.point.netWorth : null;

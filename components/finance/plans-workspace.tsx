@@ -60,7 +60,7 @@ import {
   summaryDebtFree,
   type PlanTimeline,
 } from "@/lib/finance/chart-series";
-import { changeBaseline, closeLabels } from "@/lib/finance/dashboard";
+import { changeBaseline, checkpointLabels } from "@/lib/finance/dashboard";
 import type { FinancePlan, PlanSummary } from "@/types/finance";
 
 const END_LABEL = new Intl.DateTimeFormat("en-US", {
@@ -166,11 +166,10 @@ export function PlansWorkspace({
     const timeline = main ? timelines[main.id] : undefined;
     const now = timeline?.points[timeline.todayIndex];
     if (!main || !timeline || !now) return null;
-    const anchor = main.confirmationDayOfMonth;
     const baseline = changeBaseline(
       timeline.points.slice(0, timeline.todayIndex),
-      (p) => closeLabels(p.date, anchor).time,
-      (p) => closeLabels(p.date, anchor),
+      (p) => checkpointLabels(p.date).time,
+      (p) => checkpointLabels(p.date),
       lastConfirmedDay
     );
     return {

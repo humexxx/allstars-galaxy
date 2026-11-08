@@ -12,7 +12,7 @@ import {
   forecastKpiPoints,
   formatDebtFree,
   formatDebtFreeMonth,
-  historyToClosePoints,
+  historyToCheckpoints,
   milestoneCrossings,
   summaryDebtFree,
   type PlanHistoryPoint,
@@ -76,99 +76,74 @@ describe("computeProjectionWindow", () => {
   });
 });
 
+const iso = (d: Date): string => d.toISOString().slice(0, 10);
+
 describe("buildChartSeries", () => {
-  it("plots each snapshot at the period whose CLOSE it records (F10)", () => {
-    // A snapshot stores the OPENING of the period it was taken in = the
-    // previous period's close. Apr 30 → Mar close, May 30 → Apr close, and
-    // Jun 10 (today's period) → May close.
+  it("dates every point at the day it shows: checkpoints, today, the closes ahead", () => {
+    // Anchor day 5, today Nov 8. October was confirmed (late, on Oct 18); the
+    // cron's Nov 5 row is the opening of today's period. The dot under "Oct"
+    // used to be the latest November row, and today stood in for Dec 5.
     const history = [
-      snap(utc(2026, 3, 30), 100),
-      snap(utc(2026, 4, 30), 200),
-      snap(utc(2026, 5, 10), 999),
+      snap(utc(2026, 9, 5), 60),
+      { ...snap(utc(2026, 9, 18), 14587), confirmed: true },
+      snap(utc(2026, 9, 30), 70),
+      snap(utc(2026, 10, 5), 25800),
+      snap(utc(2026, 10, 7), 25900),
     ];
     const proj = projectionOf([
-      { date: utc(2026, 5, 1), netWorth: 260 }, // Jun (boundary, projection)
-      { date: utc(2026, 6, 1), netWorth: 300 }, // Jul
-      { date: utc(2026, 7, 1), netWorth: 340 }, // Aug
+      { date: utc(2026, 10, 5), netWorth: 30000 }, // Nov-5 period, closes Dec 5
+      { date: utc(2026, 11, 5), netWorth: 35000 },
+      { date: utc(2027, 0, 5), netWorth: 40000 },
     ]);
 
-    const { points, pastCount } = buildChartSeries(history, proj, 12, utc(2026, 5, 15));
+    const { points, pastCount } = buildChartSeries(history, proj, 12, utc(2026, 10, 8), 5);
 
-    expect(pastCount).toBe(3);
-    expect(points.map((p) => p.date)).toEqual([
-      utc(2026, 2, 1),
-      utc(2026, 3, 1),
-      utc(2026, 4, 1),
-      utc(2026, 5, 1),
-      utc(2026, 6, 1),
-      utc(2026, 7, 1),
+    expect(pastCount).toBe(2);
+    expect(points.map((p) => iso(p.date))).toEqual([
+      "2026-10-05",
+      "2026-11-05",
+      "2026-11-08",
+      "2026-12-05",
+      "2027-01-05",
+      "2027-02-05",
     ]);
-    expect(points.map((p) => p.netWorth)).toEqual([100, 200, 999, 260, 300, 340]);
+    expect(points.map((p) => p.netWorth)).toEqual([14587, 25800, 25800, 30000, 35000, 40000]);
   });
 
-  it("puts snapshots and projection on ONE footing: no one-period lag (audit F10 numbers)", () => {
-    // +500 a period from 1,000. Snapshots taken mid-Jul/Aug/Sep hold those
-    // periods' OPENINGS (= Jun/Jul/Aug closes: 4,000 / 4,500 / 5,000). They
-    // used to be drawn at Jul/Aug/Sep — 500 below the projection there — and
-    // the line jumped +1,000 into the forecast. Now each lands on the period
-    // it closes.
-    const closes = Array.from({ length: 12 }, (_, i) => ({
-      date: utc(2026, i, 1),
-      netWorth: 1500 + 500 * i,
-    }));
-    const proj = projectionOf(closes);
-    // Taken mid-Jul, mid-Aug and mid-Sep (today's period).
-    const history = [6, 7, 8].map((m) => snap(utc(2026, m, 15), closes[m - 1].netWorth));
-    const { points } = buildChartSeries(history, proj, 12, utc(2026, 8, 20), 1, proj);
-    const sim = buildChartSeries([], proj, 12, utc(2026, 8, 20), 1, proj);
-    const byDate = (ps: typeof points) => new Map(ps.map((p) => [p.date.getTime(), p.netWorth]));
-    const real = byDate(points);
-    let compared = 0;
-    for (const [t, v] of byDate(sim.points)) {
-      if (!real.has(t)) continue;
-      expect(real.get(t)).toBe(v);
-      compared += 1;
-    }
-    expect(compared).toBeGreaterThanOrEqual(3);
-    // Jun / Jul / Aug read 4,000 / 4,500 / 5,000 — the closes — and Aug → Sep
-    // steps +500 like every other period.
-    expect(points.slice(0, 4).map((p) => p.netWorth)).toEqual([4000, 4500, 5000, 5500]);
-  });
-
-  it("aligns a day-30 snapshot with a period-anchored (day-15) projection by calendar month", () => {
-    const history = [snap(utc(2026, 4, 30), 200)]; // May 30 (real)
-    const proj = projectionOf([
-      { date: utc(2026, 4, 15), netWorth: 210 }, // May-15 period — same month as the snapshot
-      { date: utc(2026, 5, 15), netWorth: 250 }, // Jun-15 period (boundary)
-      { date: utc(2026, 6, 15), netWorth: 290 }, // Jul-15 period
-    ]);
-
-    const { points, pastCount } = buildChartSeries(history, proj, 12, utc(2026, 5, 20));
-
-    // Past = the May snapshot; the projection's May-15 period is NOT duplicated.
+  it("on the anchor day itself, today replaces that day's checkpoint", () => {
+    const history = [snap(utc(2026, 9, 5), 100), snap(utc(2026, 10, 5), 200)];
+    const proj = projectionOf([{ date: utc(2026, 10, 5), netWorth: 300 }]);
+    const { points, pastCount } = buildChartSeries(history, proj, 12, utc(2026, 10, 5), 5);
     expect(pastCount).toBe(1);
-    expect(points[0].netWorth).toBe(200);
-    expect(points[1].date).toEqual(utc(2026, 5, 15)); // Jun-15 boundary
-    expect(points.map((p) => p.netWorth)).toEqual([200, 250, 290]);
+    expect(points.map((p) => [iso(p.date), p.netWorth])).toEqual([
+      ["2026-10-05", 100],
+      ["2026-11-05", 200],
+      ["2026-12-05", 300],
+    ]);
   });
 
-  it("dates a past snapshot at its period start so the axis names each period once", () => {
-    // Anchor day 5: the Aug-5 period runs Aug 5 – Sep 4. Its closing snapshot is
-    // dated Sep 4 and used to label as "Sep" beside today's Sep-5 period.
-    const history = [snap(utc(2026, 8, 4), 200)]; // Sep 4, inside the Aug-5 period
+  it("keeps the solid/dashed boundary on the period containing today (anchorDay > 1)", () => {
+    // Anchor day 15: Jun 6 is in the May-15 period, so its close (Jun 15) is
+    // still ahead and the May-15 opening is the last checkpoint.
+    const history = [snap(utc(2026, 3, 20), 100), snap(utc(2026, 4, 20), 200)];
     const proj = projectionOf([
-      { date: utc(2026, 7, 5), netWorth: 210 }, // Aug-5 period
-      { date: utc(2026, 8, 5), netWorth: 250 }, // Sep-5 period (today)
-      { date: utc(2026, 9, 5), netWorth: 290 }, // Oct-5 period
+      { date: utc(2026, 4, 15), netWorth: 250 },
+      { date: utc(2026, 5, 15), netWorth: 300 },
+      { date: utc(2026, 6, 15), netWorth: 340 },
     ]);
 
-    const { points, pastCount } = buildChartSeries(history, proj, 12, utc(2026, 8, 7), 5);
+    const { points, pastCount } = buildChartSeries(history, proj, 12, utc(2026, 5, 6), 15);
 
-    // Taken in the Aug-5 period, it records the Jul-5 period's close.
-    expect(pastCount).toBe(1);
-    expect(points[0].date).toEqual(utc(2026, 6, 5));
-    expect(points[0].netWorth).toBe(200);
-    expect(points[1].date).toEqual(utc(2026, 8, 5));
+    expect(pastCount).toBe(2);
+    expect(points.map((p) => iso(p.date))).toEqual([
+      "2026-04-15",
+      "2026-05-15",
+      "2026-06-06",
+      "2026-06-15",
+      "2026-07-15",
+      "2026-08-15",
+    ]);
+    expect(points.map((p) => p.netWorth)).toEqual([100, 200, 200, 250, 300, 340]);
   });
 
   it("caps the past at pastBudget = round(horizon * 0.25)", () => {
@@ -178,147 +153,92 @@ describe("buildChartSeries", () => {
       snap(utc(2026, 4, 28), 3), // May
     ];
     const proj = projectionOf([{ date: utc(2026, 5, 1), netWorth: 4 }]); // Jun
-    // horizon 4 → pastBudget = round(1) = 1 → only the latest (May) snapshot.
+    // horizon 4 → pastBudget = round(1) = 1 → only the latest (May) checkpoint.
     const { points, pastCount } = buildChartSeries(history, proj, 4, utc(2026, 5, 10));
     expect(pastCount).toBe(1);
-    expect(points[0].netWorth).toBe(3); // May only
+    expect(points[0].netWorth).toBe(3);
   });
 
-  it("falls back to the projection window when there is no history", () => {
+  it("falls back to the projection's own closes when there is no history", () => {
     const proj = projectionOf([
-      { date: utc(2026, 2, 1), netWorth: 1 }, // Mar
-      { date: utc(2026, 3, 1), netWorth: 2 }, // Apr
-      { date: utc(2026, 4, 1), netWorth: 3 }, // May
-      { date: utc(2026, 5, 1), netWorth: 4 }, // Jun (today)
-      { date: utc(2026, 6, 1), netWorth: 5 }, // Jul
+      { date: utc(2026, 2, 1), netWorth: 1 }, // Mar, closes Apr 1
+      { date: utc(2026, 3, 1), netWorth: 2 },
+      { date: utc(2026, 4, 1), netWorth: 3 },
+      { date: utc(2026, 5, 1), netWorth: 4 }, // Jun (today's period)
+      { date: utc(2026, 6, 1), netWorth: 5 },
     ]);
     const { points, pastCount } = buildChartSeries([], proj, 12, utc(2026, 5, 15));
-    // Mirrors computeProjectionWindow: past = re-simulated months before today.
     expect(pastCount).toBe(3);
-    expect(points.map((p) => p.netWorth)).toEqual([1, 2, 3, 4, 5]);
-  });
-
-  it("keeps the solid/dashed boundary on the period containing today (anchorDay > 1)", () => {
-    // Anchor day 15. today = Jun 6 → belongs to the May-15 period (the
-    // in-progress one). The dashed forecast must therefore start at May-15, and
-    // only periods that closed before it (the Apr snapshot) count as past. A
-    // calendar-month split would wrongly push the boundary to Jun-15.
-    const history = [
-      snap(utc(2026, 3, 20), 100), // Apr-15 period (closed)
-      snap(utc(2026, 4, 20), 200), // May-15 period (the current, in-progress one)
-    ];
-    const proj = projectionOf([
-      { date: utc(2026, 4, 15), netWorth: 250 }, // May-15 (today's period → boundary)
-      { date: utc(2026, 5, 15), netWorth: 300 }, // Jun-15
-      { date: utc(2026, 6, 15), netWorth: 340 }, // Jul-15
+    expect(points.map((p) => iso(p.date))).toEqual([
+      "2026-04-01",
+      "2026-05-01",
+      "2026-06-01",
+      "2026-06-15",
+      "2026-07-01",
+      "2026-08-01",
     ]);
-
-    const { points, pastCount } = buildChartSeries(history, proj, 12, utc(2026, 5, 6), 15);
-
-    // Apr-20 records the Mar-15 close, May-20 the Apr-15 close — both closed
-    // before today's May-15 period, whose own close comes from the projection.
-    expect(pastCount).toBe(2);
-    expect(points[0].date).toEqual(utc(2026, 2, 15));
-    expect(points[2].date).toEqual(utc(2026, 4, 15)); // May-15 boundary
-    expect(points.map((p) => p.netWorth)).toEqual([100, 200, 250, 300, 340]);
+    expect(points.map((p) => p.netWorth)).toEqual([1, 2, 3, 3, 4, 5]);
   });
 
   it("re-simulates the past from the RAW projection when the calibrated one starts at today", () => {
-    // Simulates confirming the CURRENT period: the calibrated projection begins
-    // at today (Jun), so on its own it has no past to show. With no real
-    // snapshots, the raw `pastProjection` (which still spans back to plan start)
-    // supplies the past line so the chart history isn't blanked.
     const calibrated = projectionOf([
-      { date: utc(2026, 5, 1), netWorth: 4 }, // Jun (today, boundary)
-      { date: utc(2026, 6, 1), netWorth: 5 }, // Jul
-      { date: utc(2026, 7, 1), netWorth: 6 }, // Aug
+      { date: utc(2026, 5, 1), netWorth: 4 }, // Jun (today's period)
+      { date: utc(2026, 6, 1), netWorth: 5 },
+      { date: utc(2026, 7, 1), netWorth: 6 },
     ]);
     const raw = projectionOf([
-      { date: utc(2026, 3, 1), netWorth: 2 }, // Apr
-      { date: utc(2026, 4, 1), netWorth: 3 }, // May
-      { date: utc(2026, 5, 1), netWorth: 4 }, // Jun
-      { date: utc(2026, 6, 1), netWorth: 5 }, // Jul
-      { date: utc(2026, 7, 1), netWorth: 6 }, // Aug
+      { date: utc(2026, 3, 1), netWorth: 2 },
+      { date: utc(2026, 4, 1), netWorth: 3 },
+      { date: utc(2026, 5, 1), netWorth: 4 },
+      { date: utc(2026, 6, 1), netWorth: 5 },
+      { date: utc(2026, 7, 1), netWorth: 6 },
     ]);
 
-    // Without pastProjection: no past at all (the regression the user hit).
     const bare = buildChartSeries([], calibrated, 12, utc(2026, 5, 15));
     expect(bare.pastCount).toBe(0);
-    expect(bare.points.map((p) => p.netWorth)).toEqual([4, 5, 6]);
+    expect(bare.points.slice(1).map((p) => p.netWorth)).toEqual([4, 5, 6]);
 
-    // With pastProjection: Apr + May re-simulated as the past.
-    const { points, pastCount } = buildChartSeries(
-      [],
-      calibrated,
-      12,
-      utc(2026, 5, 15),
-      1,
-      raw
-    );
+    const { points, pastCount } = buildChartSeries([], calibrated, 12, utc(2026, 5, 15), 1, raw);
     expect(pastCount).toBe(2);
-    expect(points.map((p) => p.netWorth)).toEqual([2, 3, 4, 5, 6]);
+    expect(points.map((p) => p.netWorth)).toEqual([2, 3, 3, 4, 5, 6]);
   });
 
   it("prefers real snapshots over the raw projection for the past", () => {
-    const history = [snap(utc(2026, 4, 28), 200)]; // May (real)
+    const history = [snap(utc(2026, 4, 28), 200)];
     const calibrated = projectionOf([
-      { date: utc(2026, 5, 1), netWorth: 4 }, // Jun (today)
-      { date: utc(2026, 6, 1), netWorth: 5 }, // Jul
-    ]);
-    const raw = projectionOf([
-      { date: utc(2026, 4, 1), netWorth: 999 }, // May (raw — must be ignored)
       { date: utc(2026, 5, 1), netWorth: 4 },
       { date: utc(2026, 6, 1), netWorth: 5 },
     ]);
-    const { points, pastCount } = buildChartSeries(
-      history,
-      calibrated,
-      12,
-      utc(2026, 5, 15),
-      1,
-      raw
-    );
-    expect(pastCount).toBe(1);
-    expect(points[0].netWorth).toBe(200); // real snapshot, not raw's 999
-  });
-
-  it("a snapshot taken in today's period is last period's REAL close (F21)", () => {
-    // After confirming this period the confirmation snapshot is the only row —
-    // it must become the solid past (the confirmed values), not the forecast.
-    const history = [snap(utc(2026, 5, 10), 999)];
-    const proj = projectionOf([
-      { date: utc(2026, 4, 1), netWorth: 3 }, // May (forecast — not used)
-      { date: utc(2026, 5, 1), netWorth: 4 }, // Jun (today)
-      { date: utc(2026, 6, 1), netWorth: 5 }, // Jul
+    const raw = projectionOf([
+      { date: utc(2026, 3, 1), netWorth: 999 }, // closes May 1 — must be ignored
+      { date: utc(2026, 4, 1), netWorth: 4 },
+      { date: utc(2026, 5, 1), netWorth: 5 },
     ]);
-    const { points, pastCount } = buildChartSeries(history, proj, 12, utc(2026, 5, 15), 1, proj);
+    const { points, pastCount } = buildChartSeries(history, calibrated, 12, utc(2026, 5, 15), 1, raw);
     expect(pastCount).toBe(1);
-    expect(points.map((p) => p.netWorth)).toEqual([999, 4, 5]);
+    expect(points[0].netWorth).toBe(200);
   });
 
   it("never draws the old forecast as the past once the plan is confirmed (F21)", () => {
-    // simulatedPast is only passed while the plan has no confirmation; with
-    // null, a confirmed plan and no snapshots shows no invented history.
     const calibrated = projectionOf([
       { date: utc(2026, 5, 1), netWorth: 5000 },
       { date: utc(2026, 6, 1), netWorth: 5500 },
     ]);
     const { points, pastCount } = buildChartSeries([], calibrated, 12, utc(2026, 5, 15), 1, null);
     expect(pastCount).toBe(0);
-    expect(points.map((p) => p.netWorth)).toEqual([5000, 5500]);
+    expect(points.slice(1).map((p) => p.netWorth)).toEqual([5000, 5500]);
   });
 
-  it("spans exactly the horizon, so the End KPI (last point) and the chart agree (F17)", () => {
-    // 36 monthly closes from Jan 2026, today Sep 20 2026, ONE snapshot. The
-    // chart used to end Jul 2027 while the End KPI said May 2027.
+  it("spans the horizon past today, so the End KPI (last point) and the chart agree (F17)", () => {
     const proj = projectionOf(
       Array.from({ length: 36 }, (_, i) => ({ date: utc(2026, i, 1), netWorth: 1000 + 500 * i }))
     );
-    const history = [snap(utc(2026, 8, 5), 4000)]; // taken in Sep → Aug close
+    const history = [snap(utc(2026, 8, 5), 4000)]; // Sep's opening
     const s12 = buildChartSeries(history, proj, 12, utc(2026, 8, 20), 1, null);
-    expect(s12.points).toHaveLength(12);
     expect(s12.pastCount).toBe(1);
-    expect(s12.points.at(-1)!.date).toEqual(utc(2027, 6, 1)); // Jul 2027
+    // Sep 1, today, then 11 closes: 12 checkpoints and today.
+    expect(s12.points).toHaveLength(13);
+    expect(s12.points.at(-1)!.date).toEqual(utc(2027, 7, 1));
   });
 });
 
@@ -409,20 +329,32 @@ function debt(balance: string, payment: string): FinancePlanDebt {
   } as unknown as FinancePlanDebt;
 }
 
-describe("historyToClosePoints", () => {
-  it("keeps the latest snapshot per period, dated at the period it closes", () => {
-    const pts = historyToClosePoints(
+describe("historyToCheckpoints", () => {
+  it("keeps each period's opening, dated at its first day", () => {
+    const pts = historyToCheckpoints(
       [snap(utc(2026, 8, 3), 1), snap(utc(2026, 8, 20), 2), snap(utc(2026, 9, 2), 3)],
       1
     );
-    expect(pts.map((p) => [p.date.toISOString().slice(0, 10), p.netWorth])).toEqual([
-      ["2026-08-01", 2],
-      ["2026-09-01", 3],
+    expect(pts.map((p) => [iso(p.date), p.netWorth])).toEqual([
+      ["2026-09-01", 1],
+      ["2026-10-01", 3],
     ]);
   });
 
+  it("a confirmation wins its period, however late in it", () => {
+    const pts = historyToCheckpoints(
+      [
+        snap(utc(2026, 9, 5), 60),
+        { ...snap(utc(2026, 9, 18), 14587), confirmed: true },
+        snap(utc(2026, 10, 4), 70),
+      ],
+      5
+    );
+    expect(pts.map((p) => [iso(p.date), p.netWorth])).toEqual([["2026-10-05", 14587]]);
+  });
+
   it("keeps what was still owed to the user, which the dashboard draws apart", () => {
-    const [pt] = historyToClosePoints([{ ...snap(utc(2026, 8, 3), 4100), receivables: 4000 }], 1);
+    const [pt] = historyToCheckpoints([{ ...snap(utc(2026, 8, 3), 4100), receivables: 4000 }], 1);
     expect(pt.receivables).toBe(4000);
   });
 });
@@ -530,14 +462,16 @@ describe("buildCompareRows — joined by calendar month (F4)", () => {
       24,
       3
     );
+    // Today (Sep 20) wins its month; unaligned it holds the Sep 1 opening.
     const sep = rows.find((r) => r.month.getTime() === utc(2026, 8, 1).getTime())!;
-    expect(sep.values).toEqual({ a: 9000, b: 14000 });
+    expect(sep.values).toEqual({ a: 8000, b: 13000 });
     expect(rows[boundary].month).toEqual(utc(2026, 8, 1));
     // Before B starts it has no value — the line stops, it doesn't drop to 0.
     const may = rows.find((r) => r.month.getTime() === utc(2026, 4, 1).getTime());
     expect(may).toBeUndefined(); // outside the 3-month past window
-    const jun = rows.find((r) => r.month.getTime() === utc(2026, 5, 1).getTime())!;
-    expect(jun.values.b).toBe(11000);
+    // B's first close, Jun's, falls on Jul 1.
+    const jul = rows.find((r) => r.month.getTime() === utc(2026, 6, 1).getTime())!;
+    expect(jul.values.b).toBe(11000);
   });
 
   it("'Full plan' covers every month of the LONGEST plan, not the first plan's", () => {

@@ -141,6 +141,15 @@ export function changeBaseline<P extends { netWorth: number }>(
   return { point: last, since: { month: labels.month, label: `the close of ${labels.label}` } };
 }
 
+/**
+ * The names of the close a timeline checkpoint marks (see `ChartPoint`): the
+ * point sits on the period's first day, the close is the day before it.
+ */
+export function checkpointLabels(date: Date): { time: number; month: string; label: string } {
+  const close = new Date(date.getTime() - DAY_MS);
+  return { time: close.getTime(), month: MONTH_FMT.format(close), label: CLOSE_FMT.format(close) };
+}
+
 /** A closed period's names, after its last day: "Nov" and "Nov 4, 2026". */
 export function closeLabels(
   start: Date,
@@ -194,12 +203,11 @@ export function buildDashboardFigures(
       status: null,
     };
   }
-  // The closes that come AFTER today's position: from the next period on
-  // (today's own period close is still ahead but the today point stands in
-  // for it, as on the plan chart); for a plan that hasn't started, from its
-  // first period.
+  // The closes that come AFTER today's position: today's own period's close
+  // first (it is still ahead; today used to stand in for it, which dropped
+  // one close), and for a plan that hasn't started, its first period's.
   const firstAfter =
-    today.status === "before-start" ? 0 : Math.min(today.periodIndex + 1, months.length);
+    today.status === "before-start" ? 0 : Math.min(today.periodIndex, months.length);
   const ahead = months.slice(firstAfter, firstAfter + 12);
   const behind =
     today.status === "before-start" ? [] : past.slice(-DASHBOARD_PAST_MONTHS);
@@ -208,7 +216,7 @@ export function buildDashboardFigures(
   todayStart.setUTCHours(0, 0, 0, 0);
   const closes = behind.map((p) => ({
     kind: "close" as const,
-    ...closeLabels(p.date, anchorDay),
+    ...checkpointLabels(p.date),
     ...inCents(partsOfPoint(p)),
   }));
   const since = closes[0]?.time ?? -Infinity;

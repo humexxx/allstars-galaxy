@@ -563,10 +563,11 @@ describe("getRecentMonthlySnapshots", () => {
     expect(result).toEqual([]);
   });
 
-  it("keeps only the most recent snapshot per calendar month and sorts ascending", async () => {
+  it("keeps each month's opening — its first snapshot — and sorts ascending", async () => {
     mockOwnershipOk();
-    // Rows come back desc by date (per the orderBy). Three are in May 2026 —
-    // only the newest should survive the per-month dedupe.
+    // Rows come back desc by date (per the orderBy). Three are in May 2026:
+    // the cron's later rows already carry May's own payments, so the first
+    // one is May's checkpoint.
     const may15 = new Date(Date.UTC(2026, 4, 15));
     const may10 = new Date(Date.UTC(2026, 4, 10));
     const may1 = new Date(Date.UTC(2026, 4, 1));
@@ -611,15 +612,38 @@ describe("getRecentMonthlySnapshots", () => {
       new Date(Date.UTC(2026, 5, 15))
     );
 
-    // Expect two months total (April + May), sorted ascending by date,
-    // with only May 15 representing May.
     expect(result).toHaveLength(2);
     expect(result[0].date).toEqual(apr20);
-    expect(result[1].date).toEqual(may15);
-    expect(result[1].savings).toBe(300);
-    expect(result[1].investments).toBe(400);
-    expect(result[1].totalDebt).toBe(50);
-    expect(result[1].netWorth).toBe(650);
+    expect(result[1].date).toEqual(may1);
+    expect(result[1].savings).toBe(280);
+    expect(result[1].investments).toBe(380);
+    expect(result[1].totalDebt).toBe(60);
+    expect(result[1].netWorth).toBe(600);
+  });
+
+  it("a confirmation is its period's checkpoint, however late in it", async () => {
+    mockOwnershipOk();
+    const oct30 = new Date(Date.UTC(2026, 9, 30));
+    const oct18 = new Date(Date.UTC(2026, 9, 18));
+    const oct5 = new Date(Date.UTC(2026, 9, 5));
+    selectImpl.mockReturnValueOnce(
+      makeSelectChain([
+        { source: "system_cron", date: oct30, savings: "0", investments: "0", totalDebt: "61705", netWorth: "-61705" },
+        { source: "confirmation", date: oct18, savings: "0", investments: "0", totalDebt: "61705", netWorth: "-61705" },
+        { source: "system_cron", date: oct5, savings: "0", investments: "640", totalDebt: "60270", netWorth: "-59630" },
+      ])
+    );
+
+    const result = await getRecentMonthlySnapshots(
+      PLAN_ID,
+      USER_ID,
+      3,
+      new Date(Date.UTC(2026, 10, 8)),
+      5
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ date: oct18, totalDebt: 61705, confirmed: true });
   });
 
   it("adds what is still owed to the user on each snapshot's day", async () => {
@@ -671,7 +695,7 @@ describe("getRecentMonthlySnapshots", () => {
     mockOwnershipOk();
     // anchorDay=15 → periods are e.g. Feb 15–Mar 14, Mar 15–Apr 14. Feb 28 and
     // Mar 5 BOTH belong to the Feb-15 period and must collapse to one point
-    // (the latest, Mar 5). A calendar-month dedup would wrongly keep both.
+    // (the first, Feb 28). A calendar-month dedup would wrongly keep both.
     const mar5 = new Date(Date.UTC(2026, 2, 5));
     const feb28 = new Date(Date.UTC(2026, 1, 28));
     const apr20 = new Date(Date.UTC(2026, 3, 20)); // Apr 15 period
@@ -691,9 +715,9 @@ describe("getRecentMonthlySnapshots", () => {
       15
     );
 
-    // Two periods: Feb15 (represented by mar5) + Apr15 (apr20), ascending.
+    // Two periods: Feb15 (represented by feb28) + Apr15 (apr20), ascending.
     expect(result).toHaveLength(2);
-    expect(result[0].date).toEqual(mar5);
+    expect(result[0].date).toEqual(feb28);
     expect(result[1].date).toEqual(apr20);
   });
 

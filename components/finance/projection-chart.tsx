@@ -85,6 +85,13 @@ const LONG_MONTH = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 const TODAY_DAY = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+/** A plan point's own day: each is the balance on the anchor day ("Oct 5, 2026"). */
+const POINT_DAY = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+});
 
 /** Axis month: "Nov ’26" (see `formatProjectionMonth`). */
 const MONTH_FORMATTER = { format: formatProjectionMonth };
@@ -460,13 +467,16 @@ export const ProjectionChart = memo(function ProjectionChart({
       // Portfolio rides its own line, split past/future like net worth, with
       // the same boundary overlap so the series stays continuous.
       const portfolio = portfolioValues?.[i] ?? null;
-      const monthLabel = MONTH_FORMATTER.format(p.date);
+      // Today shares its month with that month's checkpoint, so it is named
+      // by its day.
+      const monthLabel =
+        isBoundary && todayLabel ? TODAY_DAY.format(p.date) : MONTH_FORMATTER.format(p.date);
       const debt = drawnAt(debts, i) ? debts[i] : null;
       const owedNow = drawnAt(owed, i) ? owed[i] : null;
       return {
         idx: i,
         monthLabel,
-        tooltipLabel: isBoundary && todayLabel ? todayLabel : LONG_MONTH.format(p.date),
+        tooltipLabel: isBoundary && todayLabel ? todayLabel : POINT_DAY.format(p.date),
         // pastValue and futureValue overlap at the boundary to keep the line
         // visually continuous when one rendered series ends and the other
         // begins.

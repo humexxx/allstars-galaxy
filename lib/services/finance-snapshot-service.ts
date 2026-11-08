@@ -561,6 +561,7 @@ async function createSnapshotForPlan(
  * period history (plan page, list, compare) must never read them.
  */
 const MOVEMENT = "movement" as const;
+const CONFIRMATION = "confirmation" as const;
 
 /**
  * Where the plan stands on `day`, recorded as a movement snapshot: the same
@@ -703,8 +704,8 @@ export async function getRecentMovementSnapshots(
 }
 
 /**
- * One snapshot per accounting PERIOD for the last `monthsBack` months, taking
- * the most recent snapshot of each period as the representative. Used by the
+ * One snapshot per accounting PERIOD for the last `monthsBack` months: the
+ * balance the period OPENED with (see `checkpointPerPeriod`). Used by the
  * chart to plot the recent past alongside the projected future on the same
  * timeline.
  *
@@ -740,7 +741,7 @@ export async function getRecentMonthlySnapshots(
     )
     .orderBy(desc(financePlanSnapshots.date));
 
-  return withReceivables(latestPerPeriod(rows, anchorDay), plan);
+  return withReceivables(checkpointPerPeriod(rows, anchorDay), plan);
 }
 
 /**
@@ -770,9 +771,12 @@ type HistoryPoint = {
   /** Still owed to the user on the point's day; already inside `netWorth`. */
   receivables: number;
   netWorth: number;
+  /** Written by a confirmation: the user's own figures, not the cron's. */
+  confirmed?: boolean;
 };
 
 const HISTORY_COLUMNS = {
+  source: financePlanSnapshots.source,
   date: financePlanSnapshots.date,
   savings: financePlanSnapshots.savings,
   investments: financePlanSnapshots.investments,
@@ -782,6 +786,7 @@ const HISTORY_COLUMNS = {
 };
 
 type HistoryRow = {
+  source: string;
   date: Date;
   savings: string;
   investments: string;
@@ -796,18 +801,22 @@ function historyCutoff(today: Date, monthsBack: number): Date {
 }
 
 /**
- * Keeps only the latest snapshot per accounting PERIOD (rows must be
- * date-desc, so the first seen per bucket is the latest) so the chart gets
- * one clean point per period even if the cron wrote multiple rows per day.
- * Bucket key = the period's anchor date, which collapses to first-of-month
- * when anchorDay = 1. Oldest first.
+ * The balance each accounting PERIOD opened with, one row per period, oldest
+ * first: the period's confirmation when the user made one (whenever in the
+ * period they got to it), else its FIRST snapshot. The cron re-reads the
+ * plan's projected position every day, so a period's later rows already carry
+ * its own payments; the latest row of November read like November's close and
+ * October's checkpoint vanished behind it. Rows must be date-desc.
  */
-function latestPerPeriod(rows: readonly HistoryRow[], anchorDay: number): HistoryPoint[] {
+function checkpointPerPeriod(rows: readonly HistoryRow[], anchorDay: number): HistoryPoint[] {
   const anchor = anchorDay > 0 ? anchorDay : 1;
   const byPeriod = new Map<string, HistoryRow>();
   for (const r of rows) {
     const key = periodStartFor(r.date, anchor).toISOString().slice(0, 10);
-    if (!byPeriod.has(key)) byPeriod.set(key, r);
+    const kept = byPeriod.get(key);
+    const confirmed = r.source === CONFIRMATION;
+    if (kept?.source === CONFIRMATION) continue;
+    if (!kept || confirmed || r.date < kept.date) byPeriod.set(key, r);
   }
 
   return Array.from(byPeriod.values())
@@ -820,6 +829,7 @@ function latestPerPeriod(rows: readonly HistoryRow[], anchorDay: number): Histor
       portfolioValue: r.portfolioValue == null ? null : parseFloat(r.portfolioValue),
       receivables: 0,
       netWorth: parseFloat(r.netWorth),
+      confirmed: r.source === CONFIRMATION,
     }));
 }
 
@@ -848,7 +858,7 @@ async function recentSnapshotsForPlans(
     .orderBy(desc(financePlanSnapshots.date));
 
   return new Map(
-    plans.map((p) => [p.id, withReceivables(latestPerPeriod(rows, p.confirmationDayOfMonth), p)])
+    plans.map((p) => [p.id, withReceivables(checkpointPerPeriod(rows, p.confirmationDayOfMonth), p)])
   );
 }
 

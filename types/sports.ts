@@ -106,6 +106,9 @@ export type DashboardSportCard = {
     status: "live" | "upcoming" | "completed";
     /** Its own page (a padel or tennis tournament's); else the card's sport page. */
     href?: string;
+    /** Who won it, the day it finished and the next. */
+    winner?: string;
+    runnerUp?: string;
   };
   /** Listed under the lead (LoL: a day of an event is several series back to back). */
   matches: DashboardMatch[];

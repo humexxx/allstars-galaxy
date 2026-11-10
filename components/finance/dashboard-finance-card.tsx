@@ -147,14 +147,17 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   // Only net worth is coloured by its sign. Each part wore its own colour
   // (blue investments, red debt), which clashed with the chart's series
   // colours that the swatches beside these labels now carry.
-  // Net worth leads the card under its title, against the user's last
-  // confirmation (else the last closed period): the number the whole card is
-  // about, and whether it moved.
+  // Net worth leads the card under its title, against the snapshot before
+  // this period's confirmation (else the user's last confirmation, else the
+  // last closed period): the number the whole card is about, and whether it
+  // moved.
   const changeFrom = changeBaseline(
     points.slice(0, fig.pastCount).filter((p) => p.kind === "close"),
     (p) => p.time,
     (p) => p,
-    lastConfirmedDay
+    lastConfirmedDay,
+    now,
+    anchorDay
   );
   const sinceClose = changeFrom ? fig.netWorth - changeFrom.point.netWorth : null;
   // The parts the plan page shows: Portfolio always, Trading for an account

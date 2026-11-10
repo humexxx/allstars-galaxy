@@ -1,7 +1,7 @@
 import type { Projection, ProjectionMonth, TodayState } from "@/types/finance";
 import { formatCurrencyCompact, moneySign, roundCents } from "@/lib/utils/format";
 import { describeDebtFree, formatDebtFree, type ChartPoint } from "./chart-series";
-import { nextPeriodStart } from "./period";
+import { nextPeriodStart, periodStartFor } from "./period";
 import { parseIsoDay } from "./schedule";
 import { formatDay, formatShortDay } from "@/lib/utils/date";
 
@@ -139,15 +139,30 @@ function partsOfPoint(p: ChartPoint): DashboardParts {
  * confirmed their balances (`confirmedDay`, YYYY-MM-DD) — the last figure that
  * is real rather than projected — read off the last close before that day.
  * Without a confirmation, or none on the chart, the last closed period.
+ *
+ * A confirmation of the period `today` is in IS today's position, give or
+ * take the days since: measured against it the change read $0.00 on the day
+ * the user confirmed. It is measured from the close before that period
+ * opened instead — the previous snapshot — when the chart has one.
  * `closes` run oldest first and end before today.
  */
 export function changeBaseline<P extends { netWorth: number }>(
   closes: readonly P[],
   closeTime: (point: P) => number,
   closeLabel: (point: P) => { month: string; label: string },
-  confirmedDay: string | null
+  confirmedDay: string | null,
+  today: Date,
+  anchorDay: number
 ): { point: P; since: { month: string; label: string } } | null {
   const confirmed = parseIsoDay(confirmedDay);
+  const opening = periodStartFor(today, anchorDay > 0 ? anchorDay : 1).getTime();
+  if (confirmed && confirmed.getTime() >= opening) {
+    const previous = closes.findLast((p) => closeTime(p) < opening - DAY_MS);
+    if (previous) {
+      const labels = closeLabel(previous);
+      return { point: previous, since: { month: labels.month, label: `the close of ${labels.label}` } };
+    }
+  }
   const atConfirmation = confirmed
     ? closes.findLast((p) => closeTime(p) < confirmed.getTime())
     : undefined;

@@ -156,7 +156,7 @@ export function JournalCalendarGrid({
 
   return (
     <div className="flex flex-col gap-1 xl:min-h-0 xl:flex-1">
-      <div className="grid grid-cols-8 gap-1 text-center">
+      <div className="grid grid-cols-8 gap-0.5 text-center sm:gap-1">
         {[...WEEKDAY_HEADS, "Week"].map((d) => (
           <Eyebrow key={d} size="sm" as="div" className="py-1">
             {d}
@@ -172,7 +172,7 @@ export function JournalCalendarGrid({
         return (
           <div
             key={week[0]}
-            className="grid grid-cols-8 gap-1 xl:min-h-0 xl:flex-1"
+            className="grid grid-cols-8 gap-0.5 sm:gap-1 xl:min-h-0 xl:flex-1"
             // The day cells take what the bars under them leave.
             style={{ gridTemplateRows: `minmax(0, 1fr) repeat(${lanes}, auto)` }}
           >

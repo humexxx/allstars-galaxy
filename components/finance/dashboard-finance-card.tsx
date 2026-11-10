@@ -161,12 +161,14 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   // with the module, Owed to you and Debt when the chart's range has any — a
   // $0.00 debt tile on a plan with none is noise. No cash, as on the plan.
   const visible = visibleSeriesKeys(points, { trading: tradingOn });
+  const portfolioNote = managedNote(managed, fig.positions, fig.claims);
   const breakdown: Figure[] = [
     {
       series: dashboardSeries("investments"),
       label: "Portfolio",
       amount: fig.investments,
-      note: managedNote(managed, fig.positions, fig.claims),
+      note: portfolioNote,
+      wide: portfolioNote !== undefined,
       href: "/portal/portfolio",
     },
     ...(visible.has("trading")
@@ -295,6 +297,8 @@ type Figure = {
   href?: string;
   /** Small print under the value. */
   note?: React.ReactNode;
+  /** Takes the whole row where the figures sit two abreast: its note is a sentence. */
+  wide?: boolean;
 };
 
 /**
@@ -333,11 +337,12 @@ function managedNote(managed: ManagedAssets | null, positions: number, claims: n
  * worth leads the rail and carries the sign colour, which is emphasis enough.
  */
 function FigureItem({ figure }: { figure: Figure }) {
-  const { series, label, amount, tone, change, note, href } = figure;
+  const { series, label, amount, tone, change, note, href, wide } = figure;
   return (
     <div
       className={cn(
         "flex min-w-0 flex-col gap-1",
+        wide && "col-span-full",
         // The negative margin cancels the padding, so the figure sits where
         // it did; only the hover surface reaches past it.
         href &&

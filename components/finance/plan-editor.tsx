@@ -396,7 +396,10 @@ export function PlanEditor({
   // The row is living expenses PLUS debt minimums (the gauge numerator), so it
   // must not be called "Living expenses": the Surplus breakdown uses that name
   // for the expenses alone, and the two showed different figures.
-  const expensesLabel = isPeriodMode ? "Period expenses & debt" : "Expenses & debt";
+  // One name in both modes: "Period expenses & debt" is wider than the 188px
+  // this rail has at 1280 and broke onto two lines beside its figure. The
+  // eyebrow over the rows already says which span they cover.
+  const expensesLabel = "Expenses & debt";
 
   // Breakdown lines: the SAME occurrences the engine counted for this period
   // (overrides applied — skipped lines are gone, amounts swapped, moved dates
@@ -1080,6 +1083,12 @@ function FigureWithTip({
   );
 }
 
+// A horizon estimate that does not fit beside its label ("In 12 months" and a
+// six-figure sum in a 148px rail) drops under it whole, instead of the label
+// breaking in two and "≈" parting from its figure.
+const HORIZON_ROW_CLASS = "flex flex-wrap items-baseline justify-between gap-x-3";
+const HORIZON_FIGURE_CLASS = "ml-auto whitespace-nowrap text-sm text-muted-foreground";
+
 /**
  * The portfolio: the plan's own investments (what the surplus invests) plus
  * the margin on the money managed for others — the positions their money
@@ -1150,12 +1159,12 @@ function PortfolioCard({
           )}
         </div>
         {atHorizon !== null && (
-          <div className="flex items-baseline justify-between gap-3">
+          <div className={HORIZON_ROW_CLASS}>
             <Text variant="small" as="span">
               {horizonLabel}
             </Text>
             {/* An estimate, at the expected rate: "≈" says so before the figure. */}
-            <Mono className="text-sm text-muted-foreground">
+            <Mono className={HORIZON_FIGURE_CLASS}>
               ≈ {formatCurrency(total(atHorizon, enabled))}
             </Mono>
           </div>
@@ -1203,11 +1212,11 @@ function TradingCard({
           <Mono className="text-sm font-semibold">{formatCurrency(today)}</Mono>
         </div>
         {atHorizon !== null && (
-          <div className="flex items-baseline justify-between gap-3">
+          <div className={HORIZON_ROW_CLASS}>
             <Text variant="small" as="span">
               {horizonMonths % 12 === 0 && horizonMonths > 12 ? `In ${horizonMonths / 12} years` : `In ${horizonMonths} months`}
             </Text>
-            <Mono className="text-sm text-muted-foreground">≈ {formatCurrency(atHorizon)}</Mono>
+            <Mono className={HORIZON_FIGURE_CLASS}>≈ {formatCurrency(atHorizon)}</Mono>
           </div>
         )}
       </CardContent>
@@ -1393,7 +1402,7 @@ function ViewSwitcher({
       {PLAN_VIEWS.map((v) => {
         const Icon = PLAN_VIEW_ICON[v];
         return (
-          <ToggleGroupItem key={v} value={v} aria-label={PLAN_VIEW_LABEL[v]}>
+          <ToggleGroupItem key={v} value={v} aria-label={PLAN_VIEW_LABEL[v]} className="max-sm:px-2.5">
             <Icon />
             {/* Icon-only on phones: this shares a row with the Portfolio
                 switch and four horizon presets, and the labels pushed that
@@ -1964,26 +1973,26 @@ function StatRow({
         {series && <SeriesSwatch series={series} />}
         {label}
       </Text>
-      <span className="text-right">
-        <Mono
-          className={cn(
-            "block text-sm font-semibold",
-            tone === "positive" && "text-success",
-            tone === "negative" && "text-destructive"
-          )}
-        >
-          {formatCurrency(animatedValue)}
-        </Mono>
-        {hint && (
-          <Text variant="small" as="span" className="block text-2xs">
-            {hint}
-          </Text>
+      <Mono
+        className={cn(
+          "shrink-0 text-sm font-semibold",
+          tone === "positive" && "text-success",
+          tone === "negative" && "text-destructive"
         )}
-      </span>
+      >
+        {formatCurrency(animatedValue)}
+      </Mono>
+      {/* A line of its own: beside the figure it set the column's width, and
+          "Total debt" broke in two to make room for "Debt-free in 4 mo". */}
+      {hint && (
+        <Text variant="small" as="span" className="basis-full text-right text-2xs">
+          {hint}
+        </Text>
+      )}
     </>
   );
 
-  const rowClass = "flex items-center justify-between gap-3 border-t py-2";
+  const rowClass = "flex flex-wrap items-center justify-between gap-x-3 border-t py-2";
 
   if (!breakdown) {
     return <div className={rowClass}>{inner}</div>;

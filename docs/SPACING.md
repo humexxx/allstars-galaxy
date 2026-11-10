@@ -219,7 +219,11 @@ to another offset.
 - **`sm` is a desktop density; a phone steps it up for a thumb.** Below `sm`
   (640px) `Button size="sm"` / `"icon-sm"` and `SelectTrigger size="sm"` are
   36px, and a `size="sm"` `ToggleGroup` gets the default 40px track, whose
-  26px segments a thumb kept missing. `xs` / `icon-xs` keep their 24px look —
+  26px segments a thumb kept missing. Inside that track a segment is still
+  34px tall, so on a touch screen it also answers in the track's padding above
+  and below it (an `::after` in `ToggleGroupItem`), and a segment must be 36px
+  wide too: an icon-only one takes `max-sm:px-2.5`, a two-or-three-letter one
+  (`1M`, `YTD`) `max-sm:px-3`. `xs` / `icon-xs` keep their 24px look —
   they sit inside a line of text — and on a touch screen (`pointer-coarse`)
   reach 36px through an invisible `::after` hit area, as `Switch` does. A
   target that is not a `Button` — a text link on a line of its own, a

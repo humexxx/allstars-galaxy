@@ -247,7 +247,7 @@ function BarsChart({ title, rows }: { title: string; rows: JournalBreakdownRow[]
       <ChartContainer config={{ pnl: { label: "P&L", color: GAIN } }} className="aspect-auto h-40 w-full">
         <BarChart data={rows} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
           <CartesianGrid vertical={false} strokeOpacity={0.25} />
-          <XAxis dataKey="key" tickLine={false} axisLine={false} tickMargin={8} interval={0} fontSize={11} />
+          <XAxis dataKey="key" tickLine={false} axisLine={false} tickMargin={8} interval={0} />
           <YAxis
             tickLine={false}
             axisLine={false}

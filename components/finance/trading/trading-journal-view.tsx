@@ -172,7 +172,7 @@ export function TradingJournalView({
                   {JOURNAL_VIEWS.map((v) => {
                     const Icon = VIEW_ICON[v];
                     return (
-                      <ToggleGroupItem key={v} value={v} aria-label={VIEW_LABEL[v]}>
+                      <ToggleGroupItem key={v} value={v} aria-label={VIEW_LABEL[v]} className="max-sm:px-2.5">
                         <Icon />
                         <span className="hidden sm:inline">{VIEW_LABEL[v]}</span>
                       </ToggleGroupItem>
@@ -185,7 +185,12 @@ export function TradingJournalView({
           </CardHeader>
           <CardContent
             key={view}
-            className="flex flex-col motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200 xl:min-h-0 xl:flex-1"
+            className={cn(
+              "flex flex-col motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200 xl:min-h-0 xl:flex-1",
+              // Eight columns in a phone's card are 32px each; the narrower
+              // gutter is what gets a day cell to 36.
+              view === "calendar" && "max-sm:px-3"
+            )}
           >
             {view === "calendar" && (
               <JournalCalendarGrid

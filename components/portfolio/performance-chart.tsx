@@ -94,7 +94,7 @@ export function PerformanceChart({
           onValueChange={(v) => v && setTimeRange(v as Range)}
         >
           {RANGES.map((r) => (
-            <ToggleGroupItem key={r} value={r} className="font-mono tabular-nums">
+            <ToggleGroupItem key={r} value={r} className="font-mono tabular-nums max-sm:px-3">
               {r}
             </ToggleGroupItem>
           ))}

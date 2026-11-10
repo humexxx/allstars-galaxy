@@ -158,7 +158,7 @@ export function MarginChart({
             onValueChange={(v) => v && setRange(v as RangeValue)}
           >
             {RANGES.map(([value, label]) => (
-              <ToggleGroupItem key={value} value={value} className="font-mono tabular-nums">
+              <ToggleGroupItem key={value} value={value} className="font-mono tabular-nums max-sm:px-3">
                 {label}
               </ToggleGroupItem>
             ))}

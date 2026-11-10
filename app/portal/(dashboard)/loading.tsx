@@ -23,7 +23,7 @@ export default function DashboardLoading() {
         </span>
         <div className={DASHBOARD_GRID}>
           <DashboardCardSkeleton rail={5} />
-          <DashboardCardSkeleton tiles={2} />
+          <DashboardCardSkeleton board />
           <DashboardCardSkeleton trips />
           <DashboardSportCardSkeleton />
           <DashboardSportCardSkeleton />

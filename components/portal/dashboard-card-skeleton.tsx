@@ -10,27 +10,25 @@ type DashboardCardSkeletonProps = {
   rail?: number;
   /** The travel card's body: its featured trip tiles. */
   trips?: boolean;
-  /**
-   * A card with no shaped placeholder of its own yet: this many plain boxes
-   * under the header.
-   */
-  tiles?: number;
+  /** The productivity card's body: today's board beside the habits. */
+  board?: boolean;
   className?: string;
 };
 
 /**
- * Suspense fallback for the finance and travel dashboard cards. Every bar is
- * the height of the line box it stands in for — the title is a 24→28px line,
- * the description a 20px one — and text that wraps is drawn as pieces of its
- * width in a wrapping row, so the bars break onto a second line where the
- * words do. The real card then fills the same box instead of pushing the grid
- * down when it lands. Sport cards have their own
- * (`DashboardSportCardSkeleton`): they share row tracks in pairs.
+ * Suspense fallback for the finance, productivity and travel dashboard cards.
+ * Every bar is the height of the line box it stands in for — the title is a
+ * 24→28px line, the description a 20px one, the action 36px on a phone — and
+ * text that wraps is drawn as pieces of its width in a wrapping row, so the
+ * bars break onto a second line where the words do. The real card then fills
+ * the same box instead of pushing the grid down when it lands. Sport cards
+ * have their own (`DashboardSportCardSkeleton`): they share row tracks in
+ * pairs.
  */
 export function DashboardCardSkeleton({
   rail,
   trips,
-  tiles,
+  board,
   className,
 }: DashboardCardSkeletonProps) {
   return (
@@ -40,12 +38,12 @@ export function DashboardCardSkeleton({
         {/* The finance card's header is its plan name alone. */}
         {!rail && <Skeleton className="h-5 w-40 max-w-full" />}
         <CardAction>
-          <Skeleton className="h-8 w-20" />
+          <Skeleton className="h-9 w-20 sm:h-8" />
         </CardAction>
       </CardHeader>
       {rail ? <RailBody figures={rail} /> : null}
       {trips ? <TripsBody /> : null}
-      {tiles ? <TilesBody tiles={tiles} /> : null}
+      {board ? <BoardBody /> : null}
     </Card>
   );
 }
@@ -121,20 +119,39 @@ function TripsBody() {
   );
 }
 
-function TilesBody({ tiles }: { tiles: number }) {
+/**
+ * `DashboardProductivityCard`'s two panels, in its grid: today's board (label,
+ * progress bar, task lines) and the habits, each a name over its day with the
+ * week's dots beside it — under it where the panel is too narrow, as the real
+ * row wraps.
+ */
+function BoardBody() {
   return (
-    <CardContent>
-      <div
-        className={cn(
-          "grid gap-3",
-          tiles <= 2 && "grid-cols-1 sm:grid-cols-2",
-          tiles === 3 && "grid-cols-1 sm:grid-cols-3",
-          tiles >= 4 && "grid-cols-2 sm:grid-cols-5"
-        )}
-      >
-        {Array.from({ length: tiles }).map((_, i) => (
-          <Skeleton key={i} className="h-20 w-full rounded-md" />
-        ))}
+    <CardContent className="@container">
+      <div className="grid gap-3 @2xl:grid-cols-2">
+        <div className="flex flex-col gap-3 rounded-lg border p-4">
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-1.5 w-full" />
+          <div className="flex flex-col gap-2">
+            {["w-48", "w-56"].map((width, i) => (
+              <Skeleton key={i} className={cn("h-6 max-w-full", width)} />
+            ))}
+          </div>
+        </div>
+        <div className="flex flex-col gap-3 rounded-lg border p-4">
+          <Skeleton className="h-4 w-20" />
+          <div className="flex flex-col gap-3">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                <div className="flex flex-col">
+                  <Skeleton className="h-5 w-36" />
+                  <Skeleton className="h-4 w-28" />
+                </div>
+                <Skeleton className="h-9.5 w-54" />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </CardContent>
   );

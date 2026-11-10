@@ -45,7 +45,7 @@ export default async function PortalPage() {
           )}
           {/* The card is the day's board; its habits ride along. */}
           {!off.has("board") && (
-            <Suspense fallback={<DashboardCardSkeleton tiles={2} />}>
+            <Suspense fallback={<DashboardCardSkeleton board />}>
               <DashboardProductivityCard userId={userId} />
             </Suspense>
           )}

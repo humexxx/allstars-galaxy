@@ -9,8 +9,8 @@ export default function AdminTransactionsLoading() {
           two selects share the next one. */}
       <div className="grid grid-cols-2 items-end gap-4 sm:flex sm:flex-row">
         {["col-span-2 sm:w-72", "sm:w-50", "sm:w-50"].map((width, i) => (
-          <div key={i} className={`flex min-w-0 flex-col gap-2 ${width}`}>
-            <Skeleton className="h-4 w-16" />
+          <div key={i} className={`flex min-w-0 flex-col gap-3 ${width}`}>
+            <Skeleton className="h-5 w-16" />
             <Skeleton className="h-10 w-full" />
           </div>
         ))}

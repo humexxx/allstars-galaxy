@@ -33,17 +33,17 @@ export function ShellHeadSkeleton({ title = "w-44" }: { title?: "w-44" | "w-72" 
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 pb-4 @5xl:flex-nowrap">
         <div className="flex min-w-0 items-center gap-3" aria-hidden="true">
           <Skeleton className="size-10 shrink-0 rounded-lg" />
-          <div className="flex min-w-0 flex-col gap-1">
-            <Skeleton className={cn("h-6 max-w-full", title)} />
-            <Skeleton className="h-4 w-28" />
+          <div className="flex min-w-0 flex-col">
+            <Skeleton className={cn("my-0.5 h-6 max-w-full", title)} />
+            <Skeleton className="my-0.5 h-4 w-28" />
           </div>
         </div>
         {hubControls ? (
           <div className="flex max-w-full min-w-0 items-center gap-2">{hubControls}</div>
         ) : (
-          <div className="flex items-center gap-2" aria-hidden="true">
-            <Skeleton className="size-8 rounded-full" />
-            <Skeleton className="h-8 w-112 max-w-full rounded-md" />
+          <div className="flex max-w-full min-w-0 items-center gap-2" aria-hidden="true">
+            <Skeleton className="size-9 shrink-0 rounded-full sm:size-8" />
+            <Skeleton className="h-9 w-183 min-w-0 rounded-md sm:h-8" />
           </div>
         )}
       </div>

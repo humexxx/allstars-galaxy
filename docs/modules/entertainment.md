@@ -155,6 +155,10 @@ back to its fixture only when its feed has never answered.
   a past one ("Ends in 3 days", "6 mo ago")
 - `app/portal/entertainment/travel-planner/{,new/,[id]/}loading.tsx` — one
   skeleton per page shape; a non-uuid `[id]` is a `notFound()`
+- `components/travel/trip-form-skeleton.tsx` — `TripFormSkeleton`, the new-trip
+  form before it loads, in the form's own grid (fields beside the cover picker
+  from `md`, swatches, notes, buttons); the route's `loading.tsx` and the
+  page's Suspense fallback both draw it
 - `components/travel/trip-calendar.tsx` — the month view behind the List /
   Calendar tabs; bars laid over the day grid by `lib/travel/calendar.ts`.
   `TripCalendar` (planner, editable) and `SharedTripCalendar` (share links,

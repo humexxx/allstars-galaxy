@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/portal/page-header";
 import { TripForm } from "@/components/travel/trip-form";
-import { FormSkeleton } from "@/components/skeletons/form-skeleton";
+import { TripFormSkeleton } from "@/components/travel/trip-form-skeleton";
 import { requireModulePage } from "@/lib/services/module-access-service";
 import { getRequestTodayIso } from "@/lib/utils/request-today";
 
@@ -28,7 +28,7 @@ export default async function NewTripPage() {
           <CardTitle as="h2">Trip basics</CardTitle>
         </CardHeader>
         <CardContent>
-          <Suspense fallback={<FormSkeleton rows={4} />}>
+          <Suspense fallback={<TripFormSkeleton />}>
             <TripForm today={today} />
           </Suspense>
         </CardContent>

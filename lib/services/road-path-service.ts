@@ -128,23 +128,21 @@ export async function updateRoadPath(
 }
 
 /**
- * Puts the user's road paths in `ids`' order. Every one of them must be the
- * user's, and no other is touched; false (nothing written) otherwise.
+ * Puts the user's road paths in `ids`' order, in one statement. Every one of
+ * them must be the user's and listed once, and no other is touched; false
+ * (nothing written) otherwise.
  */
 export async function reorderRoadPaths(userId: string, ids: readonly string[]): Promise<boolean> {
   const owned = await db
     .select({ id: roadPaths.id })
     .from(roadPaths)
     .where(and(eq(roadPaths.userId, userId), inArray(roadPaths.id, [...ids])));
-  if (owned.length !== new Set(ids).size) return false;
-  await db.transaction(async (tx) => {
-    for (const [position, id] of ids.entries()) {
-      await tx
-        .update(roadPaths)
-        .set({ position })
-        .where(and(eq(roadPaths.id, id), eq(roadPaths.userId, userId)));
-    }
-  });
+  if (new Set(ids).size !== ids.length || owned.length !== ids.length) return false;
+  const places = ids.map((id, position) => sql`when ${id}::uuid then ${position}::int`);
+  await db
+    .update(roadPaths)
+    .set({ position: sql<number>`case ${roadPaths.id} ${sql.join(places, sql` `)} end` })
+    .where(and(eq(roadPaths.userId, userId), inArray(roadPaths.id, [...ids])));
   return true;
 }
 

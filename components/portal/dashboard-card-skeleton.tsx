@@ -51,8 +51,9 @@ export function DashboardCardSkeleton({
 /**
  * The same grid as `DashboardFinanceCard`'s body — figures in a 15rem column,
  * the chart beside it from `@2xl` — with each bar the height of the line box
- * it stands in for (net worth's 36→40px figure, then a 14px eyebrow over a
- * 20→24px figure per part), so the card swaps in without moving the chart.
+ * it stands in for (net worth's 36→40px figure, then an eyebrow, 14px and 16px
+ * on a phone, over a 20→24px figure per part), so the card swaps in without
+ * moving the chart. A part's note is not drawn: which parts have one is data.
  */
 function RailBody({ figures }: { figures: number }) {
   return (
@@ -60,7 +61,7 @@ function RailBody({ figures }: { figures: number }) {
       <div className="grid grid-cols-1 gap-6 @2xl:grid-cols-[15rem_minmax(0,1fr)] @2xl:gap-x-8">
         <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-1">
-            <Skeleton className="h-3.5 w-20" />
+            <Skeleton className="h-3.5 w-20 max-sm:h-4" />
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <Skeleton className="h-9 w-44 sm:h-10" />
               <Skeleton className="h-5 w-28" />
@@ -69,7 +70,7 @@ function RailBody({ figures }: { figures: number }) {
           <div className="grid grid-cols-2 gap-x-6 gap-y-4 @2xl:grid-cols-1">
             {Array.from({ length: figures - 1 }).map((_, i) => (
               <div key={i} className="flex flex-col gap-1">
-                <Skeleton className="h-3.5 w-20" />
+                <Skeleton className="h-3.5 w-20 max-sm:h-4" />
                 <Skeleton className="h-5 w-24 sm:h-6" />
               </div>
             ))}
@@ -147,7 +148,7 @@ function BoardBody() {
                   <Skeleton className="h-5 w-36" />
                   <Skeleton className="h-4 w-28" />
                 </div>
-                <Skeleton className="h-9.5 w-54" />
+                <Skeleton className="h-9.5 w-54 max-sm:h-10" />
               </div>
             ))}
           </div>

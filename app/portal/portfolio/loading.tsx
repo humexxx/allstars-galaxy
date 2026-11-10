@@ -41,7 +41,7 @@ export default function PortfolioLoading() {
             </div>
             <Skeleton className="h-64 w-full sm:h-80" />
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-              <Skeleton className="h-7 w-full sm:h-3.5 sm:w-96" />
+              <Skeleton className="h-8 w-full sm:h-3.5 sm:w-96" />
               <Skeleton className="h-6 w-72" />
             </div>
           </CardContent>

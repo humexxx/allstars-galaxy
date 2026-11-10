@@ -1,7 +1,10 @@
 import { Skeleton } from "@/components/ui/skeleton"
 import { AdminTableSkeleton } from "@/components/admin/admin-table-skeleton"
 
-/** The approvals queue: the three filter fields, then the table. */
+/**
+ * The approvals queue: the three filter fields, then the table. It opens on
+ * what is waiting, which is a few rows or none, so the table is a short one.
+ */
 export default function AdminTransactionsLoading() {
   return (
     <section className="flex flex-col gap-6" aria-hidden="true">
@@ -10,12 +13,12 @@ export default function AdminTransactionsLoading() {
       <div className="grid grid-cols-2 items-end gap-4 sm:flex sm:flex-row">
         {["col-span-2 sm:w-72", "sm:w-50", "sm:w-50"].map((width, i) => (
           <div key={i} className={`flex min-w-0 flex-col gap-3 ${width}`}>
-            <Skeleton className="h-5 w-16" />
+            <Skeleton className="h-4.75 w-16" />
             <Skeleton className="h-10 w-full" />
           </div>
         ))}
       </div>
-      <AdminTableSkeleton />
+      <AdminTableSkeleton rows={3} />
     </section>
   )
 }

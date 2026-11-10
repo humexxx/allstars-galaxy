@@ -7,9 +7,13 @@ import { PageHeaderSkeleton } from "@/components/skeletons/page-header-skeleton"
  * tabs + More) and the Polymarket-style Overview hero — a 3/4 main panel
  * (net worth today with its change chip, the view switcher over the horizon
  * presets, then the default Graph view) beside the 1/4 sidebar: the gauge and
- * figures card, then the Portfolio card (from xl; below it the sidebar cards
- * sit under the panel, two abreast from lg). Matching spacing + breakpoints
- * keeps the swap to the real editor a content fill-in, not a layout shift.
+ * figures card, then the Portfolio and Trading cards (from xl; below it the
+ * sidebar cards sit under the panel, two abreast from lg). Matching spacing +
+ * breakpoints keeps the swap to the real editor a content fill-in, not a
+ * layout shift.
+ *
+ * `text-2xs` lines (the eyebrow, the owed note, the gauge label) are 14px tall
+ * and 16px on a phone, where the two switchers are also 40px instead of 32.
  */
 export default function PlanDetailLoading() {
   return (
@@ -30,17 +34,18 @@ export default function PlanDetailLoading() {
             <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
               {/* "Today", the figure with its change chip, the owed note */}
               <div className="flex flex-col gap-1">
-                <Skeleton className="h-3 w-20" />
-                <div className="flex items-center gap-3">
-                  <Skeleton className="h-9 w-52 sm:h-10 sm:w-60" />
-                  <Skeleton className="h-5 w-28 rounded-full" />
+                <Skeleton className="h-3.5 w-20 max-sm:h-4" />
+                {/* The chip drops under the figure where both do not fit */}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <Skeleton className="h-9 w-44 sm:h-10 sm:w-54" />
+                  <Skeleton className="h-5 w-44 rounded-full" />
                 </div>
-                <Skeleton className="h-3 w-36" />
+                <Skeleton className="h-3.5 w-36 max-sm:h-4" />
               </div>
-              {/* View switcher over the horizon presets, both h-8 */}
-              <div className="flex flex-col items-end gap-2">
-                <Skeleton className="h-8 w-28 sm:w-56" />
-                <Skeleton className="h-8 w-52" />
+              {/* View switcher over the horizon presets */}
+              <div className="flex flex-col gap-2 sm:items-end">
+                <Skeleton className="h-10 w-40 sm:h-8 sm:w-68" />
+                <Skeleton className="h-10 w-54 sm:h-8" />
               </div>
             </div>
           </CardHeader>
@@ -49,46 +54,51 @@ export default function PlanDetailLoading() {
           </CardContent>
         </Card>
 
-        {/* Sidebar: figures card (gauge + rows, stretches) + Portfolio card */}
+        {/* Sidebar: figures card (gauge + rows, stretches), then Portfolio and
+            Trading */}
         <div className="grid min-w-0 items-start gap-3 lg:grid-cols-2 xl:flex xl:min-h-[max(40rem,calc(100svh-11.5rem))] xl:flex-col xl:items-stretch xl:gap-4">
           <Card className="xl:flex-1">
             <CardContent className="flex flex-col gap-3">
               <div className="flex flex-col items-center gap-1.5">
                 <Skeleton className="size-30 rounded-full" />
-                <Skeleton className="h-3 w-24" />
+                <Skeleton className="h-3.5 w-24 max-sm:h-4" />
               </div>
               <div>
-                {/* Income, expenses, debt, owed to you, surplus */}
-                {Array.from({ length: 5 }).map((_, i) => (
+                {/* Income, expenses, debt over its debt-free line, owed to you */}
+                {Array.from({ length: 4 }).map((_, i) => (
                   <div
                     key={i}
-                    className="flex items-center justify-between gap-3 border-t py-2.5"
+                    className="flex flex-wrap items-center justify-between gap-x-3 border-t py-2.5"
                   >
                     <Skeleton className="h-3 w-20" />
                     <Skeleton className="h-4 w-16" />
+                    {i === 2 && (
+                      <div className="flex basis-full justify-end">
+                        <Skeleton className="h-3.5 w-28 max-sm:h-4" />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             </CardContent>
           </Card>
-          <Card className="gap-3">
-            <CardHeader>
-              <Skeleton className="h-3 w-20" />
-            </CardHeader>
-            <CardContent className="flex flex-col gap-1">
-              {/* Today, in 12 months, then the "Count in net worth" switch */}
-              {Array.from({ length: 2 }).map((_, i) => (
-                <div key={i} className="flex items-center justify-between gap-3 py-0.5">
-                  <Skeleton className="h-3 w-20" />
-                  <Skeleton className="h-4 w-16" />
-                </div>
-              ))}
-              <div className="mt-2 flex items-center justify-between gap-3 border-t pt-3">
-                <Skeleton className="h-3 w-28" />
-                <Skeleton className="h-5 w-9 rounded-full" />
-              </div>
-            </CardContent>
-          </Card>
+          {/* Portfolio, Trading: the name beside its link, today, the horizon */}
+          {Array.from({ length: 2 }).map((_, card) => (
+            <Card key={card} className="gap-3">
+              <CardHeader className="flex h-6 items-center justify-between gap-2">
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-3 w-12" />
+              </CardHeader>
+              <CardContent className="flex flex-col gap-1">
+                {Array.from({ length: 2 }).map((_, i) => (
+                  <div key={i} className="flex items-center justify-between gap-3 py-0.5">
+                    <Skeleton className="h-3 w-20" />
+                    <Skeleton className="h-4 w-16" />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </div>
     </section>

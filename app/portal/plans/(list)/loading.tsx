@@ -30,14 +30,15 @@ export default function PlansLoading() {
               <div className="flex h-5 items-center">
                 <Skeleton className="h-3 w-16" />
               </div>
-              <div className="flex items-center gap-3">
-                <Skeleton className="h-9 w-52 sm:h-10 sm:w-60" />
-                <Skeleton className="h-5 w-28 rounded-full" />
+              {/* The chip drops under the figure where both do not fit */}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <Skeleton className="h-9 w-44 sm:h-10 sm:w-54" />
+                <Skeleton className="h-5 w-44 rounded-full" />
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {/* horizon select */}
-              <Skeleton className="h-8 w-38" />
+              {/* horizon select, 36px on a phone */}
+              <Skeleton className="h-9 w-38 sm:h-8" />
             </div>
           </CardHeader>
           <CardContent className="px-3 sm:px-6">
@@ -48,13 +49,18 @@ export default function PlansLoading() {
         {/* Your plans rail */}
         <Card className="min-w-0">
           <CardHeader>
-            <Skeleton className="h-3 w-24" />
-            <Skeleton className="h-4 w-full" />
+            <Skeleton className="my-0.5 h-3 w-24" />
+            {/* The hint takes two lines in a narrow rail: a phone, and from lg */}
+            <div className="flex flex-col">
+              <Skeleton className="my-0.5 h-4 w-full" />
+              <Skeleton className="my-0.5 h-4 w-2/3 sm:max-lg:hidden" />
+            </div>
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
-            {/* A row: name, net worth at the end, its date, the debt-free line */}
+            {/* A row: name, net worth at the end, its date, the debt-free line.
+                In a narrow rail the last two wrap. */}
             {Array.from({ length: 2 }).map((_, i) => (
-              <Skeleton key={i} className="h-21 w-full rounded-lg" />
+              <Skeleton key={i} className="h-23.5 w-full rounded-lg sm:h-19.5 lg:h-27.5" />
             ))}
           </CardContent>
         </Card>

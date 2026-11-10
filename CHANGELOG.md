@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.19.0](https://github.com/humexxx/allstars-galaxy/compare/v0.18.0...v0.19.0) (2026-11-10)
+
+
+### Features
+
+* **entertainment:** dashboard keeps a tournament won yesterday with its champion ([b3968ed](https://github.com/humexxx/allstars-galaxy/commit/b3968ed85efeeff0b1af805beee4e2d814c9d93b))
+* **finance:** count the trading account in plans and project its pace ([90b9374](https://github.com/humexxx/allstars-galaxy/commit/90b9374edb10ab6333c05f01979bd76dcf5981fa))
+* **finance:** dashboard card follows the plan, Trading instead of Cash ([0d75ca4](https://github.com/humexxx/allstars-galaxy/commit/0d75ca497a279ec833c8b2be3b9d825d2d77a4ce))
+* **finance:** drop positions and owed-to-investors from the plan's Portfolio card ([9d00f5a](https://github.com/humexxx/allstars-galaxy/commit/9d00f5a2216d1dd027877e149947f78d93bd2a48))
+* **finance:** lay the trading journal out like a plan, on one screen ([59bd236](https://github.com/humexxx/allstars-galaxy/commit/59bd236dbf3bee10fe85d0f32e093c88fc57cd17))
+* **finance:** no tooltip on the plan's Trading card ([a624f81](https://github.com/humexxx/allstars-galaxy/commit/a624f816c6797ad08bd6ab921e312c414d3888f7))
+* **finance:** plan cards link to the portfolio and keep their small print in tooltips ([170bdc3](https://github.com/humexxx/allstars-galaxy/commit/170bdc3b8e5d75a65ca3857357ad44494e8784c3))
+* **finance:** show the empty journal as itself, at zero, and put Plans first ([58a633a](https://github.com/humexxx/allstars-galaxy/commit/58a633a55163945560a924727ff6d3f8ad53b36b))
+* **finance:** the dashboard draws the plan's chart, and plans draw trading ([a48b61b](https://github.com/humexxx/allstars-galaxy/commit/a48b61bf9ab9eca0d30fbddffbb11c022efaf052))
+* **finance:** the plan shows Trading whenever the module is on, at $0 before a trade ([ad12f2b](https://github.com/humexxx/allstars-galaxy/commit/ad12f2b4f6d5af51e5bb9ce905f80ca87a5b06f5))
+* **finance:** trading assistant that logs trades and moves money ([8380ef1](https://github.com/humexxx/allstars-galaxy/commit/8380ef11a032192b914d33c28a16a65625d28752))
+* **finance:** trading journal page with calendar, analytics and trades ([b17a03b](https://github.com/humexxx/allstars-galaxy/commit/b17a03b970689caac827959f3441e7ff8562d52a))
+* **finance:** trading journal tables, maths, service and actions ([ea42a6a](https://github.com/humexxx/allstars-galaxy/commit/ea42a6a38b98f519eb0e073710e4d99ee46c78f9))
+* **finance:** trading journal with calendar, analytics, AI assistant and plan pace ([4c087c5](https://github.com/humexxx/allstars-galaxy/commit/4c087c540a4e44c347da800f16ba57a931fbd815))
+* **portal:** mascot scenes for portfolio, trading, board and road paths ([822bdf9](https://github.com/humexxx/allstars-galaxy/commit/822bdf9d7c246a286e68f7bfb69dcdb320acdc04))
+* **portal:** module mascot redrawn as an overworld hero, with sports and travel scenes ([6aec1ad](https://github.com/humexxx/allstars-galaxy/commit/6aec1ad670afb65909b59aa99c8b96c2a011966e))
+* **portal:** per-account modules, client-safe plans and empty pages at zero ([f45b6b8](https://github.com/humexxx/allstars-galaxy/commit/f45b6b84412ca620eb9f4941f0f6490d97fbf403))
+* **productivity:** drag road paths into order, over a faint grid ([9dc1f39](https://github.com/humexxx/allstars-galaxy/commit/9dc1f395155ead164c254775d8a1f3fb3e466892))
+* **productivity:** road paths are habits only ([9a9533b](https://github.com/humexxx/allstars-galaxy/commit/9a9533b85f69758d4e3ec3ba4d9df7e44ce3c580))
+
+
+### Bug Fixes
+
+* **landing:** hero figures, proof strip and module copy fit a phone and match the app ([08545b6](https://github.com/humexxx/allstars-galaxy/commit/08545b6d0058199673760fec00546c8eeefb34f1))
+* **portal:** auth pages hold their height sliding in and the balance prompt opens after hydration ([f3dd967](https://github.com/humexxx/allstars-galaxy/commit/f3dd9672824cb40ed9f0c44b225f44241487b358))
+* **ui:** links and carousel dots that are not buttons reach 36px under a finger ([d993e16](https://github.com/humexxx/allstars-galaxy/commit/d993e1619bf8d137104f81cc71ba028a1f499c88))
+* **ui:** skeletons follow the phone type size, this month's weeks and the open road path ([23f4042](https://github.com/humexxx/allstars-galaxy/commit/23f4042f09cdc85b5a5cfc8250ae79488bbc9651))
+* **ui:** skeletons take the size of the pages they stand for ([9bd4304](https://github.com/humexxx/allstars-galaxy/commit/9bd43046963fa9f9f00e6d395c328019b9a7fecc))
+* **ui:** small text is 12px on a phone and the remaining controls reach 36px ([788cb7f](https://github.com/humexxx/allstars-galaxy/commit/788cb7f130a086ab4d785954462eeab4384abcb6))
+
 ## [0.18.0](https://github.com/humexxx/allstars-galaxy/compare/v0.17.0...v0.18.0) (2026-11-08)
 
 

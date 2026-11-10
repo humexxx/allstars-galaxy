@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
+import { isResultOnly } from "@/lib/finance/trading";
 import { cn } from "@/lib/utils";
 import { formatDay } from "@/lib/utils/date";
 import { formatCurrencyCompact, formatSignedCurrency, moneySign } from "@/lib/utils/format";
@@ -240,7 +241,7 @@ export function JournalCalendarGrid({
                 type="button"
                 onClick={() => onOpenTrade(b.trade)}
                 style={{ gridColumn: `${b.start + 1} / ${b.end + 2}`, gridRow: b.lane + 2 }}
-                title={`${b.trade.symbol} ${b.trade.side} · ${formatDay(b.trade.openedDay)} → ${b.trade.closedDay ? formatDay(b.trade.closedDay) : "open"}`}
+                title={`${b.trade.symbol}${isResultOnly(b.trade) ? "" : ` ${b.trade.side}`} · ${formatDay(b.trade.openedDay)} → ${b.trade.closedDay ? formatDay(b.trade.closedDay) : "open"}`}
                 className={cn(
                   "flex h-5 min-w-0 cursor-pointer items-center justify-between gap-2 rounded px-1.5 text-2xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   b.trade.status === "open"
@@ -251,7 +252,8 @@ export function JournalCalendarGrid({
                 )}
               >
                 <span className="truncate">
-                  {b.trade.symbol} {b.trade.side === "long" ? "↑" : "↓"}
+                  {b.trade.symbol}
+                  {!isResultOnly(b.trade) && (b.trade.side === "long" ? " ↑" : " ↓")}
                 </span>
                 <Mono className="hidden shrink-0 sm:inline">
                   {b.trade.status === "open" ? "open" : formatCurrencyCompact(b.trade.pnl ?? 0)}
@@ -345,7 +347,10 @@ export function JournalCalendarSide({
               >
                 <span className="flex min-w-0 flex-col">
                   <span className="truncate text-sm font-medium">
-                    {t.symbol} <span className="text-muted-foreground">{t.side === "long" ? "Long" : "Short"}</span>
+                    {t.symbol}
+                    {!isResultOnly(t) && (
+                      <span className="text-muted-foreground"> {t.side === "long" ? "Long" : "Short"}</span>
+                    )}
                   </span>
                   <span className="text-2xs text-muted-foreground">
                     {t.closedDay === picked ? "Closed" : t.openedDay === picked ? "Opened" : "Held"}

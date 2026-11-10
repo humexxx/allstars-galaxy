@@ -52,11 +52,13 @@ export function JournalAnalyticsMain({ journal }: { journal: TradingJournal }): 
 /**
  * The figures a journal is read for (net P&L, win rate, profit factor,
  * expectancy, average win and loss, drawdown, hold time, streaks), and where
- * the money is made, by symbol or by setup.
+ * the money is made, by symbol — or by setup, once a trade carries one (the
+ * assistant records them; the form does not ask).
  */
 export function JournalAnalyticsSide({ journal }: { journal: TradingJournal }): React.ReactElement {
   const s = journal.stats;
   const [by, setBy] = useState<"symbol" | "setup">("symbol");
+  const hasSetups = journal.trades.some((t) => t.setup);
   const stats: { label: string; value: string; sub?: string; tone?: string }[] = [
     { label: "Net P&L", value: formatSignedCurrency(s.netPnl), sub: `${s.trades} closed trades`, tone: toneText(s.netPnl) },
     { label: "Win rate", value: pct(s.winRate), sub: `${s.wins} won · ${s.losses} lost` },
@@ -116,21 +118,23 @@ export function JournalAnalyticsSide({ journal }: { journal: TradingJournal }): 
       <Card className="gap-3 xl:min-h-0 xl:flex-1">
         <CardHeader className="flex items-center justify-between gap-2">
           <Eyebrow size="sm" asChild>
-            <h3>P&amp;L by</h3>
+            <h3>{hasSetups ? "P&L by" : "P&L by symbol"}</h3>
           </Eyebrow>
-          <ToggleGroup
-            type="single"
-            size="sm"
-            value={by}
-            onValueChange={(v) => v && setBy(v as "symbol" | "setup")}
-            aria-label="Break the P&L down by"
-          >
-            <ToggleGroupItem value="symbol">Symbol</ToggleGroupItem>
-            <ToggleGroupItem value="setup">Setup</ToggleGroupItem>
-          </ToggleGroup>
+          {hasSetups && (
+            <ToggleGroup
+              type="single"
+              size="sm"
+              value={by}
+              onValueChange={(v) => v && setBy(v as "symbol" | "setup")}
+              aria-label="Break the P&L down by"
+            >
+              <ToggleGroupItem value="symbol">Symbol</ToggleGroupItem>
+              <ToggleGroupItem value="setup">Setup</ToggleGroupItem>
+            </ToggleGroup>
+          )}
         </CardHeader>
         <CardContent className="xl:min-h-0 xl:overflow-y-auto">
-          <Breakdown rows={by === "symbol" ? journal.bySymbol : journal.bySetup} />
+          <Breakdown rows={hasSetups && by === "setup" ? journal.bySetup : journal.bySymbol} />
         </CardContent>
       </Card>
     </>

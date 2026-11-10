@@ -14,7 +14,7 @@ import { Eyebrow, Mono, Text } from "@/components/ui/typography";
 import { hrefWithJournalView, JOURNAL_VIEWS, type JournalView } from "@/lib/finance/journal-view";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatSignedCurrency, moneySign } from "@/lib/utils/format";
-import type { JournalTrade, TradingCashKind, TradingJournal } from "@/types/trading";
+import type { JournalTrade, TradingCashKind, TradingInstrument, TradingJournal } from "@/types/trading";
 
 import { JournalAnalyticsMain, JournalAnalyticsSide } from "./journal-analytics";
 import {
@@ -44,9 +44,12 @@ const toneText = (n: number): string =>
 export function TradingJournalView({
   journal,
   initialView,
+  linkedInstruments,
 }: {
   journal: TradingJournal;
   initialView: JournalView;
+  /** The assets linked for pricing: what the trade form offers as instruments. */
+  linkedInstruments: TradingInstrument[];
 }): React.ReactElement {
   const [view, setView] = useState<JournalView>(initialView);
   const [calendar, setCalendar] = useState<CalendarState>(() => initialCalendarState(journal.today));
@@ -59,7 +62,6 @@ export function TradingJournalView({
   const month = journal.months.at(-1);
   const monthPnl = month && month.month === journal.today.slice(0, 7) ? month.pnl : 0;
   const open = journal.trades.filter((t) => t.status === "open");
-  const setups = [...new Set(journal.trades.map((t) => t.setup).filter((s): s is string => Boolean(s)))];
   const { stats } = journal;
 
   const goView = (next: JournalView): void => {
@@ -158,7 +160,7 @@ export function TradingJournalView({
                 <Text variant="small" as="p" className="text-2xs">
                   {stats.winRate == null ? "—" : `${Math.round(stats.winRate * 100)}%`} win rate · profit factor{" "}
                   {stats.profitFactor == null ? "—" : stats.profitFactor.toFixed(2)} · {open.length} open
-                  {open.length > 0 && ` (${formatCurrency(journal.openExposure)})`}
+                  {journal.openExposure > 0 && ` (${formatCurrency(journal.openExposure)})`}
                 </Text>
               </div>
               <div className="flex flex-col items-end gap-2">
@@ -229,8 +231,20 @@ export function TradingJournalView({
         </div>
       </div>
 
-      <TradeDialog open={tradeOpen} onOpenChange={setTradeOpen} trade={editing} setups={setups} />
-      <CloseTradeDialog trade={closing} onOpenChange={(o) => !o && setClosing(null)} />
+      <TradeDialog
+        open={tradeOpen}
+        onOpenChange={setTradeOpen}
+        trade={editing}
+        trades={journal.trades}
+        cash={journal.cash}
+        linked={linkedInstruments}
+      />
+      <CloseTradeDialog
+        trade={closing}
+        onOpenChange={(o) => !o && setClosing(null)}
+        trades={journal.trades}
+        cash={journal.cash}
+      />
       <CashDialog kind={cashKind} onOpenChange={(o) => !o && setCashKind(null)} balance={journal.balance} />
     </div>
   );

@@ -18,13 +18,26 @@ const positive = (label: string) =>
 const nonNegative = (label: string) =>
   z.coerce.number().min(0, `${label} cannot be negative`).max(LARGEST, `${label} is too large`);
 
+const symbolSchema = z
+  .string()
+  .trim()
+  .min(1, "Instrument is required")
+  .max(24, "Instrument is at most 24 characters")
+  .transform((s) => s.toUpperCase());
+const notesSchema = z.string().trim().max(2000).nullable().default(null);
+
+/**
+ * What a trade made, to the cent; negative for a loss. A number and nothing
+ * coerced into one: an empty field or a null would read as a trade that made $0.
+ */
+const pnlSchema = z
+  .number("P&L must be a number")
+  .min(-LARGEST, "P&L is too large")
+  .max(LARGEST, "P&L is too large")
+  .refine((n) => Math.round(n * 100) / 100 === n, "P&L has at most 2 decimals");
+
 const tradeFields = z.object({
-  symbol: z
-    .string()
-    .trim()
-    .min(1, "Symbol is required")
-    .max(24, "Symbol is at most 24 characters")
-    .transform((s) => s.toUpperCase()),
+  symbol: symbolSchema,
   side: z.enum(["long", "short"]),
   quantity: positive("Quantity"),
   multiplier: positive("Multiplier").default(1),
@@ -34,7 +47,7 @@ const tradeFields = z.object({
   closedAt: instantSchema.nullable().default(null),
   fees: nonNegative("Fees").default(0),
   setup: z.string().trim().max(60).nullable().default(null),
-  notes: z.string().trim().max(2000).nullable().default(null),
+  notes: notesSchema,
 });
 
 /** A trade is closed by its exit price and close time together, never one alone. */
@@ -45,28 +58,55 @@ function closesAfterOpen(t: { closedAt: string | null; openedAt: string }): bool
   return t.closedAt == null || Date.parse(t.closedAt) >= Date.parse(t.openedAt);
 }
 
+const CLOSES_AFTER_OPEN = { message: "A trade cannot close before it opened", path: ["closedAt"] };
+
+/** A trade with its whole position — what the assistant records. */
 export const tradeSchema = tradeFields
   .refine(closesWhole, { message: "A closed trade needs both its exit price and when it closed", path: ["exitPrice"] })
-  .refine(closesAfterOpen, { message: "A trade cannot close before it opened", path: ["closedAt"] });
+  .refine(closesAfterOpen, CLOSES_AFTER_OPEN);
 export type TradeInput = z.input<typeof tradeSchema>;
 export type TradeData = z.infer<typeof tradeSchema>;
 
-export const updateTradeSchema = tradeFields
+/**
+ * A trade as the journal's form takes it: what was traded, when, and what it
+ * made. The position behind the result is not asked for.
+ */
+const tradeResultFields = z.object({
+  symbol: symbolSchema,
+  openedAt: instantSchema,
+  closedAt: instantSchema.nullable().default(null),
+  pnl: pnlSchema.nullable().default(null),
+  notes: notesSchema,
+});
+
+function resultClosesWhole(t: { pnl: number | null; closedAt: string | null }): boolean {
+  return (t.pnl == null) === (t.closedAt == null);
+}
+const RESULT_CLOSES_WHOLE = { message: "A closed trade needs both its P&L and when it closed", path: ["pnl"] };
+
+export const tradeResultSchema = tradeResultFields
+  .refine(resultClosesWhole, RESULT_CLOSES_WHOLE)
+  .refine(closesAfterOpen, CLOSES_AFTER_OPEN);
+export type TradeResultInput = z.input<typeof tradeResultSchema>;
+export type TradeResultData = z.infer<typeof tradeResultSchema>;
+
+export const updateTradeResultSchema = tradeResultFields
   .extend({ id: idSchema })
-  .refine(closesWhole, { message: "A closed trade needs both its exit price and when it closed", path: ["exitPrice"] })
-  .refine(closesAfterOpen, { message: "A trade cannot close before it opened", path: ["closedAt"] });
-export type UpdateTradeInput = z.input<typeof updateTradeSchema>;
-export type UpdateTradeData = z.infer<typeof updateTradeSchema>;
+  .refine(resultClosesWhole, RESULT_CLOSES_WHOLE)
+  .refine(closesAfterOpen, CLOSES_AFTER_OPEN);
+export type UpdateTradeResultInput = z.input<typeof updateTradeResultSchema>;
+export type UpdateTradeResultData = z.infer<typeof updateTradeResultSchema>;
 
 export const closeTradeSchema = z.object({
   id: idSchema,
-  exitPrice: nonNegative("Exit price"),
+  pnl: pnlSchema,
   closedAt: instantSchema,
-  /** Fees of the closing order, added to the trade's. */
-  fees: nonNegative("Fees").default(0),
 });
 export type CloseTradeInput = z.input<typeof closeTradeSchema>;
 export type CloseTradeData = z.infer<typeof closeTradeSchema>;
+
+/** What the instrument search is asked: a ticker or part of a name. */
+export const instrumentQuerySchema = z.string().trim().min(2).max(40);
 
 export const cashMovementSchema = z.object({
   kind: z.enum(["deposit", "withdrawal"]),

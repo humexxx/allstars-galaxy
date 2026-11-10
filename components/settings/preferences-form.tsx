@@ -40,7 +40,7 @@ export function AppearanceSettings({ preferences }: AppearanceSettingsProps) {
   return (
     <SettingRow
       label="Module mascot"
-      description="Show a small animated character at the bottom of module pages: mining gold on Plans, playing the sport on screen on Sports, planning a trip on Travel."
+      description="Show a small animated character at the bottom of module pages, doing whatever the page is about: mining gold on Plans, playing the sport on screen on Sports, moving a card to Done on the Board."
       control={
         <div className="flex items-center gap-2">
           {isPending && <Spinner className="size-3.5 text-muted-foreground" />}

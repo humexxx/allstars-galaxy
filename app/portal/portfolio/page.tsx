@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import {
   getUserPortfolio,
   getPortfolioStats,
@@ -23,6 +24,7 @@ import type { PortfolioStats, PortfolioTransaction } from "@/types/portfolio";
 import { getRequestTodayIso } from "@/lib/utils/request-today";
 import PortfolioClientPage from "@/components/portal/portfolio-client";
 import { performanceSeries } from "@/components/portfolio/performance-series";
+import { ModuleMascot } from "@/components/portal/module-mascot";
 import { PortalPageContainer } from "@/components/portal/page-container";
 
 export const metadata: Metadata = {
@@ -219,6 +221,9 @@ export default async function PortfolioPage() {
   return (
     <PortalPageContainer>
       <PortfolioClientPage data={data} />
+      <Suspense fallback={null}>
+        <ModuleMascot variant="portfolio" />
+      </Suspense>
     </PortalPageContainer>
   );
 }

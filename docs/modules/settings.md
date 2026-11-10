@@ -7,7 +7,9 @@
 Personal portal preferences. Today it holds a single appearance toggle — the
 decorative module mascot (a small overworld hero doing whatever the module on
 screen is about) shown after the content of module pages: mining gold on
-Plans, playing the sport on screen on Sports, reading a map on Travel.
+Plans, watering a money tree on Portfolio, calling a chart on the Trading
+Journal, moving a card to Done on the Board, ticking each day's signpost on
+Road Paths, playing the sport on screen on Sports, reading a map on Travel.
 
 ## Routes
 - `/portal/settings` — preferences page (appearance toggles); the section rail
@@ -54,7 +56,7 @@ Plans, playing the sport on screen on Sports, reading a map on Travel.
   is theirs; `MAX_MILESTONES` (12) is the guard rail.
 - Conventional Commits scope: `portal` (no dedicated `settings` scope yet — add it to `commitlint.config.mjs` if the module grows).
 - Reached from the user dropdown ([`components/nav-user.tsx`](../../components/nav-user.tsx)), not the sidebar nav sections.
-- Each module owns rendering the mascot, always inside a `<Suspense fallback={null}>` after the content so no page waits on the preference: `app/portal/plans/layout.tsx` (posed by the main plan — see [finance.md](./finance.md)), the Sports hub and its race and tournament pages (the page knows the sport; the layout does not) and `app/portal/entertainment/travel-planner/layout.tsx` — see [entertainment.md](./entertainment.md). This module only owns the preference itself. A new variant is a scene file beside the others, a member of `ContextAvatarProps`, and a `<ModuleMascot>` in the module.
+- Each module owns rendering the mascot, always inside a `<Suspense fallback={null}>` after the content so no page waits on the preference: `app/portal/plans/layout.tsx` (posed by the main plan — see [finance.md](./finance.md)), the Sports hub and its race and tournament pages (the page knows the sport; the layout does not) and `app/portal/entertainment/travel-planner/layout.tsx` — see [entertainment.md](./entertainment.md) — `app/portal/portfolio/page.tsx` ([portfolio.md](./portfolio.md)), `app/portal/trading/layout.tsx` ([finance.md](./finance.md)) and the Board's and Road Paths' layouts ([productivity.md](./productivity.md)). This module only owns the preference itself. A new variant is a scene file beside the others, a member of `ContextAvatarProps`, and a `<ModuleMascot>` in the module.
 - **AI spend is the app's own count.** An individual Claude Console account
   cannot read its balance or key expiry through the Admin API, so each call's
   `usage` is priced at the list rates in [`lib/ai/models.ts`](../../lib/ai/models.ts)

@@ -1,6 +1,7 @@
 import { Suspense, type ReactNode } from "react";
 
 import { TradingAssistant } from "@/components/finance/trading/trading-assistant";
+import { ModuleMascot } from "@/components/portal/module-mascot";
 import { PortalPageContainer } from "@/components/portal/page-container";
 import { canUseAssistant } from "@/lib/ai/assistant/access";
 import { getEffectiveContext } from "@/lib/services/impersonation";
@@ -13,6 +14,9 @@ export default function TradingLayout({ children }: { children: ReactNode }): Re
   return (
     <PortalPageContainer>
       {children}
+      <Suspense fallback={null}>
+        <ModuleMascot variant="trading" />
+      </Suspense>
       <Suspense fallback={null}>
         <TradingAssistantGate />
       </Suspense>

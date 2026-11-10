@@ -1,7 +1,7 @@
 # Productivity
 
 > **Status:** Active
-> **Last reviewed:** 2026-11-08
+> **Last reviewed:** 2026-11-10
 
 ## Overview
 Two surfaces: a *daily* kanban board — each day its own, with what was left
@@ -59,6 +59,7 @@ getter actions were deleted — pages read through the services.
 
 ## Notes
 - Conventional Commits scope: `productivity`
+- **Module mascot**: `board/layout.tsx` and `road-paths/layout.tsx` each append `<ModuleMascot>` after the page, in its own `Suspense` and gated by the `showContextAvatar` preference — see [settings.md](./settings.md). `variant="board"` ([`mascot/board-scene.tsx`](../../components/portal/mascot/board-scene.tsx)) carries a card across a kanban board to Done; `variant="road-paths"` ([`mascot/road-paths-scene.tsx`](../../components/portal/mascot/road-paths-scene.tsx)) walks an endless road, ticking each day's signpost under a streak flame.
 - **A task can only sit in the caller's own column.** `createBoardTask`,
   `updateBoardTask` and a cross-column `reorderTask` run
   `ensureColumnOwnership` first; a foreign `columnId` used to be inserted as-is

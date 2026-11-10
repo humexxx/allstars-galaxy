@@ -1,7 +1,7 @@
 # Portfolio
 
 > **Status:** Active (page redesigned to mirror plan-editor layout)
-> **Last reviewed:** 2026-11-08
+> **Last reviewed:** 2026-11-10
 
 ## Overview
 Tracks the user's real portfolio: transactions (buys/withdrawals), historical
@@ -68,6 +68,7 @@ Removed as dead in the 2026-09-29 pass: `types/api.ts`, `types/snapshot.ts`, `li
 - `app_state` — global key-value (cron state, etc.) — also touched by other modules; `last_manual_price_refresh` is the Refresh cooldown
 
 ## Notes
+- **Module mascot**: `app/portal/portfolio/page.tsx` appends `<ModuleMascot variant="portfolio" />` after the page ([`mascot/portfolio-scene.tsx`](../../components/portal/mascot/portfolio-scene.tsx): the hero waters a money tree and shakes its coins into a basket), in its own `Suspense` and gated by the `showContextAvatar` preference — see [settings.md](./settings.md).
 - **Empty is the same page at zero.** With no portfolio, or nothing approved yet, the page keeps its compact header, its three tabs and its figures at $0.00 (an owner's figures too), with a flat chart from the month's start to today (built by the page) and the transactions table's headers over one empty line. A pending first transaction adds a note above the figures. A zero is neutral, never green. The separate `EmptyPortfolio` page is gone.
 - The admin-only "add for a user" picker and the snapshot tools are off while an admin impersonates, as the transaction actions already decided.
 - **Logic audit (2026-09-11).** Monthly interest is idempotent per calendar month: the cron consults `last_interest_run` on every day (the 1st included), a failure writes `last_interest_error` instead, and the admin's manual "apply interest" goes through the same month claim (see 2026-10-16). Approve/reject only move a `pending` row (re-approval used to reset accrued value). `PortfolioStats.totalWithdrawn` and `getPortfolioAssets` add approved withdrawals back into profit. `getDerivedHoldings` keeps `closed` buys' units; `backfillTransactionAllocations` and `setMethodAllocations` require a policy that totals 100%. The performance chart no longer fabricates a $0 origin. Daily snapshots skip a portfolio already snapshotted today; `COUNT(*)` is cast to int. The investor summary joins on `investorId`; the admin filter ignores a non-UUID user id; the CSV signs withdrawals.

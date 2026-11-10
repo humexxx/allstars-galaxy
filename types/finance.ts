@@ -206,6 +206,6 @@ export type PlanSummary = {
 
 /**
  * How the finance module's mascot should read the user's main plan. Derived by
- * `getFinanceMood` — see the mood table in `components/portal/context-avatar.tsx`.
+ * `getFinanceMood` — see the mood table in `components/portal/mascot/finance-scene.tsx`.
  */
 export type FinanceMood = "idle" | "thriving" | "steady" | "strained";

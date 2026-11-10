@@ -1,7 +1,9 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { RacquetTournamentPage } from "@/components/entertainment/sports/sports/racquet-tournament-page";
+import { ModuleMascot } from "@/components/portal/module-mascot";
 import { requireModulePage } from "@/lib/services/module-access-service";
 import { listUserFavoriteSportIds } from "@/lib/services/sports-service";
 import { loadRacquetTournament } from "@/lib/sports/detail";
@@ -24,16 +26,21 @@ export default async function TennisTournamentPage({ params, searchParams }: Pro
   ]);
   if (!detail) notFound();
   return (
-    // Keyed by tab: a link to another tab of this page opens it.
-    <RacquetTournamentPage
-      key={tab ?? ""}
-      sport="tennis"
-      tournament={detail.tournament}
-      draw={detail.draw}
-      today={detail.today}
-      season={detail.season}
-      favoriteSportIds={favorites}
-      initialTab={tab}
-    />
+    <>
+      {/* Keyed by tab: a link to another tab of this page opens it. */}
+      <RacquetTournamentPage
+        key={tab ?? ""}
+        sport="tennis"
+        tournament={detail.tournament}
+        draw={detail.draw}
+        today={detail.today}
+        season={detail.season}
+        favoriteSportIds={favorites}
+        initialTab={tab}
+      />
+      <Suspense fallback={null}>
+        <ModuleMascot variant="sports" sport="tennis" />
+      </Suspense>
+    </>
   );
 }

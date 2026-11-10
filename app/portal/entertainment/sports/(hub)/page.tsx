@@ -1,6 +1,8 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 
 import { SportsHub } from "@/components/entertainment/sports/sports-hub";
+import { ModuleMascot } from "@/components/portal/module-mascot";
 import { DEFAULT_SPORT, SPORTS_BY_ID } from "@/lib/data/sports/registry";
 import { FOOTBALL_COMPETITIONS } from "@/lib/services/football-service";
 import { requireModulePage } from "@/lib/services/module-access-service";
@@ -78,14 +80,19 @@ export default async function SportsPage({
   // No PageHeader: the sport's own name row names the page, with the
   // favourites button and the sport picker at its end (SportsHub).
   return (
-    <SportsHub
-      activeSport={active}
-      favoriteSportIds={favorites}
-      payload={payload}
-      initialTab={tab}
-      today={today}
-      teamFilter={list ? { list, teamIds } : null}
-      viewerId={ctx.effectiveUserId}
-    />
+    <>
+      <SportsHub
+        activeSport={active}
+        favoriteSportIds={favorites}
+        payload={payload}
+        initialTab={tab}
+        today={today}
+        teamFilter={list ? { list, teamIds } : null}
+        viewerId={ctx.effectiveUserId}
+      />
+      <Suspense fallback={null}>
+        <ModuleMascot variant="sports" sport={active} />
+      </Suspense>
+    </>
   );
 }

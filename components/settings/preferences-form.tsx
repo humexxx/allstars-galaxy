@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { SettingRow } from "@/components/settings/settings-shell";
-import { ContextAvatar } from "@/components/portal/context-avatar";
+import { FinanceScene } from "@/components/portal/mascot/finance-scene";
 import type { UserPreferences } from "@/types/preferences";
 
 import { setShowContextAvatarAction } from "@/app/actions/user-preferences";
@@ -40,7 +40,7 @@ export function AppearanceSettings({ preferences }: AppearanceSettingsProps) {
   return (
     <SettingRow
       label="Module mascot"
-      description="Show a small animated mascot at the bottom of module pages — on Finance it mines for gold."
+      description="Show a small animated character at the bottom of module pages: mining gold on Plans, playing the sport on screen on Sports, planning a trip on Travel."
       control={
         <div className="flex items-center gap-2">
           {isPending && <Spinner className="size-3.5 text-muted-foreground" />}
@@ -54,7 +54,7 @@ export function AppearanceSettings({ preferences }: AppearanceSettingsProps) {
         </div>
       }
     >
-      {showAvatar && <ContextAvatar variant="finance" />}
+      {showAvatar && <FinanceScene mood="steady" />}
     </SettingRow>
   );
 }

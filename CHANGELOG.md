@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.19.1](https://github.com/humexxx/allstars-galaxy/compare/v0.19.0...v0.19.1) (2026-11-10)
+
+
+### Bug Fixes
+
+* **finance:** harden the trading journal after its review ([75a687d](https://github.com/humexxx/allstars-galaxy/commit/75a687df9430341716799898efc2a25bfbdde895))
+* **finance:** keep the trading account's balance and pace honest ([16bbc2e](https://github.com/humexxx/allstars-galaxy/commit/16bbc2e462919fd03419a21ac5c1d391880dffa4))
+* **finance:** trading journal fixes after its review ([dabf6d1](https://github.com/humexxx/allstars-galaxy/commit/dabf6d1dc54e905f7cbdbebbe6cbab177925d03e))
+* **portal:** write the module toggle and the path order in one statement ([d4be67b](https://github.com/humexxx/allstars-galaxy/commit/d4be67ba3341eceeaa58a70359f898480b345d54))
+
 ## [0.19.0](https://github.com/humexxx/allstars-galaxy/compare/v0.18.0...v0.19.0) (2026-11-10)
 
 

@@ -1,8 +1,10 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { F1RacePage } from "@/components/entertainment/sports/f1-race-page";
-import { requireEffectiveContext } from "@/lib/services/impersonation";
+import { ModuleMascot } from "@/components/portal/module-mascot";
+import { requireModulePage } from "@/lib/services/module-access-service";
 import { listUserFavoriteSportIds } from "@/lib/services/sports-service";
 import { loadF1Race } from "@/lib/sports/detail";
 import { f1RoundSchema } from "@/schemas/f1";
@@ -18,7 +20,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 /** One race of the season, by its round: what "View details" and the tiles open. */
 export default async function F1RaceRoute({ params, searchParams }: Props): Promise<React.ReactElement> {
-  const ctx = await requireEffectiveContext();
+  const ctx = await requireModulePage("sports");
   const round = f1RoundSchema.safeParse((await params).round);
   if (!round.success) notFound();
   const [detail, favorites, { tab }] = await Promise.all([
@@ -28,17 +30,22 @@ export default async function F1RaceRoute({ params, searchParams }: Props): Prom
   ]);
   if (!detail) notFound();
   return (
-    // Keyed by tab: a link to another tab of this page opens it.
-    <F1RacePage
-      key={tab ?? ""}
-      race={detail.race}
-      season={detail.data.season}
-      drivers={detail.data.drivers}
-      classification={detail.classification}
-      sessions={detail.sessions}
-      current={detail.current}
-      favoriteSportIds={favorites}
-      initialTab={tab}
-    />
+    <>
+      {/* Keyed by tab: a link to another tab of this page opens it. */}
+      <F1RacePage
+        key={tab ?? ""}
+        race={detail.race}
+        season={detail.data.season}
+        drivers={detail.data.drivers}
+        classification={detail.classification}
+        sessions={detail.sessions}
+        current={detail.current}
+        favoriteSportIds={favorites}
+        initialTab={tab}
+      />
+      <Suspense fallback={null}>
+        <ModuleMascot variant="sports" sport="f1" />
+      </Suspense>
+    </>
   );
 }

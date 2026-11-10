@@ -2,11 +2,11 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 
 /** Placeholder for an admin table, on the same card the real one sits on. */
-export function AdminTableSkeleton() {
+export function AdminTableSkeleton({ rows = 8 }: { rows?: number }) {
   return (
     <Card>
       <CardContent className="flex flex-col gap-2">
-        {Array.from({ length: 8 }).map((_, i) => (
+        {Array.from({ length: rows }).map((_, i) => (
           <Skeleton key={i} className="h-12 w-full" />
         ))}
       </CardContent>

@@ -86,9 +86,9 @@ describe("F11: dashboard card figures", () => {
     // The portfolio rides in investments, or the tiles fall $20k short of
     // the net worth above them.
     expect(fig.investments).toBeCloseTo(today!.investments + today!.portfolioValue, 6);
-    expect(fig.savings + fig.investments + fig.receivables - fig.debt).toBeCloseTo(fig.netWorth, 6);
+    expect(fig.savings + fig.investments + fig.trading + fig.receivables - fig.debt).toBeCloseTo(fig.netWorth, 6);
     for (const p of fig.points) {
-      expect(p.savings + p.investments + p.receivables - p.debt).toBeCloseTo(p.netWorth, 1);
+      expect(p.savings + p.investments + p.trading + p.receivables - p.debt).toBeCloseTo(p.netWorth, 1);
     }
   });
 
@@ -127,6 +127,24 @@ describe("F11: dashboard card figures", () => {
     // A projected close carries the portfolio in investments, like today.
     const aug = projection.months[7];
     expect(fig.points[2].investments).toBeCloseTo(aug.investments + aug.portfolioValue, 1);
+  });
+
+  it("keeps the trading account out of the portfolio, as a part of its own", () => {
+    const withTrading = { ...options, tradingValue: 1500, tradingMonthlyRate: 0.02, tradingAsOf: now };
+    const projection = projectPlan(plan, incomes, expenses, [], withTrading);
+    const today = projectStateAt(plan, incomes, expenses, [], withTrading, now);
+    const fig = buildDashboardFigures(projection, today);
+
+    expect(fig.trading).toBe(1500);
+    expect(fig.investments).toBeCloseTo(today!.investments + today!.portfolioValue, 2);
+    for (const p of [fig, ...fig.points]) {
+      expect(p.savings + p.investments + p.trading + p.receivables - p.debt).toBeCloseTo(p.netWorth, 1);
+    }
+    // A recorded past point carries its trading balance apart too.
+    const [jul] = buildDashboardFigures(projection, today, [
+      { date: U(2026, 8), netWorth: 25000, savings: 3000, investments: 500, totalDebt: 0, receivables: 0, tradingValue: 1200 },
+    ]).points;
+    expect(jul).toMatchObject({ trading: 1200, investments: 20800 });
   });
 
   it("splits a recorded snapshot into parts that add up to its net worth", () => {
@@ -221,53 +239,6 @@ describe("dashboard card: period names and the headline goal", () => {
     const projection = projectPlan(plan, incomes, [], [], {});
     const today = projectStateAt(plan, incomes, [], [], {}, now);
     expect(dashboardGoal(projection, today, [10_000_000], 5, now)).toBeNull();
-  });
-});
-
-describe("dashboard card: movement days between the closes", () => {
-  const plan = {
-    id: "p",
-    startMonth: U(2026, 7),
-    monthsAhead: 24,
-    confirmationDayOfMonth: 5,
-    initialSavings: "0",
-    monthlySavingsRate: "0",
-    surplusToDebtsPercent: "1",
-    debtStrategy: "avalanche",
-    autoInvestPercent: "0",
-    initialInvestments: "0",
-    includePortfolio: false,
-  } as unknown as FinancePlan;
-  const incomes = [
-    { id: "i", name: "Pay", monthlyAmount: "5000", kind: "recurring", dayOfMonth: 1, recurrenceType: "monthly_day" },
-  ] as unknown as FinancePlanIncome[];
-  const now = U(2026, 11, 3);
-  const close = (m: number, netWorth: number): ChartPoint => ({ date: U(2026, m, 5), netWorth, savings: 0, totalDebt: 0, receivables: 0 });
-  const moved = (m: number, d: number, netWorth: number): ChartPoint => ({ date: U(2026, m, d), netWorth, savings: netWorth, totalDebt: 0, receivables: 0 });
-
-  it("draws movement days at their own dates, between the closes, before today", () => {
-    const projection = projectPlan(plan, incomes, [], [], {});
-    const today = projectStateAt(plan, incomes, [], [], {}, now);
-    const fig = buildDashboardFigures(
-      projection,
-      today,
-      [close(8, 100), close(9, 200), close(10, 300)],
-      5,
-      [moved(6, 1, 1), moved(10, 1, 250), moved(11, 1, 350), moved(11, 3, 400)]
-    );
-    const past = fig.points.slice(0, fig.pastCount);
-    // The June movement is older than the first close shown; today's own day
-    // is the Today point.
-    expect(past.map((p) => p.label)).toEqual([
-      "Aug 4, 2026",
-      "Sep 4, 2026",
-      "Oct 1, 2026",
-      "Oct 4, 2026",
-      "Nov 1, 2026",
-    ]);
-    expect(past.every((p, i) => i === 0 || p.time > past[i - 1].time)).toBe(true);
-    expect(fig.points[fig.pastCount]).toMatchObject({ label: "Today", tick: true });
-    expect(past.filter((p) => p.tick)).toHaveLength(1);
   });
 });
 

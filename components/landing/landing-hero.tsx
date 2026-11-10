@@ -106,18 +106,19 @@ export function LandingHero({ signupsOpen }: { signupsOpen: boolean }) {
             {/* KPIs mirror PortfolioKpiGrid on /portal/portfolio
                 (components/portal/portfolio-client.tsx) — same labels and
                 sublabels. Numbers are illustrative. */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-3 text-left sm:gap-4 lg:grid-cols-4">
               {[
-                { label: "Total value", value: "$284,150", note: "Current market value" },
+                { label: "Total value", value: "$284,150", note: "Your balance, interest included" },
                 { label: "All-time profit", value: "+$31,350", note: "up 12.4%", positive: true },
+                { label: "Cost basis", value: "$252,800", note: "Total invested" },
                 { label: "Active positions", value: "18", note: "5 methods" },
               ].map((kpi) => (
                 <div
                   key={kpi.label}
-                  className="rounded-lg border bg-card p-4"
+                  className="rounded-lg border bg-card p-3 sm:p-4"
                 >
                   <Eyebrow as="div" size="sm">{kpi.label}</Eyebrow>
-                  <Mono as="div" className="mt-1 text-2xl font-semibold">
+                  <Mono as="div" className="mt-1 text-xl font-semibold sm:text-2xl">
                     {kpi.value}
                   </Mono>
                   <div

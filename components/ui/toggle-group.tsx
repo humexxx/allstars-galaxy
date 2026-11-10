@@ -80,8 +80,10 @@ function ToggleGroupItem({
         // Segments share the track evenly but never below their own label
         // (`min-w-0` clipped "Calendar" beside "List"); chips keep their
         // natural width so a row of them wraps instead of overlapping.
+        // On a touch screen a segment also answers in the track's own
+        // padding above and below it, so the whole 40px rail is the target.
         (context.variant ?? variant ?? "default") === "default"
-          ? "h-full min-w-fit flex-1 max-sm:h-full max-sm:min-w-fit"
+          ? "relative h-full min-w-fit flex-1 max-sm:h-full max-sm:min-w-fit pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-0.75"
           : "flex-none",
         className
       )}

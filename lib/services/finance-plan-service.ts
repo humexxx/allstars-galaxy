@@ -44,6 +44,8 @@ import { isoDay } from "@/lib/finance/schedule";
 import { getUserPortfolio, getPortfolioStats, getPortfolioAssets } from "./portfolio-service";
 import { getManagedAssets } from "./margin-service";
 import { ensureOwnedRow } from "./ownership";
+import { getDisabledModules } from "./module-access-service";
+import { getTradingSummary } from "./trading-journal-service";
 
 // ---------- helpers ----------
 
@@ -1089,16 +1091,22 @@ export async function projectionOptionsFor(
   userId: string,
   prefetched: { autoInvestRate?: number } = {}
 ): Promise<ProjectOptions> {
-  const [ownValue, portfolioMonthlyGrowthRate, managed, autoInvestRate] = await Promise.all([
-    plan.includePortfolio ? getPortfolioValueForUser(userId) : Promise.resolve(0),
-    plan.includePortfolio ? getPortfolioWeightedMonthlyRoi(userId) : Promise.resolve(0),
+  // A module an admin turned off for the account adds nothing to its plans.
+  const off = await getDisabledModules(userId);
+  const portfolio = plan.includePortfolio && !off.includes("portfolio");
+  const [ownValue, portfolioMonthlyGrowthRate, managed, autoInvestRate, trading] = await Promise.all([
+    portfolio ? getPortfolioValueForUser(userId) : Promise.resolve(0),
+    portfolio ? getPortfolioWeightedMonthlyRoi(userId) : Promise.resolve(0),
     // What the user holds with other people's money: the assets at market
     // value, growing at the return the owner EXPECTS of them (each method's
     // `expected_monthly_roi`), less what is owed to the investors, growing at
     // the rate PROMISED to them — so net worth carries only the margin (the
     // owner's call of 2026-11-08; until then it carried the whole value).
-    plan.includePortfolio ? getManagedAssets(userId) : Promise.resolve(null),
+    portfolio ? getManagedAssets(userId) : Promise.resolve(null),
     prefetched.autoInvestRate ?? getAutoInvestRate(plan),
+    // The trading journal is money the user holds, plan or no plan: its
+    // balance, growing at the average return of its last complete months.
+    off.includes("trading") ? null : getTradingSummary(userId, null),
   ]);
   const managedValue = managed?.value ?? 0;
   return {
@@ -1107,6 +1115,9 @@ export async function projectionOptionsFor(
     portfolioHeldMonthlyGrowthRate: managed?.expectedMonthlyRate ?? 0,
     portfolioClaims: managed?.owed ?? 0,
     portfolioClaimsMonthlyRate: managed?.promisedMonthlyRate ?? 0,
+    tradingValue: trading?.balance ?? 0,
+    tradingAsOf: trading ? new Date(`${trading.asOf}T00:00:00Z`) : null,
+    tradingMonthlyRate: trading?.monthlyGrowthRate ?? 0,
     portfolioMonthlyGrowthRate,
     autoInvestRate,
     overrides: plan.overrides,

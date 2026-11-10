@@ -144,8 +144,10 @@ const eyebrowVariants = cva(
     variants: {
       size: {
         default: "text-xs",
-        // Dense rails (KPI tiles, bracket labels) — the 10px step.
-        sm: "text-2xs",
+        // Dense rails (KPI tiles, bracket labels) — the 10px step. On a phone
+        // `text-2xs` is 12px, and the tighter tracking keeps the label as wide
+        // as it was at 10px, so a rail sized for one line still holds one.
+        sm: "text-2xs max-sm:tracking-wider",
       },
     },
     defaultVariants: { size: "default" },

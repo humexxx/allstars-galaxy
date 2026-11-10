@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { safe, type ActionResult } from "@/lib/actions/safe";
-import { requireEffectiveContext } from "@/lib/services/impersonation";
+import { requireModuleContext } from "@/lib/services/module-access-service";
 import { saveConfirmation } from "@/lib/services/finance-confirmation-service";
 import { confirmationSchema, type ConfirmationData } from "@/schemas/finance-confirmations";
 import { getRequestToday } from "@/lib/utils/request-today";
@@ -12,7 +12,7 @@ export async function saveConfirmationAction(
   input: ConfirmationData,
 ): Promise<ActionResult> {
   return safe("finance-confirmations", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("plans");
     const parsed = confirmationSchema.safeParse(input);
     if (!parsed.success) {
       return { success: false, error: "Invalid input" };

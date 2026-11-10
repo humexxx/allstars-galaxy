@@ -65,6 +65,7 @@ describe("getAllUsers", () => {
         fullName: "Alice",
         role: "admin" as const,
         avatarUrl: "https://cdn.example.com/a.png",
+        disabledModules: [],
       },
       {
         id: "00000000-0000-0000-0000-000000000002",
@@ -72,6 +73,7 @@ describe("getAllUsers", () => {
         fullName: "Bob",
         role: "user" as const,
         avatarUrl: null,
+        disabledModules: ["trading"],
       },
     ];
     const chain = mockSelect(rows);
@@ -88,6 +90,7 @@ describe("getAllUsers", () => {
         fullName: expect.anything(),
         role: expect.anything(),
         avatarUrl: expect.anything(),
+        disabledModules: expect.anything(),
       })
     );
     expect(chain.from).toHaveBeenCalledOnce();
@@ -146,7 +149,7 @@ describe("getAllUsers", () => {
 
     const result = await getAllUsers();
 
-    expect(result).toEqual(rows);
+    expect(result).toEqual([{ ...rows[0], disabledModules: [] }]);
     expect(result[0].email).toBeNull();
     expect(result[0].role).toBeNull();
   });

@@ -132,7 +132,9 @@ Equivalent classes: `text-xs font-semibold uppercase tracking-[0.18em] text-mute
 
 `<Eyebrow>` is also the **KPI label** everywhere (stat cards, dashboard tiles).
 Dense rails (standings, landing mock tiles) use `size="sm"` (10px) — never a
-`className="text-2xs"` override. The figure under it is `<Mono>` with
+`className="text-2xs"` override. On a phone `size="sm"` is 12px with
+`tracking-wider` instead of 0.18em, which makes the label as wide as it was at
+10px: a rail sized for one line of it still holds one. The figure under it is `<Mono>` with
 `text-xl font-semibold sm:text-2xl` (`Mono` already sets `tabular-nums`).
 
 ### Page headers — use `<PageHeader>`
@@ -192,6 +194,12 @@ chart ticks, the ⌘K hint — the scale bottoms out one step below `text-xs` at
 [`app/globals.css`](../app/globals.css). Use `text-2xs` instead of ad-hoc
 `text-[10px]` / `text-[11px]`. It is the **smallest sanctioned size** — never go
 below it, and never reach for an arbitrary `text-[Npx]` anywhere.
+
+**Below `sm` (640px) the same utility is 12px / 16px.** 10px is a desktop
+density: on a phone it is under the smallest size that reads comfortably, so
+the utility steps itself up and no call site writes `max-sm:text-xs`. A dense
+row that fitted at 10px has to fit at 12px on a phone too — check it at 360px,
+and let the label truncate or the row wrap rather than pinning the size back.
 
 ```tsx
 <span className="text-2xs font-medium text-muted-foreground">L1</span>

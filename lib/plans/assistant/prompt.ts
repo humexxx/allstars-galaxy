@@ -12,7 +12,7 @@ How a plan works
 - An income that stops gets an endDate: the last day it applies, so the last payment before it still lands.
 - Debts have a balance owed today (initialBalance), a monthly interest rate, and a payment: fixed (monthlyPayment) or a minimum (a share of the balance, with a floor). Each is paid on its dayOfMonth.
 - Each period's leftover (income minus expenses minus scheduled debt payments) is routed: surplusToDebtsPercent of it goes to extra debt payments in the debtStrategy's order (avalanche: highest interest first; snowball: smallest balance first; none: no extras). Of what remains, autoInvestPercent goes to the investments bucket, growing at the chosen method's monthly ROI or at autoInvestCustomRate; the rest stays as cash, earning monthlySavingsRate.
-- includePortfolio counts the user's live portfolio, and the assets they manage for others, in net worth.
+- includePortfolio counts the user's live portfolio in net worth (for an account that runs investment methods, also the margin on the money it manages for others). Mention managed money only when get_plan shows some.
 - savingsToday, investmentsToday and a debt's initialBalance are what the user holds or owes TODAY. Changing one restates the plan's opening balances as of today; the app rolls the others forward.
 - Every rate and share is a DECIMAL: 0.02 is 2%. An annual rate of 24% is a monthly 0.02. Never send 2 or 24 for a percentage.
 - One plan is the main plan: the dashboard shows it.

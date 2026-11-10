@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/sports/detail", () => ({ loadRacquetTournament: vi.fn() }));
 vi.mock("@/lib/services/impersonation", () => ({ requireEffectiveContext: vi.fn() }));
 vi.mock("@/lib/services/sports-service", () => ({ listUserFavoriteSportIds: vi.fn() }));
+vi.mock("@/components/portal/module-mascot", () => ({ ModuleMascot: () => null }));
 vi.mock("@/components/entertainment/sports/sports/racquet-tournament-page", () => ({
   RacquetTournamentPage: () => null,
 }));

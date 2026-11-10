@@ -6,7 +6,8 @@ import { PortalPageContainer } from "@/components/portal/page-container"
 /**
  * Mirrors the real Portfolio silhouette: compact title + three header actions
  * (hide values, Export, Add transaction), the tab strip, then the KPI row and
- * the chart in that order.
+ * the chart card in that order: its figure over a note, the range switch, the
+ * plot (taller from `sm`), and the legend line beside the price status.
  *
  * Keep the tab count, the action count and the KPI count in sync with
  * `components/portal/portfolio-client.tsx`.
@@ -23,21 +24,26 @@ export default function PortfolioLoading() {
         {/* Four KPI cards — the headline row */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-28 w-full rounded-xl" />
+            <Skeleton key={i} className="h-28 w-full rounded-xl sm:h-29" />
           ))}
         </div>
 
         {/* Chart */}
         <Card>
           <CardContent className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div className="flex flex-col gap-2">
-                <Skeleton className="h-3 w-24" />
-                <Skeleton className="h-8 w-44" />
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex flex-col gap-1">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-7 w-44 sm:h-8" />
+                <Skeleton className="h-4 w-40" />
               </div>
-              <Skeleton className="h-8 w-56 rounded-lg" />
+              <Skeleton className="h-10 w-64 rounded-lg sm:h-8" />
             </div>
-            <Skeleton className="h-64 w-full" />
+            <Skeleton className="h-64 w-full sm:h-80" />
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+              <Skeleton className="h-8 w-full sm:h-3.5 sm:w-96" />
+              <Skeleton className="h-6 w-72" />
+            </div>
           </CardContent>
         </Card>
       </section>

@@ -73,8 +73,8 @@ const base: Data = {
   currentUserId: "me",
 };
 
-describe("PortfolioClientPage — empty books read as empty, not as zeros", () => {
-  it("an owner whose methods hold no money gets an empty state, not $0.00 100%", () => {
+describe("PortfolioClientPage — an empty book is the same page at zero", () => {
+  it("an owner whose methods hold no money gets the owner figures at $0.00, no 100%", () => {
     render(
       <PortfolioClientPage
         data={{
@@ -93,16 +93,17 @@ describe("PortfolioClientPage — empty books read as empty, not as zeros", () =
       />
     );
 
-    expect(screen.getByText("No money in your methods yet")).toBeInTheDocument();
-    expect(screen.queryByText("$0.00")).not.toBeInTheDocument();
+    expect(screen.getByText("Owed to investors")).toBeInTheDocument();
+    expect(screen.getAllByText("$0.00").length).toBeGreaterThan(0);
+    // A share of nothing is not 100%.
     expect(screen.queryByText("100%")).not.toBeInTheDocument();
   });
 
-  it("an investor with nothing approved gets an empty state, not a grid of zeros", () => {
+  it("an investor with nothing approved gets the same grid, at zero", () => {
     render(<PortfolioClientPage data={base} />);
 
-    expect(screen.getByText("Your portfolio is empty")).toBeInTheDocument();
-    expect(screen.queryByText("Total value")).not.toBeInTheDocument();
+    expect(screen.getByText("Total value")).toBeInTheDocument();
+    expect(screen.queryByText("Your portfolio is empty")).not.toBeInTheDocument();
   });
 
   it("says a first transaction is waiting rather than empty", () => {
@@ -130,7 +131,8 @@ describe("PortfolioClientPage — empty books read as empty, not as zeros", () =
       />
     );
 
-    expect(screen.getByText("Waiting for approval")).toBeInTheDocument();
+    expect(screen.getByText(/Your first transaction is waiting for an admin/)).toBeInTheDocument();
+    expect(screen.getByText("Total value")).toBeInTheDocument();
   });
 });
 

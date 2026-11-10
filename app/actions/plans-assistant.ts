@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { canUseAssistant } from "@/lib/ai/assistant/access";
 import { safe, type ActionResult } from "@/lib/actions/safe";
 import { planOperationContext } from "@/lib/services/finance-plan-operations";
-import { logImpersonatedMutation, requireEffectiveContext } from "@/lib/services/impersonation";
+import { logImpersonatedMutation } from "@/lib/services/impersonation";
+import { requireModuleContext } from "@/lib/services/module-access-service";
 import { applyPlanChanges, PlanChangeError } from "@/lib/services/plans-assistant-service";
 import { planChangeSetSchema, type PlanChangeSetInput } from "@/schemas/plans-assistant";
 import type { AppliedPlanChanges } from "@/types/plans-assistant";
@@ -24,7 +25,7 @@ export async function applyPlanChangesAction(
   input: PlanChangeSetInput
 ): Promise<ActionResult<AppliedPlanChanges>> {
   return safe("plans-assistant", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("plans");
     if (!canUseAssistant(ctx)) return { success: false, error: "The plans assistant is not available" };
 
     const parsed = planChangeSetSchema.safeParse(input);

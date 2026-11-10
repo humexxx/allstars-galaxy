@@ -50,6 +50,7 @@ import { Mono, Text } from "@/components/ui/typography";
 
 import { createPlanAction, updatePlanAction } from "@/app/actions/finance-plans";
 import { cn } from "@/lib/utils";
+import { formatRoi } from "@/components/portfolio/figures";
 import { PLAN_COLORS } from "@/lib/finance/plan-colors";
 import {
   createFinancePlanSchema,
@@ -620,7 +621,7 @@ export function PlanForm({
                           trigger the badge was cut to "Disa". */}
                       <span className="flex min-w-0 items-center gap-2">
                         <span className="truncate">
-                          {m.name} · {m.monthlyRoi}%/mo
+                          {m.name} · {formatRoi(parseFloat(m.monthlyRoi))}/mo
                         </span>
                         {!m.enabled && (
                           <Badge variant="outline" className="shrink-0 text-2xs">

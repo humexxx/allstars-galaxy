@@ -3,10 +3,8 @@
 import { refresh, revalidatePath } from "next/cache";
 
 import { safe, type ActionResult } from "@/lib/actions/safe";
-import {
-  logImpersonatedMutation,
-  requireEffectiveContext,
-} from "@/lib/services/impersonation";
+import { logImpersonatedMutation } from "@/lib/services/impersonation";
+import { requireModuleContext } from "@/lib/services/module-access-service";
 import {
   setSportCompetition,
   setSportFavorite,
@@ -28,7 +26,7 @@ export async function setSportFavoriteAction(
   input: SetSportFavoriteData
 ): Promise<ActionResult> {
   return safe("sports", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("sports");
     const parsed = setSportFavoriteSchema.safeParse(input);
     if (!parsed.success) {
       return { success: false, error: "Invalid input" };
@@ -58,7 +56,7 @@ export async function setSportCompetitionAction(
   input: SetSportCompetitionData
 ): Promise<ActionResult> {
   return safe("sports", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("sports");
     const parsed = setSportCompetitionSchema.safeParse(input);
     if (!parsed.success) {
       return { success: false, error: "Unknown championship" };
@@ -92,7 +90,7 @@ export async function setSportTeamFilterAction(
   input: SetSportTeamFilterData
 ): Promise<ActionResult> {
   return safe("sports", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("sports");
     const parsed = setSportTeamFilterSchema.safeParse(input);
     if (!parsed.success) {
       return { success: false, error: "Invalid team filter" };

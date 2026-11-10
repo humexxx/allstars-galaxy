@@ -18,11 +18,13 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { visibleSections } from "@/components/portal/nav-config";
+import type { AppModule } from "@/lib/access/modules";
 import type { UserRole } from "@/types/user";
 
 type CommandMenuProps = {
   role?: UserRole;
   isImpersonating?: boolean;
+  disabledModules?: readonly AppModule[];
 };
 
 /**
@@ -33,6 +35,7 @@ type CommandMenuProps = {
 export function CommandMenu({
   role,
   isImpersonating = false,
+  disabledModules = [],
 }: CommandMenuProps) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
@@ -51,14 +54,14 @@ export function CommandMenu({
   // Skip disabled sections/items — there's nothing to navigate to.
   const sections = React.useMemo(
     () =>
-      visibleSections(role, isImpersonating)
+      visibleSections(role, isImpersonating, disabledModules)
         .filter((section) => !section.disabled)
         .map((section) => ({
           ...section,
           items: section.items.filter((item) => !item.disabled),
         }))
         .filter((section) => section.items.length > 0),
-    [role, isImpersonating]
+    [role, isImpersonating, disabledModules]
   );
 
   const go = React.useCallback(

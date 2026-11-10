@@ -29,10 +29,13 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** What net worth is made of, at one point. */
 export type DashboardParts = {
-  /** Can be negative: an overdrawn account. */
+  /** Can be negative: an overdrawn account. In net worth, never drawn: the
+   *  card follows the plan page, which shows no cash. */
   savings: number;
   /** Investments AND the portfolio — see `partsOf`. */
   investments: number;
+  /** The trading journal's balance. */
+  trading: number;
   /** Money owed to the user, not yet repaid. */
   receivables: number;
   /** Owed BY the user, as a positive amount. */
@@ -43,13 +46,12 @@ export type DashboardParts = {
 /** One mini-chart point, at cent precision: the tooltip printed "-1,467"
  *  beside a "-$1,467.28" tile for the same point. */
 export type DashboardPoint = DashboardParts & {
-  /** Where the point sits on the time axis (epoch ms): a close's last day,
-   *  a movement's day, today. */
+  /** Where the point sits on the time axis (epoch ms): a close's last day, today. */
   time: number;
   /** Whether the axis labels this point. */
   tick: boolean;
-  /** A period's close, a day money moved, or today's position. */
-  kind: "close" | "movement" | "today";
+  /** A period's close, or today's position. */
+  kind: "close" | "today";
   /** Axis tick: "Now" for today's position, else the month ("Oct"). */
   month: string;
   /** Tooltip title: "Today", else the close's date — the 12 closes run into
@@ -75,11 +77,21 @@ export type DashboardFigures = DashboardParts & {
    *  worth counts the managed money only as its margin, so the parts add up
    *  to it once this comes off. */
   claims: number;
+  /** What the positions are worth today, before that claim: the plan's
+   *  Portfolio card's figure. */
+  positions: number;
 };
 
 type State = Pick<
   TodayState & ProjectionMonth,
-  "savings" | "investments" | "portfolioValue" | "portfolioClaims" | "receivables" | "totalDebt" | "netWorth"
+  | "savings"
+  | "investments"
+  | "portfolioValue"
+  | "portfolioClaims"
+  | "tradingValue"
+  | "receivables"
+  | "totalDebt"
+  | "netWorth"
 >;
 
 /**
@@ -91,8 +103,10 @@ function partsOf(s: State): DashboardParts {
   return {
     savings: s.savings,
     // Our own investments plus the managed MARGIN (positions less what the
-    // investors are owed), as the plan chart's Portfolio reads it.
+    // investors are owed), as the plan chart's Portfolio reads it. The
+    // trading account is its own part, as on the plan.
     investments: s.investments + s.portfolioValue - (s.portfolioClaims ?? 0),
+    trading: s.tradingValue ?? 0,
     receivables: s.receivables,
     debt: s.totalDebt,
     netWorth: s.netWorth,
@@ -109,9 +123,11 @@ function partsOfPoint(p: ChartPoint): DashboardParts {
   const savings = p.savings ?? 0;
   const debt = p.totalDebt ?? 0;
   const receivables = p.receivables ?? 0;
+  const trading = p.tradingValue ?? 0;
   return {
     savings,
-    investments: p.netWorth - savings - receivables + debt,
+    investments: p.netWorth - savings - receivables - trading + debt,
+    trading,
     receivables,
     debt,
     netWorth: p.netWorth,
@@ -169,6 +185,7 @@ function inCents(p: DashboardParts): DashboardParts {
   return {
     savings: roundCents(p.savings),
     investments: roundCents(p.investments),
+    trading: roundCents(p.trading),
     receivables: roundCents(p.receivables),
     debt: roundCents(p.debt),
     netWorth: roundCents(p.netWorth),
@@ -189,10 +206,7 @@ export function buildDashboardFigures(
   projection: Projection,
   today: TodayState | null,
   past: readonly ChartPoint[] = [],
-  anchorDay = 1,
-  /** Days money moved (movement snapshots), oldest first: drawn between the
-   *  closes, at their own dates. */
-  movements: readonly ChartPoint[] = []
+  anchorDay = 1
 ): DashboardFigures {
   const months = projection.months;
   if (!today || months.length === 0) {
@@ -201,9 +215,11 @@ export function buildDashboardFigures(
       pastCount: 0,
       savings: 0,
       investments: 0,
+      trading: 0,
       receivables: 0,
       debt: 0,
       claims: 0,
+      positions: 0,
       netWorth: 0,
       delta: 0,
       deltaPeriods: 0,
@@ -226,22 +242,7 @@ export function buildDashboardFigures(
     ...checkpointLabels(p.date),
     ...inCents(partsOfPoint(p)),
   }));
-  const since = closes[0]?.time ?? -Infinity;
-  const moved =
-    today.status === "before-start"
-      ? []
-      : movements
-          .filter((p) => p.date.getTime() > since && p.date.getTime() < todayStart.getTime())
-          .map((p) => ({
-            kind: "movement" as const,
-            time: p.date.getTime(),
-            month: MONTH_FMT.format(p.date),
-            label: CLOSE_FMT.format(p.date),
-            ...inCents(partsOfPoint(p)),
-          }));
-  const pastPoints = [...closes, ...moved]
-    .sort((a, b) => a.time - b.time)
-    .map((p, i) => ({ ...p, tick: i === 0 }));
+  const pastPoints = closes.map((p, i) => ({ ...p, tick: i === 0 }));
   const points: DashboardPoint[] = [
     ...pastPoints,
     {
@@ -268,6 +269,7 @@ export function buildDashboardFigures(
     deltaPeriods: ahead.length,
     status: today.status,
     claims: roundCents(today.portfolioClaims ?? 0),
+    positions: roundCents(today.portfolioValue),
   };
 }
 

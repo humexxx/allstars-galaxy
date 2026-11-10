@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/portal/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { CompareView } from "@/components/finance/compare-view";
 
-import { requireEffectiveContext } from "@/lib/services/impersonation";
+import { requireModulePage } from "@/lib/services/module-access-service";
 import { listUserPlansWithLines } from "@/lib/services/finance-plan-service";
 import { loadPlanOverviews } from "@/lib/services/finance-snapshot-service";
 import { getRequestTimeZone } from "@/lib/utils/request-today";
@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 const BACK = { href: "/portal/plans", label: "Plans" };
 
 export default async function ComparePlansPage() {
-  const ctx = await requireEffectiveContext();
+  const ctx = await requireModulePage("plans");
   const plans = await listUserPlansWithLines(ctx.effectiveUserId);
 
   if (plans.length < 2) {

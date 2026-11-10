@@ -1,15 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { LineChart, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/portal/page-header";
-import { EmptyState } from "@/components/ui/empty-state";
 import { PlansWorkspace } from "@/components/finance/plans-workspace";
 import type { PlanSummary } from "@/types/finance";
 import type { PlanTimeline } from "@/lib/finance/chart-series";
 
-import { requireEffectiveContext } from "@/lib/services/impersonation";
+import { requireModulePage } from "@/lib/services/module-access-service";
 import { listUserPlansWithLines } from "@/lib/services/finance-plan-service";
 import { getLastConfirmedDay } from "@/lib/services/finance-confirmation-service";
 import { loadPlanOverviews } from "@/lib/services/finance-snapshot-service";
@@ -24,7 +23,7 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function FinancePlansPage() {
-  const ctx = await requireEffectiveContext();
+  const ctx = await requireModulePage("plans");
   const plans = await listUserPlansWithLines(ctx.effectiveUserId);
 
   // Every plan calibrated and projected exactly as its own page does it
@@ -57,33 +56,16 @@ export default async function FinancePlansPage() {
         }
       />
 
-      {plans.length === 0 ? (
-        <EmptyState
-          variant="card"
-          icon={LineChart}
-          title="No plans yet"
-          description="Create your first plan to start modelling income, debts and savings."
-          action={
-            <Button asChild>
-              <Link href="/portal/plans/new">
-                <Plus />
-                Create plan
-              </Link>
-            </Button>
-          }
-        />
-      ) : (
-        // One plan or twenty: the workspace is the same surface. A single plan
-        // still gets its projection curve, and the rail grows into a real
-        // comparison as scenarios are added.
-        <PlansWorkspace
-          plans={plans}
-          summaries={summaries}
-          timelines={timelines}
-          today={today}
-          lastConfirmedDay={lastConfirmedDay}
-        />
-      )}
+      {/* None, one or twenty: the workspace is the same surface. A single
+          plan still gets its projection curve, and the rail grows into a real
+          comparison as scenarios are added. */}
+      <PlansWorkspace
+        plans={plans}
+        summaries={summaries}
+        timelines={timelines}
+        today={today}
+        lastConfirmedDay={lastConfirmedDay}
+      />
     </section>
   );
 }

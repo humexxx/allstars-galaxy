@@ -98,6 +98,8 @@ export type ProjectionMonth = {
    *  (their capital plus the return promised so far). Taken off `netWorth`,
    *  so the managed money counts only as its margin. */
   portfolioClaims?: number;
+  /** The trading account's balance (see `ProjectOptions.tradingValue`). */
+  tradingValue?: number;
   /** Money owed to the user and not yet repaid at period end. Part of
    *  `netWorth` — see lib/finance/receivables.ts. */
   receivables: number;
@@ -151,6 +153,8 @@ export type TodayState = {
   portfolioValue: number;
   /** See `ProjectionMonth.portfolioClaims`. */
   portfolioClaims?: number;
+  /** See `ProjectionMonth.tradingValue`. */
+  tradingValue?: number;
   totalDebt: number;
   /** Money owed to the user and not yet repaid on `date`. Part of `netWorth`. */
   receivables: number;
@@ -202,6 +206,6 @@ export type PlanSummary = {
 
 /**
  * How the finance module's mascot should read the user's main plan. Derived by
- * `getFinanceMood` — see the mood table in `components/portal/context-avatar.tsx`.
+ * `getFinanceMood` — see the mood table in `components/portal/mascot/finance-scene.tsx`.
  */
 export type FinanceMood = "idle" | "thriving" | "steady" | "strained";

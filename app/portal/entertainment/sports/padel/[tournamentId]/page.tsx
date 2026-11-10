@@ -1,8 +1,10 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { RacquetTournamentPage } from "@/components/entertainment/sports/sports/racquet-tournament-page";
-import { requireEffectiveContext } from "@/lib/services/impersonation";
+import { ModuleMascot } from "@/components/portal/module-mascot";
+import { requireModulePage } from "@/lib/services/module-access-service";
 import { listUserFavoriteSportIds } from "@/lib/services/sports-service";
 import { loadRacquetTournament } from "@/lib/sports/detail";
 
@@ -16,7 +18,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 /** One padel tournament, its whole draw: what "View details" and the tiles open. */
 export default async function PadelTournamentPage({ params, searchParams }: Props): Promise<React.ReactElement> {
-  const ctx = await requireEffectiveContext();
+  const ctx = await requireModulePage("sports");
   const [detail, favorites, { tab }] = await Promise.all([
     params.then(({ tournamentId }) => loadRacquetTournament("padel", tournamentId)),
     listUserFavoriteSportIds(ctx.effectiveUserId),
@@ -24,16 +26,21 @@ export default async function PadelTournamentPage({ params, searchParams }: Prop
   ]);
   if (!detail) notFound();
   return (
-    // Keyed by tab: a link to another tab of this page opens it.
-    <RacquetTournamentPage
-      key={tab ?? ""}
-      sport="padel"
-      tournament={detail.tournament}
-      draw={detail.draw}
-      today={detail.today}
-      season={detail.season}
-      favoriteSportIds={favorites}
-      initialTab={tab}
-    />
+    <>
+      {/* Keyed by tab: a link to another tab of this page opens it. */}
+      <RacquetTournamentPage
+        key={tab ?? ""}
+        sport="padel"
+        tournament={detail.tournament}
+        draw={detail.draw}
+        today={detail.today}
+        season={detail.season}
+        favoriteSportIds={favorites}
+        initialTab={tab}
+      />
+      <Suspense fallback={null}>
+        <ModuleMascot variant="sports" sport="padel" />
+      </Suspense>
+    </>
   );
 }

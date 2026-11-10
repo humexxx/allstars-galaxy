@@ -3,17 +3,18 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 /**
  * A trip opens on a photo hero, not a `PageHeader`: the back link and view
- * switch above it, the banner (full bleed on a phone, 21/9 from `sm`), then
- * the itinerary beside the payments.
+ * switch above it (36 and 40px on a phone), the banner (full bleed on a
+ * phone and as tall as its column of four actions makes it, 21/9 from `sm`),
+ * then the itinerary beside the payments.
  */
 export default function TripDetailLoading() {
   return (
     <div className="flex flex-col gap-6" aria-hidden="true">
       <div className="flex items-center justify-between gap-2">
-        <Skeleton className="h-8 w-24" />
-        <Skeleton className="h-8 w-24 sm:w-44" />
+        <Skeleton className="h-9 w-24 sm:h-8" />
+        <Skeleton className="h-10 w-18 sm:h-8 sm:w-38" />
       </div>
-      <Skeleton className="-mx-4 h-72 rounded-none sm:mx-0 sm:h-auto sm:aspect-21/9 sm:rounded-xl" />
+      <Skeleton className="-mx-4 h-75.5 rounded-none sm:mx-0 sm:h-auto sm:aspect-21/9 sm:rounded-xl" />
       <div className="grid gap-6 lg:grid-cols-[5fr_3fr]">
         <Card>
           <CardHeader>

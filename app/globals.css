@@ -6,10 +6,17 @@
 
 /* Dense-data micro size — one step below `text-xs` (12px). The standard token
    for badges, calendar cells, score tickers and chart ticks. Use `text-2xs`
-   instead of arbitrary `text-[10px]`/`text-[11px]`. See docs/TYPOGRAPHY.md. */
+   instead of arbitrary `text-[10px]`/`text-[11px]`. Below `sm` it is 12px:
+   10px is a desktop density, under what reads comfortably on a phone.
+   See docs/TYPOGRAPHY.md. */
 @utility text-2xs {
   font-size: 0.625rem;
   line-height: 0.875rem;
+
+  @media (width < 40rem) {
+    font-size: 0.75rem;
+    line-height: 1rem;
+  }
 }
 
 /* The edges a phone's hardware covers: the home indicator, and the notch with

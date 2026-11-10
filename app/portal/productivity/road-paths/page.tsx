@@ -11,14 +11,14 @@ import { RoadPathDetailSkeleton } from "@/components/productivity/road-paths/roa
 import { RoadPathsView } from "@/components/productivity/road-paths/road-paths-view";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
-import { requireEffectiveContext } from "@/lib/services/impersonation";
+import { requireModulePage } from "@/lib/services/module-access-service";
 import { getRoadPathDetail, getUserRoadPaths } from "@/lib/services/road-path-service";
 import { idSchema } from "@/schemas/common";
 import { getRequestTimeZone, getRequestTodayIso } from "@/lib/utils/request-today";
 
 export const metadata: Metadata = {
   title: "Road Paths",
-  description: "Track your long-term goals and progress",
+  description: "Habits on the days you choose, with a streak and a calendar",
 };
 
 const LIST_HREF = "/portal/productivity/road-paths";
@@ -46,7 +46,7 @@ export default async function RoadPathsPage({
     );
   }
 
-  const ctx = await requireEffectiveContext();
+  const ctx = await requireModulePage("road-paths");
   const [roadPaths, timeZone, today] = await Promise.all([
     getUserRoadPaths(ctx.effectiveUserId),
     getRequestTimeZone(),
@@ -75,7 +75,7 @@ export default async function RoadPathsPage({
 }
 
 async function RoadPathDetailScreen({ id }: { id: string }) {
-  const ctx = await requireEffectiveContext();
+  const ctx = await requireModulePage("road-paths");
   const [timeZone, today] = await Promise.all([getRequestTimeZone(), getRequestTodayIso()]);
   const detail = idSchema.safeParse(id).success
     ? await getRoadPathDetail(id, ctx.effectiveUserId, today, timeZone)

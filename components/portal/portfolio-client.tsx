@@ -13,7 +13,6 @@ import {
   RefreshCw,
   Search,
   Trash2,
-  Wallet,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -55,10 +54,10 @@ import {
   formatPercent,
   formatSignedCurrency,
   formatSignedPercent,
+  moneySign,
 } from "@/lib/utils/format";
 
 import { AddTransactionDialog } from "@/components/portfolio/add-transaction-dialog";
-import { EmptyPortfolio } from "@/components/portfolio/empty-portfolio";
 import { ManualSnapshotDialog } from "@/components/portfolio/manual-snapshot-dialog";
 import { TransactionsTable } from "@/components/portfolio/transactions-table";
 import { InvestorSummaryTable } from "@/components/portfolio/investor-summary-table";
@@ -384,48 +383,8 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
     if (result.ok) setIsClearDialogOpen(false);
   };
 
-  if (!data.portfolio) {
-    // No portfolio yet — but the methods catalogue used to be its own page and
-    // needs nothing from a portfolio, so it stays reachable. Browsing methods
-    // is exactly what you do BEFORE you have one.
-    return (
-      <>
-        <PageHeader
-          title="Portfolio"
-          description="Browse the investment methods, then add your first transaction."
-        />
-        <Tabs defaultValue="overview" className="gap-6">
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="methods">Methods</TabsTrigger>
-          </TabsList>
-          <TabsContent value="overview">
-            <EmptyPortfolio onAddTransaction={() => setIsDialogOpen(true)} />
-          </TabsContent>
-          <TabsContent value="methods">
-            <InvestmentMethodsView
-              methods={data.methods}
-              ownedMethodIds={ownedMethodIds}
-              allocations={data.methodAllocations}
-              capital={methodCapital}
-              hideValues={hideValues}
-              onEditMethod={setEditingMethod}
-            />
-          </TabsContent>
-        </Tabs>
-        <AddTransactionDialog
-          open={isDialogOpen}
-          onClose={() => setIsDialogOpen(false)}
-          methods={enabledMethods}
-          onSubmit={handleAddTransaction}
-          isAdmin={data.isAdmin}
-          users={data.users}
-        />
-      </>
-    );
-  }
-
-  const stats = data.stats;
+  // A portfolio with nothing in it yet is the same page at zero.
+  const stats = data.stats ?? EMPTY_STATS;
 
   // Only investors see this one; owners get the margin chart instead.
   const chartSeries = data.chartData;
@@ -464,8 +423,8 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
             ops) live in the dev drawer; the header keeps what a reader uses. */}
         <PageHeader
           size="compact"
-          title={data.portfolio.name}
-          badge={<Badge variant="secondary">Default</Badge>}
+          title={data.portfolio?.name ?? "Portfolio"}
+          badge={data.portfolio && <Badge variant="secondary">Default</Badge>}
           actions={
             <>
               <Tooltip>
@@ -527,19 +486,7 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
                 a badly underwater book read as growth. */}
             {ownsMethods ? (
               ownerKpis === null ? (
-                // Nothing has moved through the methods yet. Four "$0.00"
-                // cards and a "100%" read like a result; this is a start.
-                <EmptyState
-                  variant="card"
-                  icon={Wallet}
-                  title="No money in your methods yet"
-                  description="Once a contribution to one of your methods is approved — yours or an investor's — what it bought and what you owe appear here."
-                  action={
-                    <Button onClick={() => setIsDialogOpen(true)}>
-                      <Plus /> Add transaction
-                    </Button>
-                  }
-                />
+                <OwnerKpiGrid kpis={EMPTY_OWNER_KPIS} priced hideValues={hideValues} />
               ) : (
                 <>
                   {data.marginStatus.unpriced > 0 && !data.marginStatus.unconfigured && (
@@ -559,31 +506,25 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
                   />
                 </>
               )
-            ) : stats && hasSettledMoney(stats) ? (
-              <PortfolioKpiGrid
-                stats={stats}
-                hideValues={hideValues}
-                onToggleHideValues={() => setHideValues((v) => !v)}
-                sparkline={data.chartData}
-              />
             ) : (
-              <EmptyState
-                variant="card"
-                icon={Wallet}
-                title={
-                  pendingCount > 0 ? "Waiting for approval" : "Your portfolio is empty"
-                }
-                description={
-                  pendingCount > 0
-                    ? `${pendingCount === 1 ? "Your first transaction is" : `${pendingCount} transactions are`} waiting for an admin. Your balance and performance appear once one is approved.`
-                    : "Pick an investment method and add your first transaction."
-                }
-                action={
-                  <Button onClick={() => setIsDialogOpen(true)}>
-                    <Plus /> Add transaction
-                  </Button>
-                }
-              />
+              <>
+                {pendingCount > 0 && !hasSettledMoney(stats) && (
+                  <Alert>
+                    <CircleDashed />
+                    <AlertDescription>
+                      {pendingCount === 1
+                        ? "Your first transaction is waiting for an admin. Your balance and performance fill in once it is approved."
+                        : `${pendingCount} transactions are waiting for an admin. Your balance and performance fill in once one is approved.`}
+                    </AlertDescription>
+                  </Alert>
+                )}
+                <PortfolioKpiGrid
+                  stats={stats}
+                  hideValues={hideValues}
+                  onToggleHideValues={() => setHideValues((v) => !v)}
+                  sparkline={data.chartData}
+                />
+              </>
             )}
 
             {/* Exactly one chart. Owners get allocations against what is owed —
@@ -592,7 +533,6 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
             {/* The per-person view is the chart's investor filter, and each
                 person's movements open from the Transactions tab. */}
             {ownsMethods ? (
-              ownerKpis !== null &&
               showCharts && (
                 <Card>
                   <CardContent>
@@ -615,7 +555,7 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
                 </Card>
               )
             ) : (
-              stats && hasSettledMoney(stats) && showCharts && performanceChart
+              showCharts && performanceChart
             )}
           </TabsContent>
 
@@ -805,6 +745,18 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
 }
 
 /** Any approved money at all — otherwise the KPI grid is four zeros. */
+const EMPTY_STATS: PortfolioStats = {
+  totalValue: 0,
+  costBasis: 0,
+  totalWithdrawn: 0,
+  allTimeProfit: 0,
+  allTimeProfitPercentage: 0,
+  totalInvestmentMethods: 0,
+  activeTransactions: 0,
+};
+
+const EMPTY_OWNER_KPIS = { contributed: 0, deployed: 0, liability: 0, margin: 0, monthlyChange: null };
+
 function hasSettledMoney(stats: PortfolioStats): boolean {
   return stats.costBasis > 0 || stats.totalWithdrawn > 0 || stats.activeTransactions > 0;
 }
@@ -822,7 +774,9 @@ function PortfolioKpiGrid({
    *  no axes, so the number carries a direction without a second chart. */
   sparkline: ChartDataPoint[];
 }) {
-  const profitTone = stats.allTimeProfit >= 0 ? "positive" : "negative";
+  // Nothing gained is not green: an empty book reads neutral, not as a win.
+  const profitTone =
+    moneySign(stats.allTimeProfit) > 0 ? "positive" : moneySign(stats.allTimeProfit) < 0 ? "negative" : undefined;
   const profitSublabel = (
     <span className={cn("font-medium", statToneClass(profitTone))}>
       {stats.allTimeProfit >= 0 ? "up" : "down"}{" "}
@@ -843,7 +797,7 @@ function PortfolioKpiGrid({
               ? maskValue(formatCurrency(stats.totalValue))
               : formatCurrency(stats.totalValue)
           }
-          tone="positive"
+          tone={moneySign(stats.totalValue) > 0 ? "positive" : undefined}
           sublabel="Your balance, interest included"
           chart={<Sparkline data={sparkline} />}
           action={

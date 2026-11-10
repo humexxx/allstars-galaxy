@@ -1,9 +1,8 @@
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
 
 // Three-step "How it works" — anchored in what the app actually does today.
-// Step 1 maps to /portal/portfolio (add accounts), step 2 maps to
-// /portal/investment-methods + /portal/plans (codify), step 3 maps to the
-// dashboard + road paths (watch progress).
+// Step 1 maps to /portal/portfolio (add accounts), step 2 to /portal/plans
+// (codify), step 3 to road paths, the board and the dashboard (watch progress).
 const STEPS = [
   {
     n: "01",
@@ -21,7 +20,7 @@ const STEPS = [
     n: "03",
     title: "Watch it compound",
     description:
-      "Track road paths across quarters, run the board for the week, and let the dashboard surface the snapshot of where you stand.",
+      "Keep your road paths going day by day, run the board for today, and let the dashboard show where you stand.",
   },
 ];
 

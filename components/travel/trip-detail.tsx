@@ -278,11 +278,11 @@ export function TripDetail({
           {/* `flex-none`: the group splits its width equally, and "Calendar"
               got the same 74px as "List" — its label ran into the track's
               edge with no padding left on the right. */}
-          <ToggleGroupItem value="list" aria-label="List" className="flex-none">
+          <ToggleGroupItem value="list" aria-label="List" className="flex-none max-sm:px-2.5">
             <ListIcon />
             <span className="hidden sm:inline">List</span>
           </ToggleGroupItem>
-          <ToggleGroupItem value="calendar" aria-label="Calendar" className="flex-none">
+          <ToggleGroupItem value="calendar" aria-label="Calendar" className="flex-none max-sm:px-2.5">
             <CalendarDays />
             <span className="hidden sm:inline">Calendar</span>
           </ToggleGroupItem>

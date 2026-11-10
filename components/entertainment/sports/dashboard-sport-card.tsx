@@ -33,6 +33,7 @@ import { matchTimeFormat, type MatchTimeFormat } from "./shared/match-time";
 import { NewsRail } from "./shared/news-rail";
 import { StatusPill } from "./shared/status-pill";
 import { TeamBadge } from "./shared/team-badge";
+import { WinnerLine } from "./shared/winner-line";
 
 /**
  * One favourite sport on the dashboard, laid out like the F1 card: what is on
@@ -296,6 +297,7 @@ function FeaturedEvent({
       <Text variant="small" as="span" className="truncate">
         {event.detail}
       </Text>
+      {event.winner && <WinnerLine winner={event.winner} beside={event.runnerUp && `def. ${event.runnerUp}`} />}
     </FeatureBox>
   );
 }

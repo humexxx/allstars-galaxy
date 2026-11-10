@@ -16,13 +16,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { statToneClass } from "@/components/ui/stat-card";
 import { Eyebrow, Mono } from "@/components/ui/typography";
-import { shownCash } from "@/lib/finance/cash";
 import { cn } from "@/lib/utils";
 
 import { CountUpCurrency } from "./count-up";
 import { DeltaChip } from "./delta-chip";
 import { SeriesSwatch } from "./series-swatch";
-import { DashboardFinanceMiniChart } from "./dashboard-finance-mini-chart";
+import { ProjectionChart } from "./projection-chart";
 import { drawDelay } from "./dashboard-motion";
 import {
   dashboardSeries,
@@ -35,24 +34,36 @@ import {
   getPlanWithLines,
   listUserPlans,
 } from "@/lib/services/finance-plan-service";
+import { getRecentMonthlySnapshots, loadCalibratedView } from "@/lib/services/finance-snapshot-service";
 import {
-  getRecentMonthlySnapshots,
-  getRecentMovementSnapshots,
-  loadCalibratedView,
-} from "@/lib/services/finance-snapshot-service";
-import { buildPlanTimeline } from "@/lib/finance/chart-series";
-import {
-  buildDashboardFigures,
-  changeBaseline,
-  dashboardGoal,
-  DASHBOARD_PAST_MONTHS,
-} from "@/lib/finance/dashboard";
+  alignTodayPoint,
+  buildChartSeries,
+  buildPlanTimeline,
+  portfolioSeries,
+} from "@/lib/finance/chart-series";
+import { buildDashboardFigures, changeBaseline, dashboardGoal } from "@/lib/finance/dashboard";
+import { getPortfolioPerformanceData } from "@/lib/services/chart-service";
+import { getUserPortfolio } from "@/lib/services/portfolio-service";
 import { getLastConfirmedDay } from "@/lib/services/finance-confirmation-service";
 import { getManagedAssets } from "@/lib/services/margin-service";
+import { isModuleEnabled } from "@/lib/services/module-access-service";
 import { getUserPreferences } from "@/lib/services/user-preferences-service";
 import type { ManagedAssets } from "@/types/margin";
 import { getRequestTimeZone } from "@/lib/utils/request-today";
 import { todayInTimeZone } from "@/lib/utils/date";
+
+/** The plan page's default horizon: the card shows what the page opens on. */
+const DASHBOARD_HORIZON = 12;
+
+const TODAY_LABEL = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+
+/** The live portfolio's recorded value over time: the past of the Portfolio series. */
+async function portfolioHistoryOf(userId: string): Promise<{ date: Date; value: number }[]> {
+  const portfolio = await getUserPortfolio(userId);
+  if (!portfolio) return [];
+  const points = await getPortfolioPerformanceData(portfolio.id, "All");
+  return points.map((p) => ({ date: new Date(p.date), value: p.value }));
+}
 
 type DashboardFinanceCardProps = {
   userId: string;
@@ -97,48 +108,40 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   // included), with "now" as the day-aware position in the reader's zone.
   const timeZone = await getRequestTimeZone();
   const now = todayInTimeZone(timeZone);
-  const [view, history, preferences, managed, movements, lastConfirmedDay] = await Promise.all([
+  const anchorDay = full.confirmationDayOfMonth;
+  const withPortfolio = full.includePortfolio && (await isModuleEnabled(userId, "portfolio"));
+  const [view, history, preferences, managed, lastConfirmedDay, tradingOn, portfolioHistory] = await Promise.all([
     loadCalibratedView(full, userId, now, { timeZone }),
-    // One month more than the chart shows: a period's close is recorded by the
-    // snapshots taken in the period after it.
-    getRecentMonthlySnapshots(
-      full.id,
-      userId,
-      DASHBOARD_PAST_MONTHS + 1,
-      now,
-      full.confirmationDayOfMonth
-    ),
+    // The plan page's own read: its chart and this one draw the same series.
+    getRecentMonthlySnapshots(full.id, userId, 36, now, anchorDay),
     getUserPreferences(userId),
     // Same request-cached read the projection already made for net worth.
-    full.includePortfolio ? getManagedAssets(userId) : Promise.resolve(null),
-    getRecentMovementSnapshots(full.id, userId, DASHBOARD_PAST_MONTHS, now),
+    withPortfolio ? getManagedAssets(userId) : Promise.resolve(null),
     getLastConfirmedDay(userId),
+    isModuleEnabled(userId, "trading"),
+    withPortfolio ? portfolioHistoryOf(userId) : Promise.resolve([]),
   ]);
+  const simulatedPast = view.baseline.baselineSource === "plan" ? view.projection : null;
   // The months before today come off the plan page's own timeline: recorded
   // snapshots, or the plan's forecast while it has none.
-  const timeline = buildPlanTimeline(
-    history,
-    view.projection,
-    now,
-    full.confirmationDayOfMonth,
-    view.baseline.baselineSource === "plan" ? view.projection : null
-  );
+  const timeline = buildPlanTimeline(history, view.projection, now, anchorDay, simulatedPast);
   const fig = buildDashboardFigures(
     view.projection,
     view.today,
     // A period never confirmed is only a place on the plan page's axis; the
     // card's axis is time, so the line crosses it anyway.
     timeline.points.slice(0, timeline.todayIndex).filter((p) => !p.skipped),
-    full.confirmationDayOfMonth,
-    movements
+    anchorDay
   );
-  const goal = dashboardGoal(
-    view.projection,
+  // The chart IS the plan page's, on its 12-month horizon: the same points
+  // (checkpoints, today, the closes ahead) and the same Portfolio series.
+  const chart = alignTodayPoint(
+    buildChartSeries(history, view.projection, DASHBOARD_HORIZON, now, anchorDay, simulatedPast),
     view.today,
-    preferences.financeMilestones,
-    full.confirmationDayOfMonth,
-    now
+    anchorDay
   );
+  const portfolioValues = portfolioSeries(chart, portfolioHistory, view.projection, anchorDay, withPortfolio);
+  const goal = dashboardGoal(view.projection, view.today, preferences.financeMilestones, anchorDay, now);
   const points = fig.points;
 
   // Only net worth is coloured by its sign. Each part wore its own colour
@@ -154,22 +157,30 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
     lastConfirmedDay
   );
   const sinceClose = changeFrom ? fig.netWorth - changeFrom.point.netWorth : null;
-  // Net worth, Portfolio and Cash always show; Owed to you and Debt when the
-  // chart's range has any — a $0.00 debt tile on a plan with none is noise.
-  const visible = visibleSeriesKeys(points);
+  // The parts the plan page shows: Portfolio always, Trading for an account
+  // with the module, Owed to you and Debt when the chart's range has any — a
+  // $0.00 debt tile on a plan with none is noise. No cash, as on the plan.
+  const visible = visibleSeriesKeys(points, { trading: tradingOn });
+  const portfolioNote = managedNote(managed, fig.positions, fig.claims);
   const breakdown: Figure[] = [
     {
       series: dashboardSeries("investments"),
       label: "Portfolio",
       amount: fig.investments,
-      note: managedNote(managed, fig.claims),
+      note: portfolioNote,
+      wide: portfolioNote !== undefined,
       href: "/portal/portfolio",
     },
-    {
-      series: dashboardSeries("savings"),
-      label: "Cash",
-      amount: shownCash(fig.savings),
-    },
+    ...(visible.has("trading")
+      ? [
+          {
+            series: dashboardSeries("trading"),
+            label: "Trading",
+            amount: fig.trading,
+            href: "/portal/trading",
+          },
+        ]
+      : []),
     ...(visible.has("receivables")
       ? [
           {
@@ -257,10 +268,15 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
               </dl>
             )}
           </div>
-          <DashboardFinanceMiniChart
-            data={points}
-            pastCount={fig.pastCount}
-            className="h-64 sm:h-72 @2xl:h-auto @2xl:min-h-96"
+          <ProjectionChart
+            points={chart.points}
+            pastCount={chart.pastCount}
+            portfolioValues={portfolioValues}
+            showTrading={tradingOn}
+            milestones={preferences.financeMilestones}
+            todayLabel={view.today?.status === "in-range" ? `Today ${TODAY_LABEL.format(now)}` : undefined}
+            markToday={view.today?.status !== "before-start"}
+            heightClass="aspect-auto h-64 sm:h-72 @2xl:h-full @2xl:min-h-96"
           />
         </div>
       </CardContent>
@@ -281,6 +297,8 @@ type Figure = {
   href?: string;
   /** Small print under the value. */
   note?: React.ReactNode;
+  /** Takes the whole row where the figures sit two abreast: its note is a sentence. */
+  wide?: boolean;
 };
 
 /**
@@ -289,10 +307,11 @@ type Figure = {
  */
 /**
  * The two sides of the managed margin the Portfolio figure holds — the
- * positions and what is owed to the investors — and that margin as a share of
- * what is owed, this month and to date.
+ * positions and what is owed to the investors, the plan's Portfolio card's
+ * figures — and that margin as a share of what is owed, this month and to
+ * date. Only for an account that runs methods: a client has none.
  */
-function managedNote(managed: ManagedAssets | null, claims: number): React.ReactNode {
+function managedNote(managed: ManagedAssets | null, positions: number, claims: number): React.ReactNode {
   if (!managed || managed.value <= 0 || managed.allTimeMarginPercent === null) return undefined;
   const part = (pct: number, label: string) => (
     <span className={statToneClass(pct >= 0 ? "positive" : "negative")}>
@@ -303,7 +322,7 @@ function managedNote(managed: ManagedAssets | null, claims: number): React.React
     <Mono className="block text-2xs text-muted-foreground">
       {claims > 0 && (
         <>
-          {formatCurrency(managed.value)} positions · {formatCurrency(claims)} owed ·{" "}
+          {formatCurrency(positions)} positions · {formatCurrency(claims)} owed ·{" "}
         </>
       )}
       ({managed.monthMarginPercent !== null && <>{part(managed.monthMarginPercent, "mo")} · </>}
@@ -318,11 +337,12 @@ function managedNote(managed: ManagedAssets | null, claims: number): React.React
  * worth leads the rail and carries the sign colour, which is emphasis enough.
  */
 function FigureItem({ figure }: { figure: Figure }) {
-  const { series, label, amount, tone, change, note, href } = figure;
+  const { series, label, amount, tone, change, note, href, wide } = figure;
   return (
     <div
       className={cn(
         "flex min-w-0 flex-col gap-1",
+        wide && "col-span-full",
         // The negative margin cancels the padding, so the figure sits where
         // it did; only the hover surface reaches past it.
         href &&
@@ -346,7 +366,7 @@ function FigureItem({ figure }: { figure: Figure }) {
       <dd>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <Mono className={cn("text-sm font-semibold sm:text-base", statToneClass(tone))}>
-            <CountUpCurrency value={amount} delay={drawDelay(series.key)} />
+            <CountUpCurrency value={amount} delay={drawDelay(series.key === "savings" ? "netWorth" : series.key)} />
           </Mono>
           {change}
         </div>

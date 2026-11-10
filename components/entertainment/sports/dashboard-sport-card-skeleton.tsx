@@ -11,7 +11,7 @@ import {
  * A sport card's stand-in, cut into the same four rows (header, lead box,
  * match list, tables), so a pair of them takes the row tracks a pair of cards
  * will. The rows are typical heights — each sport fills them differently, the
- * cards measured 572–640px — close enough that the cards land without the
+ * cards measured 642–698px — close enough that the cards land without the
  * 400px drop a generic two-tile skeleton made.
  */
 export function DashboardSportCardSkeleton(): React.ReactElement {
@@ -22,17 +22,17 @@ export function DashboardSportCardSkeleton(): React.ReactElement {
         {/* The competition picker's trigger, 2px taller than a text line. */}
         <Skeleton className="h-5.5 w-44" />
         <CardAction>
-          <Skeleton className="h-8 w-20" />
+          <Skeleton className="h-9 w-20 sm:h-8" />
         </CardAction>
       </CardHeader>
       <div className={SPORT_CARD_SECTION}>
-        <Skeleton className="h-28 w-full rounded-lg" />
+        <Skeleton className="h-30 w-full rounded-lg" />
       </div>
       <div className={SPORT_CARD_SECTION}>
         <SkeletonList rows={6} />
       </div>
       <div className={SPORT_CARD_SECTION}>
-        <SkeletonList rows={4} />
+        <SkeletonList rows={7} />
       </div>
     </Card>
   );

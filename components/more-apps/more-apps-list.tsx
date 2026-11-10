@@ -125,7 +125,7 @@ export function MoreAppsList({ items }: { items: AppWithScreenshot[] }) {
         <>
           <Separator />
           <Collapsible open={showHidden} onOpenChange={setShowHidden} className="flex flex-col gap-3">
-            <CollapsibleTrigger className="group/hidden inline-flex w-fit items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
+            <CollapsibleTrigger className="group/hidden relative inline-flex w-fit items-center gap-1 rounded-sm text-sm pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-2 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
               <ChevronRight className="size-4 transition-transform group-data-[state=open]/hidden:rotate-90" />
               Hidden apps ({hiddenList.length})
             </CollapsibleTrigger>

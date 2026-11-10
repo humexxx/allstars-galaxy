@@ -1,0 +1,1 @@
+ALTER TABLE "road_paths" ADD COLUMN "position" integer;

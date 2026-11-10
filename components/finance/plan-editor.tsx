@@ -1,10 +1,12 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import {
+  ArrowRight,
   CalendarDays,
   Camera,
   ClipboardCheck,
@@ -114,6 +116,7 @@ import { cn } from "@/lib/utils";
 import { formatCurrency, formatSignedCurrency, moneySign } from "@/lib/utils/format";
 import { periodIndexForDate, periodRangeFor } from "@/lib/finance/period";
 import { rowStepFor } from "@/lib/finance/table-rows";
+import type { TradingSummary } from "@/types/trading";
 import { formatProjectionMonth } from "@/lib/utils/date";
 import {
   DEFAULT_PLAN_VIEW,
@@ -128,7 +131,7 @@ import {
   forecastKpiPoints,
   formatDebtFree,
   mapGhostValues,
-  mapPortfolioValues,
+  portfolioSeries,
   type PlanHistoryPoint,
 } from "@/lib/finance/chart-series";
 import { planOccurrences } from "@/lib/finance/schedule";
@@ -259,6 +262,13 @@ type PlanEditorProps = {
   lastConfirmedDay?: string | null;
   /** The Overview view the page opens on, read from `?view=`. */
   initialView?: PlanView;
+  /** The trading journal's balance and pace; null without a journal (or with the module off). */
+  trading?: TradingSummary | null;
+  /** The Portfolio module is on for the account: off, the plan shows none of it. */
+  portfolioOn?: boolean;
+  /** The account runs investment methods: only then does the Portfolio card
+   *  break the managed margin out from its own money. */
+  managesMoney?: boolean;
 };
 
 export function PlanEditor({
@@ -282,6 +292,9 @@ export function PlanEditor({
   confirmationDue = false,
   lastConfirmedDay = null,
   initialView = DEFAULT_PLAN_VIEW,
+  trading = null,
+  portfolioOn = true,
+  managesMoney = false,
 }: PlanEditorProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -383,7 +396,10 @@ export function PlanEditor({
   // The row is living expenses PLUS debt minimums (the gauge numerator), so it
   // must not be called "Living expenses": the Surplus breakdown uses that name
   // for the expenses alone, and the two showed different figures.
-  const expensesLabel = isPeriodMode ? "Period expenses & debt" : "Expenses & debt";
+  // One name in both modes: "Period expenses & debt" is wider than the 188px
+  // this rail has at 1280 and broke onto two lines beside its figure. The
+  // eyebrow over the rows already says which span they cover.
+  const expensesLabel = "Expenses & debt";
 
   // Breakdown lines: the SAME occurrences the engine counted for this period
   // (overrides applied — skipped lines are gone, amounts swapped, moved dates
@@ -605,7 +621,8 @@ export function PlanEditor({
           history={history}
           ghost={ghost}
           portfolioHistory={portfolioHistory}
-          portfolioEnabled={plan.includePortfolio}
+          portfolioEnabled={plan.includePortfolio && portfolioOn}
+          showTrading={trading !== null}
           horizonMonths={horizonMonths}
           onHorizonChange={setHorizonMonths}
           selectedIndex={picked?.index ?? null}
@@ -618,7 +635,6 @@ export function PlanEditor({
           confirmationDue={plan.isMain && confirmationDue}
           lastConfirmedDay={lastConfirmedDay}
           initialView={initialView}
-          onOpenSetup={() => setTab("setup")}
           now={now}
           calendar={(header) => (
             <PlanCalendar
@@ -771,16 +787,16 @@ export function PlanEditor({
                 today={now}
               />
             )}
+            {portfolioOn && (
             <PortfolioCard
               enabled={plan.includePortfolio}
+              managesMoney={managesMoney}
               today={{
                 managed:
                   (todayState?.portfolioValue ?? projection.months[currentPeriodIdx]?.portfolioValue ?? 0) -
                   (todayState?.portfolioClaims ?? 0),
                 own: todayState?.investments ?? projection.months[currentPeriodIdx]?.investments ?? 0,
               }}
-              positions={todayState?.portfolioValue ?? projection.months[currentPeriodIdx]?.portfolioValue ?? 0}
-              owedToInvestors={todayState?.portfolioClaims ?? 0}
               horizonLabel={(() => {
                 const last = projection.months.length - 1;
                 if (currentPeriodIdx + horizonMonths > last && last >= 0) {
@@ -798,6 +814,17 @@ export function PlanEditor({
                   : null;
               })()}
             />
+            )}
+            {trading && (
+              <TradingCard
+                today={todayState?.tradingValue ?? trading.balance}
+                atHorizon={
+                  projection.months[Math.min(projection.months.length - 1, currentPeriodIdx + horizonMonths)]
+                    ?.tradingValue ?? null
+                }
+                horizonMonths={horizonMonths}
+              />
+            )}
             </>
           }
         />
@@ -1025,77 +1052,173 @@ const total = (a: PortfolioAmounts, managedCounts: boolean): number =>
   a.own + (managedCounts ? a.managed : 0);
 
 /**
+ * A card figure that explains itself on hover or focus: a dotted underline
+ * says there is more, the tooltip holds it. Keeps the small print off the
+ * card.
+ */
+function FigureWithTip({
+  className,
+  tip,
+  children,
+}: {
+  className?: string;
+  tip: React.ReactNode;
+  children: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "cursor-help font-mono tabular-nums underline decoration-muted-foreground/40 decoration-dotted underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+            className
+          )}
+        >
+          {children}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs">{tip}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+// A horizon estimate that does not fit beside its label ("In 12 months" and a
+// six-figure sum in a 148px rail) drops under it whole, instead of the label
+// breaking in two and "≈" parting from its figure.
+const HORIZON_ROW_CLASS = "flex flex-wrap items-baseline justify-between gap-x-3";
+const HORIZON_FIGURE_CLASS = "ml-auto whitespace-nowrap text-sm text-muted-foreground";
+
+/**
  * The portfolio: the plan's own investments (what the surplus invests) plus
  * the margin on the money managed for others — the positions their money
- * bought less what is owed to them, both shown beneath it. Both always count,
- * as the chart's portfolio line does.
+ * bought less what is owed to them. Both always count, as the chart's
+ * portfolio line does; the two sides of the margin stay off the card, for
+ * room (the dashboard's note and the Portfolio page carry them).
  */
 function PortfolioCard({
   enabled,
+  managesMoney,
   today,
-  positions,
-  owedToInvestors,
   horizonLabel,
   atHorizon,
 }: {
   /** The plan counts the managed money (`includePortfolio`). */
   enabled: boolean;
+  /** The account runs methods. A client's "positions" are its own holdings,
+   *  so it gets no managed breakdown at all. */
+  managesMoney: boolean;
   today: PortfolioAmounts;
-  /** The managed money's two sides: what the positions are worth today, and
-   *  what is owed to the investors behind them. */
-  positions: number;
-  owedToInvestors: number;
   /** Where the chart's horizon ends ("In 12 months", or "By May ’36" when the
    *  plan ends first), and what each part is there. */
   horizonLabel: string;
   atHorizon: PortfolioAmounts | null;
 }): React.ReactElement {
-  const row = (label: string, value: number, indent = false): React.ReactElement => (
-    <div className={cn("flex items-center justify-between gap-3", indent && "pl-3")}>
-      <Text variant="small" as="span">
-        {label}
-      </Text>
-      <Mono className="text-xs text-muted-foreground">{formatCurrency(value)}</Mono>
+  const row = (label: string, value: number): React.ReactElement => (
+    <div className="flex items-center justify-between gap-4">
+      <span>{label}</span>
+      <Mono>{formatCurrency(value)}</Mono>
     </div>
   );
   return (
     <Card className="gap-3">
-      <CardHeader>
+      <CardHeader className="flex items-center justify-between gap-2">
         <Eyebrow asChild>
           <h2 className="flex items-center gap-1.5">
             <SeriesSwatch series={dashboardSeries("investments")} />
             Portfolio
           </h2>
         </Eyebrow>
+        <Button variant="ghost" size="xs" asChild>
+          <Link href="/portal/portfolio">
+            Open
+            <ArrowRight />
+          </Link>
+        </Button>
       </CardHeader>
       <CardContent className="flex flex-col gap-1">
         <div className="flex items-baseline justify-between gap-3">
           <Text variant="small" as="span">
             Today
           </Text>
-          <Mono className="text-sm font-semibold">{formatCurrency(total(today, enabled))}</Mono>
+          {/* What it is made of rides in a tooltip, off the card. */}
+          {managesMoney ? (
+            <FigureWithTip
+              className="text-sm font-semibold"
+              tip={
+                <div className="flex flex-col gap-1">
+                  {row("Our own", today.own)}
+                  {enabled && row("Managed margin", today.managed)}
+                </div>
+              }
+            >
+              {formatCurrency(total(today, enabled))}
+            </FigureWithTip>
+          ) : (
+            <Mono className="text-sm font-semibold">{formatCurrency(total(today, enabled))}</Mono>
+          )}
         </div>
         {atHorizon !== null && (
-          <div className="flex items-baseline justify-between gap-3">
+          <div className={HORIZON_ROW_CLASS}>
             <Text variant="small" as="span">
               {horizonLabel}
             </Text>
             {/* An estimate, at the expected rate: "≈" says so before the figure. */}
-            <Mono className="text-sm text-muted-foreground">
+            <Mono className={HORIZON_FIGURE_CLASS}>
               ≈ {formatCurrency(total(atHorizon, enabled))}
             </Mono>
           </div>
         )}
-        <div className="mt-1 flex flex-col gap-1.5 border-t pt-2">
-          {row("Our own", today.own)}
-          {enabled && (positions > 0 || owedToInvestors > 0) && (
-            <>
-              {row("Managed margin", today.managed)}
-              {row("Positions", positions, true)}
-              {row("Owed to investors", -owedToInvestors, true)}
-            </>
-          )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * The trading journal in the plan: its balance today and where it is heading,
+ * grown at the average return of its last complete months (none yet: held
+ * flat), with a way into the journal.
+ */
+function TradingCard({
+  today,
+  atHorizon,
+  horizonMonths,
+}: {
+  today: number;
+  atHorizon: number | null;
+  horizonMonths: number;
+}): React.ReactElement {
+  return (
+    <Card className="gap-3">
+      <CardHeader className="flex items-center justify-between gap-2">
+        <Eyebrow asChild>
+          <h2 className="flex items-center gap-1.5">
+            <SeriesSwatch series={dashboardSeries("trading")} />
+            Trading
+          </h2>
+        </Eyebrow>
+        <Button variant="ghost" size="xs" asChild>
+          <Link href="/portal/trading">
+            Journal
+            <ArrowRight />
+          </Link>
+        </Button>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-1">
+        <div className="flex items-baseline justify-between gap-3">
+          <Text variant="small" as="span">
+            Today
+          </Text>
+          <Mono className="text-sm font-semibold">{formatCurrency(today)}</Mono>
         </div>
+        {atHorizon !== null && (
+          <div className={HORIZON_ROW_CLASS}>
+            <Text variant="small" as="span">
+              {horizonMonths % 12 === 0 && horizonMonths > 12 ? `In ${horizonMonths / 12} years` : `In ${horizonMonths} months`}
+            </Text>
+            <Mono className={HORIZON_FIGURE_CLASS}>≈ {formatCurrency(atHorizon)}</Mono>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -1211,6 +1334,8 @@ type ProjectionPanelProps = {
   milestones?: readonly number[];
   /** Current includePortfolio flag: the chart draws the portfolio when set. */
   portfolioEnabled: boolean;
+  /** The account has a trading journal (and the module): the chart draws it. */
+  showTrading: boolean;
   /** The current period still waits for a confirmation (main plan only). */
   confirmationDue?: boolean;
   /** The user's last own confirmation (YYYY-MM-DD). */
@@ -1218,8 +1343,6 @@ type ProjectionPanelProps = {
   /** The server's clock for this render — see PlanEditorProps. */
   now: Date;
   initialView: PlanView;
-  /** Opens the Setup tab — the empty chart's call to action. */
-  onOpenSetup?: () => void;
 };
 
 const STRATEGY_LABEL: Record<DebtStrategy, string> = {
@@ -1279,7 +1402,7 @@ function ViewSwitcher({
       {PLAN_VIEWS.map((v) => {
         const Icon = PLAN_VIEW_ICON[v];
         return (
-          <ToggleGroupItem key={v} value={v} aria-label={PLAN_VIEW_LABEL[v]}>
+          <ToggleGroupItem key={v} value={v} aria-label={PLAN_VIEW_LABEL[v]} className="max-sm:px-2.5">
             <Icon />
             {/* Icon-only on phones: this shares a row with the Portfolio
                 switch and four horizon presets, and the labels pushed that
@@ -1381,18 +1504,12 @@ function ProjectionPanel({
   ghost = null,
   portfolioHistory = [],
   portfolioEnabled,
+  showTrading,
   confirmationDue = false,
   lastConfirmedDay = null,
   now,
   initialView,
-  onOpenSetup,
 }: ProjectionPanelProps) {
-  // No income, expense or debt: the "projection" is a flat line at the
-  // opening balance under a $0 milestone marker, which says nothing.
-  const hasNoLines =
-    baseline.incomes.length === 0 &&
-    baseline.expenses.length === 0 &&
-    baseline.debts.length === 0;
   // View switcher — Graph (chart) / Table / Calendar. Segmented control (every
   // device) sits at the BOTTOM, Polymarket-style; horizontal swipe on touch
   // changes view too. A plain fade on switch — no horizontal slide, so nothing
@@ -1449,24 +1566,12 @@ function ProjectionPanel({
     return values.map((v, i) => (i < chartSeries.pastCount ? null : v));
   }, [ghost, showGhost, chartSeries.points, chartSeries.pastCount, anchorDay]);
 
-  // Portfolio series, the money the Portfolio card adds up: the plan's own
-  // investments plus the managed money's MARGIN — the positions (recorded
-  // for the past, the projection's growing value ahead) less what is owed to
-  // the investors — so it goes negative while the positions are worth less
-  // than the promise, and net worth's parts add up on every point.
-  const portfolioValues = useMemo<(number | null)[] | undefined>(() => {
-    const positions = portfolioEnabled
-      ? mapPortfolioValues(chartSeries.points, portfolioHistory, projection, chartSeries.pastCount, anchorDay)
-      : null;
-    const managed = positions?.map((v, i) =>
-      v === null ? null : v - (chartSeries.points[i].portfolioClaims ?? 0)
-    );
-    return chartSeries.points.map((p, i) => {
-      const a = managed?.[i] ?? null;
-      const b = p.investments ?? null;
-      return a === null && b === null ? null : (a ?? 0) + (b ?? 0);
-    });
-  }, [portfolioEnabled, chartSeries, portfolioHistory, projection, anchorDay]);
+  // The Portfolio series (see `portfolioSeries`): the same one the
+  // dashboard card draws.
+  const portfolioValues = useMemo<(number | null)[]>(
+    () => portfolioSeries(chartSeries, portfolioHistory, projection, anchorDay, portfolioEnabled),
+    [portfolioEnabled, chartSeries, portfolioHistory, projection, anchorDay]
+  );
   // Per-point period figures for the sidebar hover preview. Flows (income /
   // expenses / debt minimums) come from the projection month sharing the
   // point's period — the calibrated one first, falling back to the raw past
@@ -1684,21 +1789,7 @@ function ProjectionPanel({
               <Card className="xl:h-full">
                 <CardHeader className="gap-3">{forecastHeader(true)}</CardHeader>
                 <CardContent className="xl:min-h-0 xl:flex-1">
-                  {view === "chart" && hasNoLines ? (
-                    <EmptyState
-                      icon={LineChart}
-                      title="Nothing to project yet"
-                      description="Add income, expenses or debts and the projection draws itself."
-                      className="flex h-72 flex-col justify-center sm:h-80 xl:h-full"
-                      action={
-                        onOpenSetup && (
-                          <Button size="sm" onClick={onOpenSetup}>
-                            Open Setup
-                          </Button>
-                        )
-                      }
-                    />
-                  ) : view === "chart" ? (
+                  {view === "chart" ? (
                     <ProjectionChart
                       points={chartSeries.points}
                       pastCount={chartSeries.pastCount}
@@ -1711,6 +1802,7 @@ function ProjectionPanel({
                       ghostValues={ghostValues}
                       ghostLabel={ghost?.name}
                       portfolioValues={portfolioValues}
+                      showTrading={showTrading}
                     />
                   ) : (
                     <ProjectionTable
@@ -1881,26 +1973,26 @@ function StatRow({
         {series && <SeriesSwatch series={series} />}
         {label}
       </Text>
-      <span className="text-right">
-        <Mono
-          className={cn(
-            "block text-sm font-semibold",
-            tone === "positive" && "text-success",
-            tone === "negative" && "text-destructive"
-          )}
-        >
-          {formatCurrency(animatedValue)}
-        </Mono>
-        {hint && (
-          <Text variant="small" as="span" className="block text-2xs">
-            {hint}
-          </Text>
+      <Mono
+        className={cn(
+          "shrink-0 text-sm font-semibold",
+          tone === "positive" && "text-success",
+          tone === "negative" && "text-destructive"
         )}
-      </span>
+      >
+        {formatCurrency(animatedValue)}
+      </Mono>
+      {/* A line of its own: beside the figure it set the column's width, and
+          "Total debt" broke in two to make room for "Debt-free in 4 mo". */}
+      {hint && (
+        <Text variant="small" as="span" className="basis-full text-right text-2xs">
+          {hint}
+        </Text>
+      )}
     </>
   );
 
-  const rowClass = "flex items-center justify-between gap-3 border-t py-2";
+  const rowClass = "flex flex-wrap items-center justify-between gap-x-3 border-t py-2";
 
   if (!breakdown) {
     return <div className={rowClass}>{inner}</div>;

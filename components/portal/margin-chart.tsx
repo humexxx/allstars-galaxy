@@ -24,7 +24,8 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Eyebrow, Mono, Text } from "@/components/ui/typography";
 import { maskValue } from "@/components/ui/stat-card";
-import { formatCurrency, formatCurrencyCompact } from "@/lib/utils/format";
+import { DeltaChip } from "@/components/finance/delta-chip";
+import { formatCurrency, formatCurrencyCompact, formatSignedCurrency } from "@/lib/utils/format";
 import { formatMonthLong } from "@/lib/utils/date";
 import { buildMarginHistory, type MarginPoint } from "@/lib/finance/margin-history";
 import { cn } from "@/lib/utils";
@@ -46,6 +47,12 @@ const CONFIG = {
   liability: { label: "Owed to investors", color: "var(--chart-2)" },
 } as const;
 
+/** "Oct" for a `YYYY-MM` month. */
+function shortMonth(month: string): string {
+  const [y, mo] = month.split("-");
+  return new Date(Number(y), Number(mo) - 1).toLocaleDateString("en-US", { month: "short" });
+}
+
 /**
  * The one chart an owner gets: what the deployed capital is really worth
  * against what is owed, month by month.
@@ -53,6 +60,9 @@ const CONFIG = {
  * Both series on one axis on purpose — the gap between them IS the margin, and
  * the whole point is to see it directly rather than infer it from two charts.
  * When Allocations sits below Owed, the promise is being paid out of pocket.
+ *
+ * Its header is where the book's two live figures are read: what the money is
+ * worth today, large, and the margin under it, each against last month's.
  *
  * Filtering re-derives the series in the browser from the raw contributions,
  * which is why no round trip happens when the filter changes.
@@ -105,47 +115,60 @@ export function MarginChart({
     setMethodIds([]);
   };
 
-  if (data.length < 2) {
-    return filtered ? (
-      <EmptyState
-        icon={ChartLine}
-        title="Nothing to plot for this filter"
-        action={
-          <Button variant="outline" size="sm" onClick={clearFilters}>
-            Clear filters
-          </Button>
-        }
-      />
-    ) : (
-      <EmptyState
-        icon={ChartLine}
-        title="Not enough history yet"
-        description="The chart needs at least two months of contributions."
-      />
-    );
-  }
+  const noHistory = filtered ? (
+    <EmptyState
+      icon={ChartLine}
+      title="Nothing to plot for this filter"
+      action={
+        <Button variant="outline" size="sm" onClick={clearFilters}>
+          Clear filters
+        </Button>
+      }
+    />
+  ) : (
+    <EmptyState
+      icon={ChartLine}
+      title="Not enough history yet"
+      description="The chart needs at least two months of contributions."
+    />
+  );
+  if (data.length === 0) return noHistory;
 
+  // One month is no line to draw, but it is a book with figures to read.
   const latest = data[data.length - 1];
+  const previous = data.length >= 2 ? data[data.length - 2] : null;
+  const since = previous
+    ? { month: shortMonth(previous.month), label: formatMonthLong(`${previous.month}-01`) }
+    : null;
   const money = (v: number): string =>
     hideValues ? maskValue(formatCurrency(v)) : formatCurrency(v);
+  const signedMoney = (v: number): string =>
+    hideValues ? `${v < 0 ? "-" : "+"}${maskValue(formatCurrency(v))}` : formatSignedCurrency(v);
 
   return (
     <section className="flex flex-col gap-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
+        <div className="flex min-w-0 flex-col gap-1">
           <Eyebrow as="div">
-            Margin {filtered && <span className="normal-case tracking-normal">(filtered)</span>}
+            Allocations {filtered && <span className="normal-case tracking-normal">(filtered)</span>}
           </Eyebrow>
-          <Mono
-            className={cn(
-              "text-xl font-semibold tabular-nums sm:text-2xl",
-              latest.margin >= 0 ? "text-success" : "text-destructive"
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <Mono className="text-3xl font-semibold tabular-nums sm:text-4xl">{money(latest.deployed)}</Mono>
+            {previous && since && (
+              <DeltaChip delta={latest.deployed - previous.deployed} since={since} hideValues={hideValues} />
             )}
-          >
-            {money(latest.margin)}
-          </Mono>
-          <Text variant="small">
-            {money(latest.deployed)} deployed against {money(latest.liability)} owed
+          </div>
+          <Text variant="small" as="p">
+            Margin{" "}
+            <Mono
+              className={cn(
+                "font-semibold tabular-nums",
+                latest.margin >= 0 ? "text-success" : "text-destructive"
+              )}
+            >
+              {money(latest.margin)}
+            </Mono>
+            {previous && since && ` · ${signedMoney(latest.margin - previous.margin)} vs ${since.month}`}
           </Text>
         </div>
 
@@ -204,6 +227,9 @@ export function MarginChart({
         </div>
       </div>
 
+      {data.length < 2 ? (
+        noHistory
+      ) : (
       <ChartContainer config={CONFIG} className="h-64 w-full sm:h-80">
         <AreaChart data={data} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
           <CartesianGrid vertical={false} strokeDasharray="3 3" strokeOpacity={0.4} />
@@ -213,12 +239,7 @@ export function MarginChart({
             axisLine={false}
             tickMargin={8}
             minTickGap={24}
-            tickFormatter={(m: string) => {
-              const [y, mo] = m.split("-");
-              return new Date(Number(y), Number(mo) - 1).toLocaleDateString("en-US", {
-                month: "short",
-              });
-            }}
+            tickFormatter={shortMonth}
           />
           <YAxis
             tickLine={false}
@@ -289,6 +310,7 @@ export function MarginChart({
           />
         </AreaChart>
       </ChartContainer>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <Text variant="small" className="text-2xs">

@@ -235,8 +235,6 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
       contributed: last.invested,
       deployed: last.deployed,
       liability: last.liability,
-      margin: last.margin,
-      monthlyChange: h.length >= 2 ? last.margin - h[h.length - 2].margin : null,
     };
   }, [data.marginHistory]);
 
@@ -494,8 +492,8 @@ export default function PortfolioClientPage({ data }: { data: PortfolioData }) {
                       <CircleDashed />
                       <AlertDescription>
                         {data.marginStatus.unpriced === 1
-                          ? "1 approved contribution is not priced yet, so Allocations today and Margin leave it out until the daily price run values it."
-                          : `${data.marginStatus.unpriced} approved contributions are not priced yet, so Allocations today and Margin leave them out until the daily price run values them.`}
+                          ? "1 approved contribution is not priced yet, so Allocations and Margin leave it out until the daily price run values it."
+                          : `${data.marginStatus.unpriced} approved contributions are not priced yet, so Allocations and Margin leave them out until the daily price run values them.`}
                       </AlertDescription>
                     </Alert>
                   )}
@@ -755,7 +753,7 @@ const EMPTY_STATS: PortfolioStats = {
   activeTransactions: 0,
 };
 
-const EMPTY_OWNER_KPIS = { contributed: 0, deployed: 0, liability: 0, margin: 0, monthlyChange: null };
+const EMPTY_OWNER_KPIS = { contributed: 0, deployed: 0, liability: 0 };
 
 function hasSettledMoney(stats: PortfolioStats): boolean {
   return stats.costBasis > 0 || stats.totalWithdrawn > 0 || stats.activeTransactions > 0;

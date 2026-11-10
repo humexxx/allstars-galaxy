@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Diff, X } from "lucide-react";
+import { Diff } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -11,6 +11,7 @@ import {
   updateTradeAction,
 } from "@/app/actions/trading-journal";
 import { Button } from "@/components/ui/button";
+import { DateTimeField, toLocalDateTime } from "@/components/ui/date-time-field";
 import {
   Dialog,
   DialogContent,
@@ -38,13 +39,7 @@ import type { JournalCashMovement, JournalTrade, TradingCashKind, TradingInstrum
 
 import { InstrumentCombobox } from "./instrument-combobox";
 
-/** `YYYY-MM-DDTHH:mm` for a datetime-local input, on the browser's clock. */
-export function localInputValue(date: Date = new Date()): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-/** A datetime-local value back to an instant, read on the browser's clock. */
+/** A picked day and time back to an instant, read on the browser's clock. */
 const toInstant = (value: string): string => new Date(value).toISOString();
 
 const num = (v: string): number => (v.trim() === "" ? NaN : Number(v));
@@ -169,8 +164,8 @@ type TradeForm = {
 function formFor(trade: JournalTrade | null): TradeForm {
   return {
     symbol: trade?.symbol ?? "",
-    openedAt: localInputValue(trade ? new Date(trade.openedAt) : new Date()),
-    closedAt: trade?.closedAt ? localInputValue(new Date(trade.closedAt)) : "",
+    openedAt: toLocalDateTime(trade ? new Date(trade.openedAt) : new Date()),
+    closedAt: trade?.closedAt ? toLocalDateTime(new Date(trade.closedAt)) : "",
     pnl: trade?.pnl != null ? String(trade.pnl) : "",
     notes: trade?.notes ?? "",
   };
@@ -221,7 +216,7 @@ export function TradeDialog({
 
   const setPnl = (pnl: string): void => {
     // A result means the trade closed: it closes now unless a time was given.
-    const now = localInputValue();
+    const now = toLocalDateTime();
     setForm((f) => ({ ...f, pnl, closedAt: f.closedAt || (Number.isFinite(num(pnl)) ? now : "") }));
   };
   const setClosedAt = (closedAt: string): void =>
@@ -286,37 +281,25 @@ export function TradeDialog({
             </Field>
             <Field className="gap-2">
               <FieldLabel htmlFor="trade-opened">Opened</FieldLabel>
-              <Input
+              <DateTimeField
                 id="trade-opened"
-                type="datetime-local"
                 value={form.openedAt}
-                onChange={(e) => set("openedAt", e.target.value)}
-                required
+                onChange={(value) => set("openedAt", value)}
               />
             </Field>
             <Field className="gap-2">
               <FieldLabel htmlFor="trade-closed">
                 Closed <span className="font-normal text-muted-foreground">optional</span>
               </FieldLabel>
-              <InputGroup>
-                <InputGroupInput
-                  id="trade-closed"
-                  type="datetime-local"
-                  value={form.closedAt}
-                  onChange={(e) => setClosedAt(e.target.value)}
-                />
-                {form.closedAt !== "" && (
-                  <InputGroupAddon align="inline-end">
-                    <InputGroupButton
-                      size="icon-xs"
-                      aria-label="Clear the close: the trade is still open"
-                      onClick={() => setClosedAt("")}
-                    >
-                      <X />
-                    </InputGroupButton>
-                  </InputGroupAddon>
-                )}
-              </InputGroup>
+              <DateTimeField
+                id="trade-closed"
+                value={form.closedAt}
+                onChange={setClosedAt}
+                placeholder="Still open"
+                min={form.openedAt}
+                clearable
+                clearLabel="Clear the close: the trade is still open"
+              />
             </Field>
             <PnlFields id="trade" value={form.pnl} onChange={setPnl} base={base} className="sm:col-span-2" />
             <Field className="gap-2 sm:col-span-2">
@@ -361,14 +344,14 @@ export function CloseTradeDialog({
   cash: readonly JournalCashMovement[];
 }): React.ReactElement {
   const [pnl, setPnl] = useState("");
-  const [closedAt, setClosedAt] = useState(() => localInputValue());
+  const [closedAt, setClosedAt] = useState(() => toLocalDateTime());
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [seed, setSeed] = useState<JournalTrade | null>(trade);
   if (seed !== trade) {
     setSeed(trade);
     setPnl("");
-    setClosedAt(localInputValue());
+    setClosedAt(toLocalDateTime());
     setError(null);
   }
 
@@ -408,12 +391,11 @@ export function CloseTradeDialog({
             <PnlFields id="close" value={pnl} onChange={setPnl} base={base} autoFocus />
             <Field className="gap-2">
               <FieldLabel htmlFor="close-at">Closed</FieldLabel>
-              <Input
+              <DateTimeField
                 id="close-at"
-                type="datetime-local"
                 value={closedAt}
-                onChange={(e) => setClosedAt(e.target.value)}
-                required
+                onChange={setClosedAt}
+                min={trade ? toLocalDateTime(new Date(trade.openedAt)) : undefined}
               />
             </Field>
           </FieldGroup>
@@ -444,7 +426,7 @@ export function CashDialog({
   balance: number;
 }): React.ReactElement {
   const [amount, setAmount] = useState("");
-  const [occurredAt, setOccurredAt] = useState(() => localInputValue());
+  const [occurredAt, setOccurredAt] = useState(() => toLocalDateTime());
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -452,7 +434,7 @@ export function CashDialog({
   if (seed !== kind) {
     setSeed(kind);
     setAmount("");
-    setOccurredAt(localInputValue());
+    setOccurredAt(toLocalDateTime());
     setNote("");
     setError(null);
   }
@@ -503,13 +485,7 @@ export function CashDialog({
             </Field>
             <Field className="gap-2">
               <FieldLabel htmlFor="cash-at">When</FieldLabel>
-              <Input
-                id="cash-at"
-                type="datetime-local"
-                value={occurredAt}
-                onChange={(e) => setOccurredAt(e.target.value)}
-                required
-              />
+              <DateTimeField id="cash-at" value={occurredAt} onChange={setOccurredAt} />
             </Field>
             <Field className="gap-2">
               <FieldLabel htmlFor="cash-note">Note</FieldLabel>

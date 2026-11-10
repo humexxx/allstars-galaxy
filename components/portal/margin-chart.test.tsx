@@ -62,20 +62,50 @@ describe("MarginChart", () => {
     expect(screen.getByText("Filters")).toBeInTheDocument();
   });
 
-  it("shows the margin as deployed against owed", () => {
+  it("heads the chart with today's allocations, and the margin under them", () => {
     // 2000 ADA at 0.40 = 800 deployed, against 900 owed to Yalena. Jason's own
     // 900 is capital, not debt.
     render(<MarginChart input={INPUT} />);
 
+    expect(screen.getByText("Allocations")).toBeInTheDocument();
+    expect(screen.getByText("$800.00")).toBeInTheDocument();
     expect(screen.getByText("-$100.00")).toBeInTheDocument();
-    expect(screen.getByText(/\$800\.00 deployed against \$900\.00 owed/)).toBeInTheDocument();
+  });
+
+  it("measures both against last month", () => {
+    // November: 2000 ADA at 0.50 = 1000 deployed, a margin of +100.
+    render(<MarginChart input={INPUT} />);
+
+    expect(screen.getByText(/-\$200\.00 · vs Nov/)).toHaveAttribute("title", "Against November 2025");
+    expect(screen.getByText(/· -\$200\.00 vs Nov/)).toBeInTheDocument();
+  });
+
+  it("shows a first month's figures with nothing to compare them to", () => {
+    render(
+      <MarginChart
+        input={{
+          ...INPUT,
+          contributions: [{ ...INPUT.contributions[0], month: "2025-12" }],
+          liabilities: [{ ...INPUT.liabilities[0], month: "2025-12" }],
+          cashFlows: [{ ...INPUT.cashFlows[0], month: "2025-12" }],
+        }}
+      />
+    );
+
+    expect(screen.getByText("$400.00")).toBeInTheDocument();
+    expect(screen.getByText("-$500.00")).toBeInTheDocument();
+    expect(screen.queryByText(/vs /)).not.toBeInTheDocument();
+    expect(screen.getByText(/not enough history/i)).toBeInTheDocument();
   });
 
   it("masks the amounts but keeps the chart readable", () => {
     const { container } = render(<MarginChart input={INPUT} hideValues />);
 
     expect(container.textContent).not.toContain("$800.00");
+    expect(container.textContent).not.toContain("$200.00");
     expect(container.textContent).toMatch(/•{3,}/);
+    // The direction of the month gives no balance away.
+    expect(container.textContent).toContain("vs Nov");
   });
 
   it("filters by several investors, picked by typing, shown as chips", () => {

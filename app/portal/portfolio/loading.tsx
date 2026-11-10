@@ -6,10 +6,15 @@ import { PortalPageContainer } from "@/components/portal/page-container"
 /**
  * Mirrors the real Portfolio silhouette: compact title + three header actions
  * (hide values, Export, Add transaction), the tab strip, then the KPI row and
- * the chart card in that order: its figure over a note, the range switch, the
- * plot (taller from `sm`), and the legend line beside the price status.
+ * the chart card in that order: its large figure over a note, the range
+ * switch, the plot (taller from `sm`), and the legend line beside the price
+ * status.
  *
- * Keep the tab count, the action count and the KPI count in sync with
+ * The page is not known to be an owner's or an investor's until it loads, so
+ * the KPI row draws what both share: an owner's two cards sit in the first two
+ * of the investor's four columns, and only those two are drawn.
+ *
+ * Keep the tab count, the action count and the KPI columns in sync with
  * `components/portal/portfolio-client.tsx`.
  */
 export default function PortfolioLoading() {
@@ -21,9 +26,9 @@ export default function PortfolioLoading() {
         {/* Tab strip */}
         <Skeleton className="h-10 w-72 rounded-lg" />
 
-        {/* Four KPI cards — the headline row */}
+        {/* KPI cards — the first two of a row of four */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
+          {Array.from({ length: 2 }).map((_, i) => (
             <Skeleton key={i} className="h-28 w-full rounded-xl sm:h-29" />
           ))}
         </div>
@@ -34,8 +39,8 @@ export default function PortfolioLoading() {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex flex-col gap-1">
                 <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-7 w-44 sm:h-8" />
-                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-9 w-56 sm:h-10" />
+                <Skeleton className="h-4 w-48" />
               </div>
               <Skeleton className="h-10 w-64 rounded-lg sm:h-8" />
             </div>

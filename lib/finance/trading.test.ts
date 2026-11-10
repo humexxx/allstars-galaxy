@@ -2,7 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import type { TradingCashMovementRow, TradingTradeRow } from "@/types/trading";
 
-import { buildJournal, journalMonths, tradePnl, trailingMonthlyRate } from "./trading";
+import {
+  balanceBefore,
+  buildJournal,
+  isResultOnly,
+  journalMonths,
+  legsForResult,
+  positionLabel,
+  tradePnl,
+  trailingMonthlyRate,
+} from "./trading";
 
 const dayOf = (d: Date): string => d.toISOString().slice(0, 10);
 const at = (day: string, hour = 15): Date => new Date(`${day}T${String(hour).padStart(2, "0")}:00:00Z`);
@@ -47,6 +56,90 @@ describe("tradePnl", () => {
     expect(tradePnl({ ...base, side: "short" })).toBe(-21);
     expect(tradePnl({ ...base, side: "long", multiplier: 100 })).toBe(1999);
     expect(tradePnl({ ...base, side: "long", exitPrice: null })).toBeNull();
+  });
+});
+
+describe("a trade recorded by its result", () => {
+  const held = { side: "short", quantity: 10, multiplier: 100, entryPrice: 2.5, exitPrice: null, fees: 1.3 } as const;
+
+  it("stores a gain, a loss and a flat result so the P&L reads back to the cent", () => {
+    for (const pnl of [250.75, -80.1, 0]) {
+      const legs = legsForResult(pnl);
+      expect(tradePnl(legs)).toBe(pnl);
+      expect(legs.entryPrice).toBeGreaterThanOrEqual(0);
+      expect(legs.exitPrice).toBeGreaterThanOrEqual(0);
+      expect(isResultOnly(legs)).toBe(true);
+    }
+  });
+
+  it("leaves an open one with nothing at stake", () => {
+    const legs = legsForResult(null);
+    expect(legs).toMatchObject({ entryPrice: 0, exitPrice: null });
+    expect(tradePnl(legs)).toBeNull();
+    expect(isResultOnly(legs)).toBe(true);
+  });
+
+  it("keeps a real position and moves only its exit price", () => {
+    const closed = legsForResult(-501.3, held);
+    expect(closed).toEqual({ ...held, exitPrice: 3 });
+    expect(tradePnl(closed)).toBe(-501.3);
+    expect(legsForResult(null, closed)).toEqual(held);
+  });
+
+  it("gives up the position when no exit price reaches the result", () => {
+    // $30 of stock cannot lose $50: the exit price would be below zero.
+    const small = { side: "long", quantity: 3, multiplier: 1, entryPrice: 10, exitPrice: null, fees: 0 } as const;
+    expect(legsForResult(100, small)).toMatchObject({ quantity: 3, entryPrice: 10 });
+    expect(tradePnl(legsForResult(100, small))).toBe(100);
+    expect(isResultOnly(legsForResult(-50, small))).toBe(true);
+    expect(tradePnl(legsForResult(-50, small))).toBe(-50);
+  });
+
+  it("does not take a one-unit position for a result", () => {
+    const one = { side: "long", quantity: 1, multiplier: 1, entryPrice: 100, fees: 0 } as const;
+    expect(isResultOnly({ ...one, exitPrice: null })).toBe(false);
+    expect(isResultOnly({ ...one, exitPrice: 120 })).toBe(false);
+  });
+
+  it("names a position, and nothing for a result", () => {
+    expect(positionLabel(held)).toBe("Short 10 ×100 at 2.5");
+    expect(positionLabel({ ...held, side: "long", quantity: 1500, multiplier: 1 })).toBe("Long 1,500 at 2.5");
+    expect(positionLabel(legsForResult(40))).toBeNull();
+  });
+});
+
+describe("a trade's return", () => {
+  const journal = buildJournal(
+    {
+      trades: [
+        trade({ id: "a", exitPrice: "110", closedAt: at("2026-09-03") }), // +100 on 100 + 1,000
+        trade({ id: "b", exitPrice: "155", closedAt: at("2026-09-20") }), // +550 on 1,200 − 600
+        trade({ id: "c", openedAt: at("2026-09-21") }), // open
+        trade({ id: "early", exitPrice: "110", openedAt: at("2026-08-01"), closedAt: at("2026-08-02") }), // before any money
+      ],
+      cash: [cash({ id: "x" }), cash({ id: "y", kind: "withdrawal", amount: "600", occurredAt: at("2026-09-15") })],
+    },
+    dayOf,
+    "2026-09-30"
+  );
+  const by = (id: string) => journal.trades.find((t) => t.id === id);
+
+  it("is the P&L over what the account held when it closed", () => {
+    expect(by("a")?.returnPct).toBeCloseTo(100 / 1100);
+    expect(by("b")?.returnPct).toBeCloseTo(550 / 600);
+  });
+
+  it("is not read for an open trade, or on an empty account", () => {
+    expect(by("c")?.returnPct).toBeNull();
+    expect(by("early")?.returnPct).toBeNull();
+  });
+
+  it("is measured against the balance the form shows", () => {
+    const base = (id: string) => balanceBefore(journal.trades, journal.cash, by(id)?.closedAt ?? "", id);
+    expect(base("a")).toBe(1100);
+    expect(base("b")).toBe(600);
+    // An open trade's base is everything so far.
+    expect(balanceBefore(journal.trades, journal.cash, "9999-12-31T23:59:59.999Z")).toBe(journal.balance);
   });
 });
 

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { safe, type ActionResult } from "@/lib/actions/safe";
 import { logImpersonatedMutation } from "@/lib/services/impersonation";
 import { requireModuleContext } from "@/lib/services/module-access-service";
+import { searchInstruments } from "@/lib/services/trading-instrument-service";
 import {
   addCashMovement,
   closeTrade,
@@ -18,14 +19,15 @@ import { idSchema } from "@/schemas/common";
 import {
   cashMovementSchema,
   closeTradeSchema,
-  tradeSchema,
-  updateTradeSchema,
+  instrumentQuerySchema,
+  tradeResultSchema,
+  updateTradeResultSchema,
   type CashMovementInput,
   type CloseTradeInput,
-  type TradeInput,
-  type UpdateTradeInput,
+  type TradeResultInput,
+  type UpdateTradeResultInput,
 } from "@/schemas/trading";
-import type { JournalTrade } from "@/types/trading";
+import type { JournalTrade, TradingInstrument } from "@/types/trading";
 
 /** The journal, the plans (their trading card and net worth) and the dashboard. */
 function revalidateJournal(): void {
@@ -52,17 +54,17 @@ async function journalWrite<T>(
   }
 }
 
-export async function createTradeAction(input: TradeInput): Promise<ActionResult<JournalTrade>> {
+export async function createTradeAction(input: TradeResultInput): Promise<ActionResult<JournalTrade>> {
   return safe("trading-journal", async () => {
-    const parsed = tradeSchema.safeParse(input);
+    const parsed = tradeResultSchema.safeParse(input);
     if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
     return journalWrite("trading.trade.create", "trading_trades", (userId) => createTrade(userId, parsed.data));
   });
 }
 
-export async function updateTradeAction(input: UpdateTradeInput): Promise<ActionResult<JournalTrade>> {
+export async function updateTradeAction(input: UpdateTradeResultInput): Promise<ActionResult<JournalTrade>> {
   return safe("trading-journal", async () => {
-    const parsed = updateTradeSchema.safeParse(input);
+    const parsed = updateTradeResultSchema.safeParse(input);
     if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
     return journalWrite("trading.trade.update", "trading_trades", (userId) => updateTrade(userId, parsed.data));
   });
@@ -104,5 +106,21 @@ export async function deleteCashMovementAction(id: string): Promise<ActionResult
       deleteCashMovement(userId, id)
     );
     return result.success ? { success: true } : result;
+  });
+}
+
+/**
+ * Market instruments matching what was typed in the trade form. `available`
+ * is false when the search cannot answer; the form then takes a typed symbol.
+ */
+export async function searchInstrumentsAction(
+  query: string
+): Promise<ActionResult<{ instruments: TradingInstrument[]; available: boolean }>> {
+  return safe("trading-journal", async () => {
+    await requireModuleContext("trading");
+    const parsed = instrumentQuerySchema.safeParse(query);
+    if (!parsed.success) return { success: true, data: { instruments: [], available: true } };
+    const instruments = await searchInstruments(parsed.data);
+    return { success: true, data: { instruments: instruments ?? [], available: instruments !== null } };
   });
 }

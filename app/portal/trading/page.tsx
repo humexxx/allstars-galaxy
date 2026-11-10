@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { TradingJournalView } from "@/components/finance/trading/trading-journal-view";
 import { parseJournalView } from "@/lib/finance/journal-view";
 import { requireModulePage } from "@/lib/services/module-access-service";
+import { getLinkedInstruments } from "@/lib/services/trading-instrument-service";
 import { getTradingJournal } from "@/lib/services/trading-journal-service";
 import { getRequestTimeZone } from "@/lib/utils/request-today";
 
@@ -16,9 +17,16 @@ export default async function TradingJournalPage({
   searchParams: Promise<{ view?: string | string[] }>;
 }): Promise<React.ReactElement> {
   const ctx = await requireModulePage("trading");
-  const [journal, { view }] = await Promise.all([
+  const [journal, linkedInstruments, { view }] = await Promise.all([
     getTradingJournal(ctx.effectiveUserId, await getRequestTimeZone()),
+    getLinkedInstruments(),
     searchParams,
   ]);
-  return <TradingJournalView journal={journal} initialView={parseJournalView(view)} />;
+  return (
+    <TradingJournalView
+      journal={journal}
+      initialView={parseJournalView(view)}
+      linkedInstruments={linkedInstruments}
+    />
+  );
 }

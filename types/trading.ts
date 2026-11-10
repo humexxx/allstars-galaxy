@@ -6,6 +6,24 @@ export type TradingCashMovementRow = typeof tradingCashMovements.$inferSelect;
 export type TradeSide = TradingTradeRow["side"];
 export type TradingCashKind = TradingCashMovementRow["kind"];
 
+/** The numbers a trade's P&L is worked out from. */
+export type TradeLegs = {
+  side: TradeSide;
+  quantity: number;
+  multiplier: number;
+  entryPrice: number;
+  exitPrice: number | null;
+  fees: number;
+};
+
+/** An instrument the trade form offers: a ticker and what it is. */
+export type TradingInstrument = {
+  symbol: string;
+  name: string | null;
+  /** The provider's market — stocks, crypto, fx, indices, otc; null when unknown. */
+  market: string | null;
+};
+
 /**
  * A trade as the journal reads it: numbers parsed, its days on the reader's
  * calendar, and — once closed — what it made.
@@ -30,7 +48,10 @@ export type JournalTrade = {
   status: "open" | "closed";
   /** Realized P&L after fees; null while open. */
   pnl: number | null;
-  /** P&L as a share of the position's cost (entry × quantity × multiplier). */
+  /**
+   * P&L as a share of the account's balance just before the trade closed;
+   * null while open, and when the account held nothing.
+   */
   returnPct: number | null;
   /** Calendar days from open to close (0 for a day trade); null while open. */
   holdDays: number | null;

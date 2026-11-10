@@ -18,16 +18,14 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Eyebrow, Mono, Text } from "@/components/ui/typography";
+import { positionLabel } from "@/lib/finance/trading";
 import { cn } from "@/lib/utils";
 import { formatDay } from "@/lib/utils/date";
-import { formatCurrency, formatSignedCurrency, moneySign } from "@/lib/utils/format";
+import { formatCurrency, formatSignedCurrency, formatSignedPercent, moneySign } from "@/lib/utils/format";
 import type { JournalCashMovement, JournalTrade } from "@/types/trading";
 
 const toneText = (n: number): string =>
   moneySign(n) > 0 ? "text-success" : moneySign(n) < 0 ? "text-destructive" : "";
-
-const price = (n: number): string =>
-  n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 8 });
 
 export type TradeFilter = "all" | "open" | "closed";
 
@@ -87,96 +85,90 @@ export function JournalTradesTable({
           <Table className="text-xs" containerClassName="overflow-visible">
             <TableHeader className="sticky top-0 z-10 bg-card">
               <TableRow>
-                <TableHead>Symbol</TableHead>
+                <TableHead>Instrument</TableHead>
                 <TableHead>Opened</TableHead>
-                <TableHead className="text-right">Qty</TableHead>
-                <TableHead className="text-right">Entry</TableHead>
-                <TableHead className="text-right">Exit</TableHead>
                 <TableHead>Closed</TableHead>
                 <TableHead className="text-right">P&amp;L</TableHead>
-                <TableHead className="hidden md:table-cell">Setup</TableHead>
+                <TableHead className="hidden md:table-cell">Notes</TableHead>
                 <TableHead className="w-8" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {shown.length === 0 && (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={9} className="py-6 text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="py-6 text-center text-muted-foreground">
                     No trades here yet.
                   </TableCell>
                 </TableRow>
               )}
-              {shown.map((t) => (
-                <TableRow key={t.id} className={cn(pending && "opacity-70")}>
-                  <TableCell>
-                    <span className="flex items-center gap-1.5 font-medium">
-                      {t.symbol}
-                      <Badge variant="outline" className="px-1 text-2xs">
-                        {t.side === "long" ? "Long" : "Short"}
-                      </Badge>
-                    </span>
-                  </TableCell>
-                  <TableCell className="font-mono">{formatDay(t.openedDay).replace(/, \d{4}$/, "")}</TableCell>
-                  <TableCell className="text-right font-mono">
-                    {price(t.quantity)}
-                    {t.multiplier !== 1 && <span className="text-muted-foreground"> ×{t.multiplier}</span>}
-                  </TableCell>
-                  <TableCell className="text-right font-mono">{price(t.entryPrice)}</TableCell>
-                  <TableCell className="text-right font-mono">{t.exitPrice == null ? "—" : price(t.exitPrice)}</TableCell>
-                  <TableCell className="font-mono">
-                    {t.closedDay ? (
-                      formatDay(t.closedDay).replace(/, \d{4}$/, "")
-                    ) : (
-                      <Badge variant="outline" className="border-primary/50 text-primary">
-                        Open
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {t.pnl == null ? (
-                      <Button size="xs" variant="outline" onClick={() => onClose(t)}>
-                        Close
-                      </Button>
-                    ) : (
-                      <span className="flex flex-col items-end">
-                        <Mono className={cn("font-semibold", toneText(t.pnl))}>{formatSignedCurrency(t.pnl)}</Mono>
-                        {t.returnPct != null && (
-                          <Mono className={cn("text-2xs", toneText(t.pnl))}>
-                            {(t.returnPct * 100).toFixed(1)}%
-                          </Mono>
-                        )}
+              {shown.map((t) => {
+                const position = positionLabel(t);
+                return (
+                  <TableRow key={t.id} className={cn(pending && "opacity-70")}>
+                    <TableCell>
+                      <span className="flex flex-col">
+                        <span className="font-medium">{t.symbol}</span>
+                        {position && <span className="text-2xs text-muted-foreground">{position}</span>}
                       </span>
-                    )}
-                  </TableCell>
-                  <TableCell className="hidden max-w-32 truncate md:table-cell">{t.setup ?? "—"}</TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon-xs" aria-label={`Actions for ${t.symbol}`}>
-                          <MoreHorizontal />
+                    </TableCell>
+                    <TableCell className="font-mono">{formatDay(t.openedDay).replace(/, \d{4}$/, "")}</TableCell>
+                    <TableCell className="font-mono">
+                      {t.closedDay ? (
+                        formatDay(t.closedDay).replace(/, \d{4}$/, "")
+                      ) : (
+                        <Badge variant="outline" className="border-primary/50 text-primary">
+                          Open
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {t.pnl == null ? (
+                        <Button size="xs" variant="outline" onClick={() => onClose(t)}>
+                          Close
                         </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {t.status === "open" && (
-                          <DropdownMenuItem onSelect={() => onClose(t)}>
-                            <X />
-                            Close trade
+                      ) : (
+                        <span className="flex flex-col items-end">
+                          <Mono className={cn("font-semibold", toneText(t.pnl))}>{formatSignedCurrency(t.pnl)}</Mono>
+                          {t.returnPct != null && (
+                            <Mono className={cn("text-2xs", toneText(t.pnl))}>
+                              {formatSignedPercent(t.returnPct * 100)}
+                            </Mono>
+                          )}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="hidden max-w-48 truncate text-muted-foreground md:table-cell">
+                      {t.notes ?? "—"}
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon-xs" aria-label={`Actions for ${t.symbol}`}>
+                            <MoreHorizontal />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {t.status === "open" && (
+                            <DropdownMenuItem onSelect={() => onClose(t)}>
+                              <X />
+                              Close trade
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem onSelect={() => onEdit(t)}>
+                            <Pencil />
+                            Edit
                           </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem onSelect={() => onEdit(t)}>
-                          <Pencil />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem variant="destructive" onSelect={() => remove(t)}>
-                          <Trash2 />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem variant="destructive" onSelect={() => remove(t)}>
+                            <Trash2 />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
       </div>

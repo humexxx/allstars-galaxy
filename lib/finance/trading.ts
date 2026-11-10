@@ -6,6 +6,7 @@ import type {
   JournalMonth,
   JournalStats,
   JournalTrade,
+  TradeLegs,
   TradingCashMovementRow,
   TradingJournal,
   TradingTradeRow,
@@ -24,6 +25,7 @@ export const MAX_MONTHLY_RETURN = 1;
 
 const num = (v: string | null): number => (v == null ? 0 : parseFloat(v));
 const round2 = (n: number): number => Math.round(n * 100) / 100;
+const round8 = (n: number): number => Math.round(n * 1e8) / 1e8;
 
 /** Days between two YYYY-MM-DD calendar days. */
 function daysBetween(from: string, to: string): number {
@@ -34,21 +36,63 @@ function daysBetween(from: string, to: string): number {
  * A closed trade's realized P&L: the price move times the position, against
  * a short, less fees. Null while the trade is open.
  */
-export function tradePnl(t: {
-  side: "long" | "short";
-  quantity: number;
-  multiplier: number;
-  entryPrice: number;
-  exitPrice: number | null;
-  fees: number;
-}): number | null {
+export function tradePnl(t: TradeLegs): number | null {
   if (t.exitPrice == null) return null;
   const direction = t.side === "long" ? 1 : -1;
   return round2(direction * (t.exitPrice - t.entryPrice) * t.quantity * t.multiplier - t.fees);
 }
 
-export function toJournalTrade(row: TradingTradeRow, dayOf: (d: Date) => string): JournalTrade {
-  const base = {
+/**
+ * Whether a trade was recorded by its result alone: one unit bought at zero
+ * and sold for the gain, or bought for the loss and sold at zero. Such a trade
+ * has no position worth showing.
+ */
+export function isResultOnly(t: TradeLegs): boolean {
+  return (
+    t.side === "long" &&
+    t.quantity === 1 &&
+    t.multiplier === 1 &&
+    t.fees === 0 &&
+    (t.exitPrice == null ? t.entryPrice === 0 : Math.min(t.entryPrice, t.exitPrice) === 0)
+  );
+}
+
+/**
+ * The legs that make a trade's P&L come out at `pnl` (null leaves it open).
+ * A trade `held` with a real position keeps it and moves only its exit price;
+ * anything else — a new trade, one recorded by result, a position no exit
+ * price reaches that figure on — becomes the one-unit form `isResultOnly` reads.
+ */
+export function legsForResult(pnl: number | null, held?: TradeLegs): TradeLegs {
+  if (held && !isResultOnly(held)) {
+    if (pnl == null) return { ...held, exitPrice: null };
+    if (tradePnl(held) === pnl) return held;
+    const direction = held.side === "long" ? 1 : -1;
+    const exitPrice = round8(held.entryPrice + (direction * (pnl + held.fees)) / (held.quantity * held.multiplier));
+    const moved = { ...held, exitPrice };
+    if (exitPrice >= 0 && tradePnl(moved) === pnl) return moved;
+  }
+  return {
+    side: "long",
+    quantity: 1,
+    multiplier: 1,
+    fees: 0,
+    entryPrice: pnl == null ? 0 : Math.max(0, -pnl),
+    exitPrice: pnl == null ? null : Math.max(0, pnl),
+  };
+}
+
+const amount = (n: number): string => n.toLocaleString("en-US", { maximumFractionDigits: 8 });
+
+/** A trade's position in words — "Long 10 ×100 at 2.5" — or null for one recorded by its result alone. */
+export function positionLabel(t: TradeLegs): string | null {
+  if (isResultOnly(t)) return null;
+  const size = t.multiplier === 1 ? amount(t.quantity) : `${amount(t.quantity)} ×${amount(t.multiplier)}`;
+  return `${t.side === "long" ? "Long" : "Short"} ${size} at ${amount(t.entryPrice)}`;
+}
+
+export function tradeLegs(row: TradingTradeRow): TradeLegs {
+  return {
     side: row.side,
     quantity: num(row.quantity),
     multiplier: num(row.multiplier) || 1,
@@ -56,8 +100,12 @@ export function toJournalTrade(row: TradingTradeRow, dayOf: (d: Date) => string)
     exitPrice: row.exitPrice == null ? null : num(row.exitPrice),
     fees: num(row.fees),
   };
+}
+
+/** A stored trade as the journal reads it. Its `returnPct` needs the whole journal: `buildJournal` sets it. */
+export function toJournalTrade(row: TradingTradeRow, dayOf: (d: Date) => string): JournalTrade {
+  const base = tradeLegs(row);
   const pnl = tradePnl(base);
-  const cost = base.entryPrice * base.quantity * base.multiplier;
   const openedDay = dayOf(row.openedAt);
   const closedDay = row.closedAt ? dayOf(row.closedAt) : null;
   return {
@@ -72,7 +120,7 @@ export function toJournalTrade(row: TradingTradeRow, dayOf: (d: Date) => string)
     notes: row.notes,
     status: pnl == null ? "open" : "closed",
     pnl,
-    returnPct: pnl != null && cost > 0 ? pnl / cost : null,
+    returnPct: null,
     holdDays: closedDay ? Math.max(0, daysBetween(openedDay, closedDay)) : null,
   };
 }
@@ -96,6 +144,52 @@ function closedInOrder(trades: readonly JournalTrade[]): (JournalTrade & { pnl: 
   return trades
     .filter((t): t is JournalTrade & { pnl: number; closedDay: string } => t.pnl != null && t.closedDay != null)
     .sort((a, b) => (a.closedAt ?? "").localeCompare(b.closedAt ?? ""));
+}
+
+const cashFlow = (c: JournalCashMovement): number => (c.kind === "deposit" ? c.amount : -c.amount);
+
+/**
+ * What the account held as a trade closing at `at` did: every deposit and
+ * withdrawal up to that instant, and the P&L of the trades closed before it.
+ * `exceptId` leaves one trade out — the one being edited.
+ */
+export function balanceBefore(
+  trades: readonly JournalTrade[],
+  cash: readonly JournalCashMovement[],
+  at: string,
+  exceptId?: string
+): number {
+  const moved = cash.filter((c) => c.occurredAt <= at).reduce((s, c) => s + cashFlow(c), 0);
+  const made = trades
+    .filter((t) => t.id !== exceptId && t.closedAt != null && t.closedAt < at)
+    .reduce((s, t) => s + (t.pnl ?? 0), 0);
+  return round2(moved + made);
+}
+
+/**
+ * Each closed trade's P&L as a share of `balanceBefore` its close, by trade
+ * id; null when the account held nothing. Trades closing at the same instant
+ * share one base.
+ */
+export function returnsOnBalance(
+  trades: readonly JournalTrade[],
+  cash: readonly JournalCashMovement[]
+): Map<string, number | null> {
+  const closed = closedInOrder(trades);
+  const moves = [...cash].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
+  const returns = new Map<string, number | null>();
+  let balance = 0;
+  let next = 0;
+  for (let i = 0; i < closed.length; ) {
+    const at = closed[i].closedAt ?? "";
+    for (; next < moves.length && moves[next].occurredAt <= at; next++) balance += cashFlow(moves[next]);
+    const base = round2(balance);
+    for (; i < closed.length && closed[i].closedAt === at; i++) {
+      returns.set(closed[i].id, base > 0 ? closed[i].pnl / base : null);
+      balance += closed[i].pnl;
+    }
+  }
+  return returns;
 }
 
 export function journalStats(trades: readonly JournalTrade[]): JournalStats {
@@ -295,12 +389,14 @@ export function buildJournal(
   dayOf: (d: Date) => string,
   today: string
 ): TradingJournal {
-  const trades = rows.trades
-    .map((r) => toJournalTrade(r, dayOf))
-    .sort((a, b) => b.openedAt.localeCompare(a.openedAt));
   const cash = rows.cash
     .map((r) => toJournalCash(r, dayOf))
     .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
+  const read = rows.trades.map((r) => toJournalTrade(r, dayOf));
+  const returns = returnsOnBalance(read, cash);
+  const trades = read
+    .map((t) => ({ ...t, returnPct: returns.get(t.id) ?? null }))
+    .sort((a, b) => b.openedAt.localeCompare(a.openedAt));
   const deposited = cash.filter((c) => c.kind === "deposit").reduce((s, c) => s + c.amount, 0);
   const withdrawn = cash.filter((c) => c.kind === "withdrawal").reduce((s, c) => s + c.amount, 0);
   const realizedPnl = trades.reduce((s, t) => s + (t.pnl ?? 0), 0);

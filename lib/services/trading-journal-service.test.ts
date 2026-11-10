@@ -44,7 +44,14 @@ vi.mock("@/db", () => {
   return { db: { ...client, transaction: (run: (tx: typeof client) => unknown) => run(client) } };
 });
 
-import { addCashMovement, closeTrade, deleteCashMovement, TradingJournalError } from "./trading-journal-service";
+import {
+  addCashMovement,
+  closeTrade,
+  createTrade,
+  deleteCashMovement,
+  TradingJournalError,
+  updateTrade,
+} from "./trading-journal-service";
 
 const USER = "00000000-0000-4000-8000-000000000001";
 const NOW = new Date("2026-11-08T15:00:00Z");
@@ -142,12 +149,73 @@ describe("deleteCashMovement", () => {
   });
 });
 
+const OPENED = "2026-11-03T14:00:00.000Z";
+
+describe("a trade from the form", () => {
+  it("is stored as its result alone", async () => {
+    const made = await createTrade(USER, { symbol: "XAUUSD", openedAt: OPENED, closedAt: NOW.toISOString(), pnl: -42.5, notes: null });
+
+    expect(inserted).toEqual([
+      expect.objectContaining({ symbol: "XAUUSD", side: "long", quantity: "1", entryPrice: "42.5", exitPrice: "0", fees: "0" }),
+    ]);
+    expect(made.pnl).toBe(-42.5);
+  });
+
+  it("stays open with no result", async () => {
+    const made = await createTrade(USER, { symbol: "XAUUSD", openedAt: OPENED, closedAt: null, pnl: null, notes: "Waiting" });
+
+    expect(inserted).toEqual([expect.objectContaining({ entryPrice: "0", exitPrice: null, closedAt: null, notes: "Waiting" })]);
+    expect(made.status).toBe("open");
+  });
+
+  it("keeps a recorded position when its result is edited", async () => {
+    journal.trades = [{ ...openTrade("0"), exitPrice: "110", closedAt: NOW }];
+
+    const edited = await updateTrade(USER, { id: "t1", symbol: "NVDA", openedAt: OPENED, closedAt: NOW.toISOString(), pnl: 150, notes: null });
+
+    expect(updated).toEqual([expect.objectContaining({ side: "long", quantity: "10", entryPrice: "100", exitPrice: "115" })]);
+    expect(edited.pnl).toBe(150);
+  });
+
+  it("reopens a trade when its close is cleared", async () => {
+    journal.trades = [{ ...openTrade("0"), exitPrice: "110", closedAt: NOW }];
+
+    const edited = await updateTrade(USER, { id: "t1", symbol: "NVDA", openedAt: OPENED, closedAt: null, pnl: null, notes: null });
+
+    expect(updated).toEqual([expect.objectContaining({ exitPrice: null, closedAt: null })]);
+    expect(edited.status).toBe("open");
+  });
+});
+
 describe("closeTrade", () => {
-  it("adds the closing fees to the cent", async () => {
-    journal.trades = [openTrade("0.10")];
+  it("moves a position's exit price to what the trade made, fees included", async () => {
+    journal.trades = [openTrade("0.50")];
 
-    await closeTrade(USER, { id: "t1", exitPrice: 110, closedAt: NOW.toISOString(), fees: 0.2 });
+    const closed = await closeTrade(USER, { id: "t1", pnl: 99.5, closedAt: NOW.toISOString() });
 
-    expect(updated).toEqual([expect.objectContaining({ exitPrice: "110", fees: "0.30" })]);
+    expect(updated).toEqual([expect.objectContaining({ quantity: "10", exitPrice: "110", fees: "0.5", closedAt: NOW })]);
+    expect(closed.pnl).toBe(99.5);
+  });
+
+  it("closes a trade recorded by its result", async () => {
+    journal.trades = [{ ...openTrade("0"), quantity: "1", entryPrice: "0" }];
+
+    const closed = await closeTrade(USER, { id: "t1", pnl: -30, closedAt: NOW.toISOString() });
+
+    expect(updated).toEqual([expect.objectContaining({ entryPrice: "30", exitPrice: "0" })]);
+    expect(closed.pnl).toBe(-30);
+  });
+
+  it("refuses a trade already closed, or a close before the open", async () => {
+    journal.trades = [openTrade("0")];
+    await expect(closeTrade(USER, { id: "t1", pnl: 10, closedAt: "2026-11-01T14:00:00Z" })).rejects.toThrow(
+      "A trade cannot close before it opened"
+    );
+
+    journal.trades = [{ ...openTrade("0"), exitPrice: "110", closedAt: NOW }];
+    await expect(closeTrade(USER, { id: "t1", pnl: 10, closedAt: NOW.toISOString() })).rejects.toThrow(
+      "NVDA is already closed"
+    );
+    expect(updated).toEqual([]);
   });
 });

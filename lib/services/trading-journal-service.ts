@@ -5,7 +5,7 @@ import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import { tradingCashMovements, tradingTrades } from "@/db/schema";
-import { buildJournal, toJournalTrade } from "@/lib/finance/trading";
+import { buildJournal, legsForResult, toJournalTrade, tradeLegs } from "@/lib/finance/trading";
 import { isoDay } from "@/lib/finance/schedule";
 import { calendarDayInTimeZone } from "@/lib/utils/date";
 import { formatCurrency } from "@/lib/utils/format";
@@ -13,10 +13,12 @@ import type {
   CashMovementData,
   CloseTradeData,
   TradeData,
-  UpdateTradeData,
+  TradeResultData,
+  UpdateTradeResultData,
 } from "@/schemas/trading";
 import type {
   JournalTrade,
+  TradeLegs,
   TradingCashMovementRow,
   TradingJournal,
   TradingSummary,
@@ -101,10 +103,29 @@ export function tradeValues(data: TradeData) {
 
 const utcDay = (d: Date): string => d.toISOString().slice(0, 10);
 
-export async function createTrade(userId: string, data: TradeData): Promise<JournalTrade> {
+function legValues(legs: TradeLegs) {
+  return {
+    side: legs.side,
+    quantity: decimal(legs.quantity),
+    multiplier: decimal(legs.multiplier),
+    entryPrice: decimal(legs.entryPrice),
+    exitPrice: legs.exitPrice == null ? null : decimal(legs.exitPrice),
+    fees: decimal(legs.fees),
+  };
+}
+
+/** A trade from the journal's form: its result alone, no position behind it. */
+export async function createTrade(userId: string, data: TradeResultData): Promise<JournalTrade> {
   const [row] = await db
     .insert(tradingTrades)
-    .values({ userId, ...tradeValues(data) })
+    .values({
+      userId,
+      symbol: data.symbol,
+      ...legValues(legsForResult(data.pnl)),
+      openedAt: new Date(data.openedAt),
+      closedAt: data.closedAt == null ? null : new Date(data.closedAt),
+      notes: data.notes || null,
+    })
     .returning();
   return toJournalTrade(row, utcDay);
 }
@@ -118,17 +139,28 @@ async function ownTrade(userId: string, id: string): Promise<TradingTradeRow> {
   return row;
 }
 
-export async function updateTrade(userId: string, data: UpdateTradeData): Promise<JournalTrade> {
-  await ownTrade(userId, data.id);
+/**
+ * Rewrites a trade from the journal's form. A trade recorded with its position
+ * (the assistant's) keeps it: only its exit price moves to meet the new result.
+ */
+export async function updateTrade(userId: string, data: UpdateTradeResultData): Promise<JournalTrade> {
+  const trade = await ownTrade(userId, data.id);
   const [row] = await db
     .update(tradingTrades)
-    .set({ ...tradeValues(data), updatedAt: new Date() })
+    .set({
+      symbol: data.symbol,
+      ...legValues(legsForResult(data.pnl, tradeLegs(trade))),
+      openedAt: new Date(data.openedAt),
+      closedAt: data.closedAt == null ? null : new Date(data.closedAt),
+      notes: data.notes || null,
+      updatedAt: new Date(),
+    })
     .where(and(eq(tradingTrades.id, data.id), eq(tradingTrades.userId, userId)))
     .returning();
   return toJournalTrade(row, utcDay);
 }
 
-/** Closes an open trade at a price and time, adding the closing order's fees. */
+/** Closes an open trade at a time, for what it made. */
 export async function closeTrade(userId: string, data: CloseTradeData): Promise<JournalTrade> {
   const trade = await ownTrade(userId, data.id);
   if (trade.closedAt) throw new TradingJournalError(`${trade.symbol} is already closed`);
@@ -136,12 +168,7 @@ export async function closeTrade(userId: string, data: CloseTradeData): Promise<
   if (closedAt < trade.openedAt) throw new TradingJournalError("A trade cannot close before it opened");
   const [row] = await db
     .update(tradingTrades)
-    .set({
-      exitPrice: decimal(data.exitPrice),
-      closedAt,
-      fees: (parseFloat(trade.fees) + data.fees).toFixed(2),
-      updatedAt: new Date(),
-    })
+    .set({ ...legValues(legsForResult(data.pnl, tradeLegs(trade))), closedAt, updatedAt: new Date() })
     .where(and(eq(tradingTrades.id, data.id), eq(tradingTrades.userId, userId)))
     .returning();
   return toJournalTrade(row, utcDay);

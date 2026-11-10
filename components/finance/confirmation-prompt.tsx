@@ -32,6 +32,28 @@ function readDismissed(key: string): boolean {
   return window.localStorage.getItem(key) !== null;
 }
 
+// The dashboard streams in pieces and React hydrates them one at a time. An
+// open dialog hides the rest of the page from assistive tech by writing
+// `aria-hidden` on it, down to the siblings of every live region. Opened while
+// a piece is still waiting its turn, it writes on HTML React has not claimed
+// yet, and React then reports attributes it never rendered. So the prompt
+// waits for the browser to go idle: what has arrived by then is hydrated.
+let settled = false;
+
+function subscribeSettled(cb: () => void): () => void {
+  if (settled) return () => undefined;
+  const settle = (): void => {
+    settled = true;
+    cb();
+  };
+  if (typeof window.requestIdleCallback === "function") {
+    const id = window.requestIdleCallback(settle, { timeout: 2000 });
+    return () => window.cancelIdleCallback(id);
+  }
+  const id = window.setTimeout(settle, 200);
+  return () => window.clearTimeout(id);
+}
+
 /**
  * Auto-opens the confirmation dialog when the user lands on the dashboard.
  * Stores a "dismissed for today" flag in localStorage so it doesn't pester them
@@ -48,8 +70,13 @@ export function ConfirmationPrompt(props: ConfirmationPromptProps) {
     () => readDismissed(dismissKey),
     () => false
   );
+  const pageSettled = useSyncExternalStore(
+    subscribeSettled,
+    () => settled,
+    () => false
+  );
   const [closedLocally, setClosedLocally] = useState(false);
-  const open = !dismissed && !closedLocally;
+  const open = pageSettled && !dismissed && !closedLocally;
 
   const handleOpenChange = (next: boolean) => {
     if (!next) {

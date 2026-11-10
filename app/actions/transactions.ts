@@ -3,10 +3,8 @@
 import { revalidatePath } from "next/cache";
 
 import { safe, type ActionResult } from "@/lib/actions/safe";
-import {
-  logImpersonatedMutation,
-  requireEffectiveContext,
-} from "@/lib/services/impersonation";
+import { logImpersonatedMutation } from "@/lib/services/impersonation";
+import { requireModuleContext } from "@/lib/services/module-access-service";
 import { createApprovalSnapshot } from "@/lib/services/snapshot-service";
 import { createTransaction } from "@/lib/services/transaction-service";
 import {
@@ -33,7 +31,7 @@ export async function createTransactionAction(
   input: CreateTransactionData,
 ): Promise<ActionResult<Transaction>> {
   return safe("transactions", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("portfolio");
 
     const parsed = createTransactionSchema.safeParse(input);
     if (!parsed.success) {

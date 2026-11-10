@@ -3,10 +3,8 @@
 import { revalidatePath } from "next/cache";
 
 import { safe, type ActionResult } from "@/lib/actions/safe";
-import {
-  logImpersonatedMutation,
-  requireEffectiveContext,
-} from "@/lib/services/impersonation";
+import { logImpersonatedMutation } from "@/lib/services/impersonation";
+import { requireModuleContext } from "@/lib/services/module-access-service";
 import { refreshHeldPrices } from "@/lib/services/price-service";
 
 export type PriceRefreshOutcome =
@@ -23,7 +21,7 @@ export type PriceRefreshOutcome =
  */
 export async function refreshPricesAction(): Promise<ActionResult<PriceRefreshOutcome>> {
   return safe<PriceRefreshOutcome>("price-refresh", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("portfolio");
     const result = await refreshHeldPrices(ctx.effectiveUserId);
 
     switch (result.status) {

@@ -146,9 +146,9 @@ function HabitRow({ habit, today }: { habit: DashboardHabit; today: string }) {
       <div className="flex min-w-0 flex-col">
         <Link
           href={`${ROAD_PATHS_PATH}?path=${habit.id}`}
-          className="truncate font-medium underline-offset-4 hover:underline"
+          className="relative min-w-0 font-medium underline-offset-4 hover:underline pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-top-2 pointer-coarse:after:-bottom-1"
         >
-          {habit.title}
+          <span className="block truncate">{habit.title}</span>
         </Link>
         <Text as="span" variant="small" className={cn(habit.today === "due" && "text-warning")}>
           <HabitToday habit={habit} today={today} />

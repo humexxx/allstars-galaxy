@@ -10,6 +10,7 @@ import { AiKeyExpiryNotice } from "@/components/portal/ai-key-expiry-notice";
 import { keyExpiryWarning, type KeyExpiryWarning } from "@/lib/ai/key-expiry";
 import { getAiSettings } from "@/lib/services/ai-service";
 import { getEffectiveContext } from "@/lib/services/impersonation";
+import { getDisabledModules } from "@/lib/services/module-access-service";
 import { getRequestTimeZone, getRequestTodayIso } from "@/lib/utils/request-today";
 
 /**
@@ -36,7 +37,10 @@ export default async function PortalLayout({
   }
 
   // Admins only, and only once the key's date has been entered in Settings.
-  const keyExpiry = ctx.realRole === "admin" ? await aiKeyExpiry() : null;
+  const [keyExpiry, disabledModules] = await Promise.all([
+    ctx.realRole === "admin" ? aiKeyExpiry() : null,
+    getDisabledModules(ctx.effectiveUserId),
+  ]);
 
   return (
     <ReaderTimeZoneProvider timeZone={timeZone}>
@@ -61,11 +65,13 @@ export default async function PortalLayout({
               impersonatedUser={ctx.impersonatedUser}
               role={ctx.realRole ?? "user"}
               isImpersonating={ctx.isImpersonating}
+              disabledModules={disabledModules}
             />
             <div className="flex min-h-0 flex-1">
               <AppSidebar
                 role={ctx.realRole ?? "user"}
                 isImpersonating={ctx.isImpersonating}
+                disabledModules={disabledModules}
               />
               {/* `min-w-0`: a flex child never shrinks below its content's
                 min-content width by default, so from `lg` (sidebar showing) a

@@ -1,3 +1,5 @@
+import type { AppModule } from "@/lib/access/modules";
+
 /**
  * Derived from the `user_role` enum in `db/schema.ts`. Kept in one place
  * because the roles were spelled out by hand in ten files, which is how a
@@ -22,4 +24,6 @@ export type UserListItem = {
   fullName: string | null;
   role: UserRole | null;
   avatarUrl: string | null;
+  /** Modules an admin turned off for this account. */
+  disabledModules: AppModule[];
 };

@@ -17,16 +17,20 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { visibleSections, isNavLeafActive } from "@/components/portal/nav-config"
+import type { AppModule } from "@/lib/access/modules"
 import type { UserRole } from "@/types/user"
 import { Mono } from "@/components/ui/typography"
 
 export function AppSidebar({
   role,
   isImpersonating = false,
+  disabledModules = [],
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   role?: UserRole
   isImpersonating?: boolean
+  /** The effective account's modules an admin turned off (greyed out here). */
+  disabledModules?: readonly AppModule[]
 }) {
   const pathname = usePathname()
   const { isMobile, setOpenMobile } = useSidebar()
@@ -41,8 +45,8 @@ export function AppSidebar({
   // header, and ⌘K menu never drift apart. Disabled sections (e.g. Wellness)
   // are kept here as "Coming soon" placeholders.
   const sections = React.useMemo(
-    () => visibleSections(role, isImpersonating),
-    [role, isImpersonating]
+    () => visibleSections(role, isImpersonating, disabledModules),
+    [role, isImpersonating, disabledModules]
   )
 
   const isActive = (href: string) => isNavLeafActive(pathname, href)
@@ -83,6 +87,7 @@ export function AppSidebar({
                       {disabled ? (
                         <SidebarMenuButton
                           disabled
+                          title={item.locked ? "Not enabled for your account" : undefined}
                           className="w-fit cursor-not-allowed opacity-60"
                         >
                           {item.title}

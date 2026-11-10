@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
-import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
@@ -36,6 +36,8 @@ import {
   type HistoryOwner,
 } from "./finance-history";
 import { getManagedMarginHistory } from "./margin-service";
+import { isModuleEnabled } from "./module-access-service";
+import { getTradingJournal } from "./trading-journal-service";
 import { ensureOwnedRow } from "./ownership";
 import {
   iteratePeriods,
@@ -330,6 +332,7 @@ async function computeStateAt(
 
   const portfolioValue = Math.max(0, options.portfolioValue ?? 0);
   const portfolioClaims = Math.max(0, options.portfolioClaims ?? 0);
+  const tradingValue = Math.max(0, options.tradingValue ?? 0);
   const initialsState = (): ProjectionMonth => {
     const totalDebt = calibrated.debts.reduce(
       (s, d) => s + parseFloat(d.initialBalance),
@@ -358,8 +361,10 @@ async function computeStateAt(
       // confirmation-day snapshot drop a cliff the size of the portfolio.
       portfolioValue,
       portfolioClaims,
+      tradingValue,
       receivables,
-      netWorth: savings + investments + portfolioValue - portfolioClaims + receivables - totalDebt,
+      netWorth:
+        savings + investments + portfolioValue - portfolioClaims + tradingValue + receivables - totalDebt,
       preAsOfCashFlow: 0,
       debts: calibrated.debts.map((d) => ({
         debtId: d.id,
@@ -547,7 +552,9 @@ async function createSnapshotForPlan(
       // Without money owed to the user: `getRecentMonthlySnapshots` adds it
       // back from the plan's current lines, so history and forecast always
       // count it the same way — including snapshots taken before it existed.
-      netWorth: (state.netWorth - state.receivables).toFixed(2),
+      // Nor the trading balance: the journal holds it, and the reads add it
+      // back for the snapshot's day (see `withTradingBalance`).
+      netWorth: (state.netWorth - state.receivables - (state.tradingValue ?? 0)).toFixed(2),
       source,
     })
     .returning({ id: financePlanSnapshots.id });
@@ -620,7 +627,7 @@ export async function recordMovementSnapshot(
         totalDebt: today.totalDebt.toFixed(2),
         portfolioValue: today.portfolioValue.toFixed(2),
         // Without receivables, like every snapshot (see createSnapshotForPlan).
-        netWorth: (today.netWorth - today.receivables).toFixed(2),
+        netWorth: (today.netWorth - today.receivables - (today.tradingValue ?? 0)).toFixed(2),
         source: MOVEMENT,
       })
       .returning({ id: financePlanSnapshots.id });
@@ -680,43 +687,6 @@ export async function createMovementSnapshots(now: Date = new Date()): Promise<{
 }
 
 /**
- * The movement snapshots of the last `monthsBack` months, oldest first, with
- * what was still owed to the user added back — the dashboard's past.
- */
-export async function getRecentMovementSnapshots(
-  planId: string,
-  userId: string,
-  monthsBack: number,
-  today: Date
-): Promise<HistoryPoint[]> {
-  const plan = await getPlanWithLines(planId, userId);
-  if (!plan) return [];
-  const rows = await db
-    .select(HISTORY_COLUMNS)
-    .from(financePlanSnapshots)
-    .where(
-      and(
-        snapshotsOf(await historyOwner(userId)),
-        eq(financePlanSnapshots.source, MOVEMENT),
-        gte(financePlanSnapshots.date, historyCutoff(today, monthsBack))
-      )
-    )
-    .orderBy(asc(financePlanSnapshots.date));
-  return withReceivables(
-    rows.map((r) => ({
-      date: r.date,
-      savings: parseFloat(r.savings),
-      investments: parseFloat(r.investments),
-      totalDebt: parseFloat(r.totalDebt),
-      portfolioValue: r.portfolioValue == null ? null : parseFloat(r.portfolioValue),
-      receivables: 0,
-      netWorth: parseFloat(r.netWorth),
-    })),
-    plan
-  );
-}
-
-/**
  * One snapshot per accounting PERIOD for the last `monthsBack` months: the
  * balance the period OPENED with (see `checkpointPerPeriod`). Used by the
  * chart to plot the recent past alongside the projected future on the same
@@ -754,7 +724,26 @@ export async function getRecentMonthlySnapshots(
     )
     .orderBy(desc(financePlanSnapshots.date));
 
-  return withManagedMargin(withReceivables(checkpointPerPeriod(rows, anchorDay), plan), plan, userId);
+  return withTradingBalance(
+    await withManagedMargin(withReceivables(checkpointPerPeriod(rows, anchorDay), plan), plan, userId),
+    userId
+  );
+}
+
+/**
+ * Adds the trading account's balance on each point's day, from the journal:
+ * snapshots never store it (the journal is where it lives), so a trade logged
+ * late still lands in every point after it.
+ */
+async function withTradingBalance(points: HistoryPoint[], userId: string): Promise<HistoryPoint[]> {
+  if (points.length === 0 || !(await isModuleEnabled(userId, "trading"))) return points;
+  const { equity } = await getTradingJournal(userId, null);
+  if (equity.length === 0) return points;
+  return points.map((p) => {
+    const day = p.date.toISOString().slice(0, 10);
+    const balance = equity.findLast((e) => e.day <= day)?.balance ?? 0;
+    return balance === 0 ? p : { ...p, tradingValue: balance, netWorth: p.netWorth + balance };
+  });
 }
 
 /**
@@ -770,7 +759,9 @@ async function withManagedMargin(
   plan: FinancePlanWithLines | null,
   userId: string
 ): Promise<HistoryPoint[]> {
-  if (!plan?.includePortfolio || points.length === 0) return points;
+  if (!plan?.includePortfolio || points.length === 0 || !(await isModuleEnabled(userId, "portfolio"))) {
+    return points;
+  }
   const history = await getManagedMarginHistory(userId);
   if (history.length === 0) return points;
   return points.map((p) => {
@@ -817,6 +808,8 @@ type HistoryPoint = {
   netWorth: number;
   /** Owed to the investors on the point's day; already off `netWorth`. */
   portfolioClaims?: number;
+  /** The trading account on the point's day; already inside `netWorth`. */
+  tradingValue?: number;
   /** Written by a confirmation: the user's own figures, not the cron's. */
   confirmed?: boolean;
 };
@@ -907,9 +900,12 @@ async function recentSnapshotsForPlans(
         async (p) =>
           [
             p.id,
-            await withManagedMargin(
-              withReceivables(checkpointPerPeriod(rows, p.confirmationDayOfMonth), p),
-              p,
+            await withTradingBalance(
+              await withManagedMargin(
+                withReceivables(checkpointPerPeriod(rows, p.confirmationDayOfMonth), p),
+                p,
+                owner.userId
+              ),
               owner.userId
             ),
           ] as const

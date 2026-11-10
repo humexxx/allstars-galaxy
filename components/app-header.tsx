@@ -8,6 +8,7 @@ import { User } from "@supabase/supabase-js";
 
 import { Logo } from "@/components/logo";
 import { ModeToggle } from "@/components/mode-toggle";
+import type { AppModule } from "@/lib/access/modules";
 import { CommandMenu } from "@/components/command-menu";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,8 @@ type AppHeaderProps = {
    *  Admin link surfaces in the horizontal nav. */
   role?: UserRole;
   isImpersonating?: boolean;
+  /** The effective account's modules turned off: the ⌘K menu leaves them out. */
+  disabledModules?: readonly AppModule[];
 };
 
 // The section links that used to sit here were the sidebar's own groups
@@ -46,6 +49,7 @@ export function AppHeader({
   impersonatedUser,
   role,
   isImpersonating: isImpersonatingProp,
+  disabledModules,
 }: AppHeaderProps) {
   const [isStopping, startStop] = useTransition();
   // Tells the server the reader's time zone, so "today" (the finance period,
@@ -149,7 +153,7 @@ export function AppHeader({
             </span>
           </Button>
         )}
-        <CommandMenu role={role} isImpersonating={isImpersonating} />
+        <CommandMenu role={role} isImpersonating={isImpersonating} disabledModules={disabledModules} />
         <ModeToggle />
         <NavUser user={userData} />
       </div>

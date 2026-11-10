@@ -8,6 +8,7 @@
  * product area.
  */
 
+import { moduleOfPath, type AppModule } from "@/lib/access/modules";
 import type { UserRole } from "@/types/user";
 
 export type NavLeaf = {
@@ -15,6 +16,8 @@ export type NavLeaf = {
   url: string;
   /** Renders disabled ("Coming soon") wherever it's shown. */
   disabled?: boolean;
+  /** Its module is turned off for this account: shown greyed out, never a link. */
+  locked?: boolean;
 };
 
 export type NavSection = {
@@ -34,8 +37,9 @@ export const PORTAL_NAV: NavSection[] = [
   {
     label: "Finance",
     items: [
-      { title: "Portfolio", url: "/portal/portfolio" },
       { title: "Plans", url: "/portal/plans" },
+      { title: "Portfolio", url: "/portal/portfolio" },
+      { title: "Trading Journal", url: "/portal/trading" },
     ],
   },
   {
@@ -76,14 +80,22 @@ function adminAllowed(role: UserRole | undefined, isImpersonating: boolean): boo
  * The sections a given session may see — admin-only sections are dropped for
  * non-admins and while impersonating (so the active session never appears
  * privileged on someone else's behalf). Disabled sections are kept; consumers
- * decide whether to render them.
+ * decide whether to render them. A page whose module is off for the account
+ * stays where it is, `disabled` and `locked`: the account sees it exists.
  */
 export function visibleSections(
   role: UserRole | undefined,
-  isImpersonating = false
+  isImpersonating = false,
+  disabledModules: readonly AppModule[] = []
 ): NavSection[] {
-  return PORTAL_NAV.filter(
-    (section) => !section.adminOnly || adminAllowed(role, isImpersonating)
+  return PORTAL_NAV.filter((section) => !section.adminOnly || adminAllowed(role, isImpersonating)).map(
+    (section) => ({
+      ...section,
+      items: section.items.map((item) => {
+        const owner = moduleOfPath(item.url);
+        return owner && disabledModules.includes(owner) ? { ...item, disabled: true, locked: true } : item;
+      }),
+    })
   );
 }
 

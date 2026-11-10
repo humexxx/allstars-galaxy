@@ -3,10 +3,8 @@
 import { revalidatePath } from "next/cache";
 
 import { safe, type ActionResult } from "@/lib/actions/safe";
-import {
-  logImpersonatedMutation,
-  requireEffectiveContext,
-} from "@/lib/services/impersonation";
+import { logImpersonatedMutation } from "@/lib/services/impersonation";
+import { requireModuleContext } from "@/lib/services/module-access-service";
 import {
   addTripItem,
   addTripPhoto,
@@ -79,7 +77,7 @@ function revalidateTrip(tripId: string, { dashboard }: { dashboard: boolean }): 
 
 export async function createTripAction(input: CreateTripInput): Promise<ActionResult<Trip>> {
   return safe("travel", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("travel");
     const parsed = createTripSchema.safeParse(input);
     if (!parsed.success) {
       return { success: false, error: "Invalid input" };
@@ -99,7 +97,7 @@ export async function createTripAction(input: CreateTripInput): Promise<ActionRe
 
 export async function updateTripAction(input: UpdateTripInput): Promise<ActionResult<Trip>> {
   return safe("travel", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("travel");
     const parsed = updateTripSchema.safeParse(input);
     if (!parsed.success) {
       return { success: false, error: "Invalid input" };
@@ -119,7 +117,7 @@ export async function updateTripAction(input: UpdateTripInput): Promise<ActionRe
 
 export async function deleteTripAction(tripId: string): Promise<ActionResult> {
   return safe("travel", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("travel");
     const parsed = idSchema.safeParse(tripId);
     if (!parsed.success) return { success: false, error: "Invalid id" };
     await deleteTrip(ctx.effectiveUserId, parsed.data);
@@ -141,7 +139,7 @@ export async function addTripItemAction(
   input: TripItemInput
 ): Promise<ActionResult<TripItem>> {
   return safe("travel", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("travel");
     const idParsed = idSchema.safeParse(tripId);
     const parsed = tripItemSchema.safeParse(input);
     if (!idParsed.success || !parsed.success) {
@@ -163,7 +161,7 @@ export async function updateTripItemAction(
   input: UpdateTripItemInput
 ): Promise<ActionResult<TripItem>> {
   return safe("travel", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("travel");
     const idParsed = idSchema.safeParse(tripId);
     const parsed = updateTripItemSchema.safeParse(input);
     if (!idParsed.success || !parsed.success) {
@@ -185,7 +183,7 @@ export async function moveTripItemAction(
   input: MoveTripItemData
 ): Promise<ActionResult<TripItem>> {
   return safe("travel", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("travel");
     const idParsed = idSchema.safeParse(tripId);
     const parsed = moveTripItemSchema.safeParse(input);
     if (!idParsed.success || !parsed.success) {
@@ -208,7 +206,7 @@ export async function deleteTripItemAction(
   itemId: string
 ): Promise<ActionResult> {
   return safe("travel", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("travel");
     const tripIdParsed = idSchema.safeParse(tripId);
     const itemIdParsed = idSchema.safeParse(itemId);
     if (!tripIdParsed.success || !itemIdParsed.success) {
@@ -232,7 +230,7 @@ export async function addTripPhotoAction(
   input: TripPhotoInput
 ): Promise<ActionResult<TripPhoto>> {
   return safe("travel", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("travel");
     const idParsed = idSchema.safeParse(tripId);
     const parsed = tripPhotoSchema.safeParse(input);
     if (!idParsed.success || !parsed.success) {
@@ -254,7 +252,7 @@ export async function deleteTripPhotoAction(
   photoId: string
 ): Promise<ActionResult> {
   return safe("travel", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("travel");
     const tripIdParsed = idSchema.safeParse(tripId);
     const photoIdParsed = idSchema.safeParse(photoId);
     if (!tripIdParsed.success || !photoIdParsed.success) {
@@ -296,7 +294,7 @@ export async function createTripShareAction(
   input: CreateTripShareInput
 ): Promise<ActionResult<TripShare>> {
   return safe("travel", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("travel");
     const idParsed = idSchema.safeParse(tripId);
     const parsed = createTripShareSchema.safeParse(input);
     if (!idParsed.success || !parsed.success) {
@@ -330,7 +328,7 @@ export async function updateTripShareExpiryAction(
   input: UpdateTripShareExpiryInput
 ): Promise<ActionResult<TripShare>> {
   return safe("travel", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("travel");
     const idParsed = idSchema.safeParse(tripId);
     const parsed = updateTripShareExpirySchema.safeParse(input);
     if (!idParsed.success || !parsed.success) {
@@ -359,7 +357,7 @@ export async function revokeTripShareAction(
   shareId: string
 ): Promise<ActionResult> {
   return safe("travel", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("travel");
     const tripIdParsed = idSchema.safeParse(tripId);
     const shareIdParsed = idSchema.safeParse(shareId);
     if (!tripIdParsed.success || !shareIdParsed.success) {
@@ -381,7 +379,7 @@ export async function deleteTripShareAction(
   shareId: string
 ): Promise<ActionResult> {
   return safe("travel", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("travel");
     const tripIdParsed = idSchema.safeParse(tripId);
     const shareIdParsed = idSchema.safeParse(shareId);
     if (!tripIdParsed.success || !shareIdParsed.success) {
@@ -409,7 +407,7 @@ export async function setTripItemStopsAction(
   input: SetItemStopsData
 ): Promise<ActionResult> {
   return safe("travel", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("travel");
     const idParsed = idSchema.safeParse(tripId);
     const parsed = setItemStopsSchema.safeParse(input);
     if (!idParsed.success || !parsed.success) {
@@ -442,7 +440,7 @@ export async function setTripMembersAction(
   input: SetTripMembersData
 ): Promise<ActionResult> {
   return safe("travel", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("travel");
     const idParsed = idSchema.safeParse(tripId);
     const parsed = setTripMembersSchema.safeParse(input);
     if (!idParsed.success || !parsed.success) {
@@ -471,7 +469,7 @@ export async function addTripContributionAction(
   input: TripContributionData
 ): Promise<ActionResult<TripContribution>> {
   return safe("travel", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("travel");
     const idParsed = idSchema.safeParse(tripId);
     const parsed = tripContributionSchema.safeParse(input);
     if (!idParsed.success || !parsed.success) {
@@ -498,7 +496,7 @@ export async function updateTripContributionAction(
   input: UpdateTripContributionData
 ): Promise<ActionResult<TripContribution>> {
   return safe("travel", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("travel");
     const idParsed = idSchema.safeParse(tripId);
     const parsed = updateTripContributionSchema.safeParse(input);
     if (!idParsed.success || !parsed.success) {
@@ -525,7 +523,7 @@ export async function deleteTripContributionAction(
   contributionId: string
 ): Promise<ActionResult> {
   return safe("travel", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("travel");
     const ids = tripChildIdsSchema.safeParse({ tripId, childId: contributionId });
     if (!ids.success) {
       return { success: false, error: "Invalid input" };

@@ -122,6 +122,24 @@ describe("DashboardSportCard", () => {
     expect(screen.getByRole("link", { name: /Tahiti Pro/ }).getAttribute("href")).toContain("sport=surf");
   });
 
+  it("names the champion of a tournament that just finished", async () => {
+    await renderCard({
+      ...card([]),
+      sportId: "tennis",
+      label: "Tennis",
+      event: {
+        name: "Paris Masters",
+        detail: "Paris · Hard",
+        status: "completed",
+        winner: "C. Alcaraz",
+        runnerUp: "J. Sinner",
+      },
+    });
+    expect(screen.getByText("Just finished")).toBeInTheDocument();
+    expect(screen.getByText("Winner C. Alcaraz")).toBeInTheDocument();
+    expect(screen.getByText("def. J. Sinner")).toBeInTheDocument();
+  });
+
   it("asks for the card on the championship it is set to", async () => {
     await renderCard(card([]), "lck");
 

@@ -123,7 +123,7 @@ export function ScoreCard({
           time for a fixture — one shape, so a list of cards reads down one
           column. A fixed width keeps the divider in the same place on every
           card of a list. */}
-      <div className="flex min-w-16 flex-col items-end justify-center gap-0.5 border-l pl-3 text-right">
+      <div className="flex min-w-16 flex-col items-end justify-center gap-0.5 border-l pl-3 text-right max-sm:min-w-18">
         {status !== null && (
           // Live in the team names' colour, which a 10px green word is too
           // faint for; the green is the dot's.

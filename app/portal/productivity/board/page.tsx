@@ -1,6 +1,6 @@
 import { BoardView } from "@/components/productivity/board/board-view";
 import type { Metadata } from "next";
-import { requireEffectiveContext } from "@/lib/services/impersonation";
+import { requireModulePage } from "@/lib/services/module-access-service";
 import { getRequestTodayIso, readRequestTimeZone } from "@/lib/utils/request-today";
 import { isCalendarDay } from "@/lib/productivity/habit";
 import {
@@ -32,7 +32,7 @@ export default async function BoardPage({
 }: {
   searchParams: Promise<{ day?: string }>;
 }): Promise<React.ReactElement> {
-  const ctx = await requireEffectiveContext();
+  const ctx = await requireModulePage("board");
   const userId = ctx.effectiveUserId;
   const { day: requested } = await searchParams;
 

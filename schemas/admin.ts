@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { APP_MODULE_KEYS } from "@/lib/access/modules";
+
 import { idSchema } from "./common";
 import { userRoleSchema } from "./user";
 
@@ -9,6 +11,14 @@ export const updateUserRoleSchema = z.object({
 });
 
 export type UpdateUserRoleData = z.infer<typeof updateUserRoleSchema>;
+
+export const setUserModuleSchema = z.object({
+  userId: idSchema,
+  module: z.enum(APP_MODULE_KEYS),
+  enabled: z.boolean(),
+});
+
+export type SetUserModuleData = z.infer<typeof setUserModuleSchema>;
 
 export const adminTransactionIdSchema = idSchema;
 

@@ -4,23 +4,27 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 /**
  * The trip list: the header with the List / Calendar switch and "New trip" on
- * its row, then a grid of cover cards — the silhouette the page swaps into.
+ * its row, then the "Upcoming" label over a grid of cover cards — the silhouette
+ * the page swaps into.
  */
 export default function TravelPlannerLoading() {
   return (
     <div className="flex flex-col gap-6" aria-hidden="true">
       <PageHeaderSkeleton actions={2} description={false} />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Card key={i} className="pt-0">
-            <Skeleton className="aspect-video w-full rounded-none" />
-            <CardContent className="flex flex-col gap-2">
-              <Skeleton className="h-5 w-40" />
-              <Skeleton className="h-4 w-28" />
-              <Skeleton className="h-4 w-32" />
-            </CardContent>
-          </Card>
-        ))}
+      <div className="flex flex-col gap-3">
+        <Skeleton className="my-0.5 h-3 w-20" />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Card key={i} className="pt-0">
+              <Skeleton className="aspect-video w-full rounded-none" />
+              <CardContent className="flex flex-col gap-2">
+                <Skeleton className="h-5 w-40" />
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-4 w-32" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
     </div>
   )

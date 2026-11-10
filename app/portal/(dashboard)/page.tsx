@@ -11,6 +11,7 @@ import { DashboardSportCards } from "@/components/entertainment/sports/dashboard
 import { DashboardTravelCard } from "@/components/travel/dashboard-travel-card";
 import { DashboardProductivityCard } from "@/components/productivity/dashboard-productivity-card";
 import { requireEffectiveContext } from "@/lib/services/impersonation";
+import { getDisabledModules } from "@/lib/services/module-access-service";
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -22,11 +23,13 @@ export const dynamic = "force-dynamic";
 /**
  * Every card resolves its own data, and the sports ones wait on third-party
  * APIs. Each sits in its own Suspense boundary so the shell and the fast cards
- * stream in immediately, and one slow feed only delays its own card.
+ * stream in immediately, and one slow feed only delays its own card. A card
+ * whose module an admin turned off for the account is not drawn.
  */
 export default async function PortalPage() {
   const ctx = await requireEffectiveContext();
   const userId = ctx.effectiveUserId;
+  const off = new Set(await getDisabledModules(userId));
 
   return (
     <PortalPageContainer>
@@ -35,30 +38,41 @@ export default async function PortalPage() {
             them down. The outline still needs its h1. */}
         <h1 className="sr-only">Dashboard</h1>
         <div className={DASHBOARD_GRID}>
-          <Suspense fallback={<DashboardCardSkeleton rail={5} />}>
-            <DashboardFinanceCard userId={userId} />
-          </Suspense>
-          <Suspense fallback={<DashboardCardSkeleton tiles={2} />}>
-            <DashboardProductivityCard userId={userId} />
-          </Suspense>
-          <Suspense fallback={<DashboardCardSkeleton trips />}>
-            <DashboardTravelCard userId={userId} />
-          </Suspense>
+          {!off.has("plans") && (
+            <Suspense fallback={<DashboardCardSkeleton rail={5} />}>
+              <DashboardFinanceCard userId={userId} />
+            </Suspense>
+          )}
+          {/* The card is the day's board; its habits ride along. */}
+          {!off.has("board") && (
+            <Suspense fallback={<DashboardCardSkeleton board />}>
+              <DashboardProductivityCard userId={userId} />
+            </Suspense>
+          )}
+          {!off.has("travel") && (
+            <Suspense fallback={<DashboardCardSkeleton trips />}>
+              <DashboardTravelCard userId={userId} />
+            </Suspense>
+          )}
           {/* Two sport cards, a row: the favourites are not known yet. */}
-          <Suspense
-            fallback={
-              <>
-                <DashboardSportCardSkeleton />
-                <DashboardSportCardSkeleton />
-              </>
-            }
-          >
-            <DashboardSportCards userId={userId} />
-          </Suspense>
+          {!off.has("sports") && (
+            <Suspense
+              fallback={
+                <>
+                  <DashboardSportCardSkeleton />
+                  <DashboardSportCardSkeleton />
+                </>
+              }
+            >
+              <DashboardSportCards userId={userId} />
+            </Suspense>
+          )}
         </div>
-        <Suspense fallback={null}>
-          <DashboardConfirmationHost userId={userId} />
-        </Suspense>
+        {!off.has("plans") && (
+          <Suspense fallback={null}>
+            <DashboardConfirmationHost userId={userId} />
+          </Suspense>
+        )}
       </section>
     </PortalPageContainer>
   );

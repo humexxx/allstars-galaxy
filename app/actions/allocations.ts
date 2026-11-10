@@ -3,10 +3,8 @@
 import { revalidatePath } from "next/cache";
 
 import { safe, type ActionResult } from "@/lib/actions/safe";
-import {
-  logImpersonatedMutation,
-  requireEffectiveContext,
-} from "@/lib/services/impersonation";
+import { logImpersonatedMutation } from "@/lib/services/impersonation";
+import { requireModuleContext } from "@/lib/services/module-access-service";
 import {
   backfillTransactionAllocations,
   setMethodAllocations,
@@ -48,7 +46,7 @@ export async function setAllocationsAction(
   input: SetAllocationsData
 ): Promise<ActionResult> {
   return safe("allocations", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("portfolio");
     const parsed = setAllocationsSchema.safeParse(input);
     if (!parsed.success) {
       return { success: false, error: parsed.error.issues[0].message };
@@ -76,7 +74,7 @@ export async function setAllocationsAction(
  */
 export async function repriceContributionsAction(): Promise<ActionResult<BackfillResult>> {
   return safe("allocations", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("portfolio");
     if (!(await ownsAnyMethod(ctx.effectiveUserId))) {
       return { success: false, error: "Not allowed" };
     }
@@ -103,7 +101,7 @@ export async function createPriceAssetAction(
   input: CreatePriceAssetInput
 ): Promise<ActionResult<{ id: string }>> {
   return safe("allocations", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("portfolio");
     const parsed = createPriceAssetSchema.safeParse(input);
     if (!parsed.success) {
       return { success: false, error: parsed.error.issues[0].message };
@@ -148,7 +146,7 @@ export async function setManualPriceAction(
   input: SetManualPriceData
 ): Promise<ActionResult> {
   return safe("allocations", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("portfolio");
     const parsed = setManualPriceSchema.safeParse(input);
     if (!parsed.success) {
       return { success: false, error: parsed.error.issues[0].message };
@@ -189,7 +187,7 @@ export async function updateMethodAction(
   input: UpdateMethodData
 ): Promise<ActionResult> {
   return safe("allocations", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("portfolio");
     const parsed = updateMethodSchema.safeParse(input);
     if (!parsed.success) {
       return { success: false, error: parsed.error.issues[0].message };

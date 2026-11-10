@@ -6,8 +6,8 @@ import { idSchema } from "@/schemas/common";
 
 import { PlanEditor } from "@/components/finance/plan-editor";
 import { getPortfolioPerformanceData } from "@/lib/services/chart-service";
-import { listInvestmentMethods } from "@/lib/services/investment-method-service";
-import { requireEffectiveContext } from "@/lib/services/impersonation";
+import { listInvestmentMethods, ownsAnyMethod } from "@/lib/services/investment-method-service";
+import { getDisabledModules, requireModulePage } from "@/lib/services/module-access-service";
 import { getUserPreferences } from "@/lib/services/user-preferences-service";
 import {
   compareDebtStrategies,
@@ -25,6 +25,7 @@ import {
   getLastConfirmedDay,
 } from "@/lib/services/finance-confirmation-service";
 import { getUserPortfolio } from "@/lib/services/portfolio-service";
+import { getTradingSummary } from "@/lib/services/trading-journal-service";
 import { getRequestTimeZone } from "@/lib/utils/request-today";
 import { todayInTimeZone } from "@/lib/utils/date";
 import { parsePlanView } from "@/lib/finance/plan-view";
@@ -40,7 +41,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { id } = await params;
   // A non-uuid would reach Postgres as a cast error and a 500.
   if (!idSchema.safeParse(id).success) return { title: "Plan" };
-  const ctx = await requireEffectiveContext();
+  const ctx = await requireModulePage("plans");
   const plan = await getPlanWithLines(id, ctx.effectiveUserId);
   return {
     title: plan ? plan.name : "Plan",
@@ -50,7 +51,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function PlanDetailPage({ params, searchParams }: PageProps) {
   const [{ id }, { view: viewParam }] = await Promise.all([params, searchParams]);
   if (!idSchema.safeParse(id).success) notFound();
-  const ctx = await requireEffectiveContext();
+  const ctx = await requireModulePage("plans");
   const plan = await getPlanWithLines(id, ctx.effectiveUserId);
   if (!plan) notFound();
 
@@ -87,11 +88,22 @@ export default async function PlanDetailPage({ params, searchParams }: PageProps
   const { baseline, projection, options, today } = view;
   // Only the main plan is confirmed; the warning beside its chart says when
   // the current period still waits for one.
-  const [confirmationDue, lastConfirmedDay] = await Promise.all([
+  const off = await getDisabledModules(ctx.effectiveUserId);
+  const portfolioOn = !off.includes("portfolio");
+  const [confirmationDue, lastConfirmedDay, trading, managesMoney] = await Promise.all([
     plan.isMain
       ? getConfirmationStatus(plan, ctx.effectiveUserId, now).then((s) => s.isDue)
       : false,
     getLastConfirmedDay(ctx.effectiveUserId),
+    // With the module on, the Trading card shows even before the first
+    // trade: an empty journal is the same card at $0.
+    off.includes("trading")
+      ? null
+      : getTradingSummary(ctx.effectiveUserId, timeZone).then(
+          (summary) =>
+            summary ?? { balance: 0, asOf: now.toISOString().slice(0, 10), monthlyGrowthRate: 0, growthMonths: 0 }
+        ),
+    portfolioOn ? ownsAnyMethod(ctx.effectiveUserId) : false,
   ]);
 
   // The plan as written (no confirmation applied): the hover fallback for
@@ -127,7 +139,7 @@ export default async function PlanDetailPage({ params, searchParams }: PageProps
   // Recorded portfolio history feeds the chart's past segment of the portfolio
   // series when the plan includes the portfolio.
   let portfolioHistory: { date: Date; value: number }[] = [];
-  if (baseline.includePortfolio) {
+  if (baseline.includePortfolio && portfolioOn) {
     const portfolio = await getUserPortfolio(ctx.effectiveUserId);
     if (portfolio) {
       const points = await getPortfolioPerformanceData(portfolio.id, "All");
@@ -172,6 +184,9 @@ export default async function PlanDetailPage({ params, searchParams }: PageProps
         backHref="/portal/plans"
         confirmationDue={confirmationDue}
         lastConfirmedDay={lastConfirmedDay}
+        trading={trading}
+        portfolioOn={portfolioOn}
+        managesMoney={managesMoney}
         initialView={parsePlanView(viewParam)}
       />
     </section>

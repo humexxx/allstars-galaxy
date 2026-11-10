@@ -140,7 +140,7 @@ export function BoardTaskCard({
         {...listeners}
         aria-label={`Drag ${task.title}`}
         className={cn(
-          "mt-0.5 h-5 shrink-0 cursor-grab touch-none self-start rounded-sm text-muted-foreground/60 opacity-60 transition hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 active:cursor-grabbing sm:opacity-0 sm:group-hover:opacity-100",
+          "relative mt-0.5 h-5 shrink-0 cursor-grab touch-none self-start rounded-sm pointer-coarse:after:absolute pointer-coarse:after:-inset-x-2.5 pointer-coarse:after:-inset-y-2 text-muted-foreground/60 opacity-60 transition hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 active:cursor-grabbing sm:opacity-0 sm:group-hover:opacity-100",
           isOverlay && "cursor-grabbing opacity-100 sm:opacity-100"
         )}
       >

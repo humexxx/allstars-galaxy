@@ -9,6 +9,7 @@ import { SprintBadge } from "./f1-race-labels";
 import { FeatureBox } from "./shared/feature-box";
 import type { MatchTimeFormat } from "./shared/match-time";
 import { StatusPill } from "./shared/status-pill";
+import { WinnerLine } from "./shared/winner-line";
 
 /**
  * The race the dashboard's F1 card leads with, in the frame of the football
@@ -62,11 +63,11 @@ export function F1NextRace({
             </Mono>
           )}
           {race.status === "completed" && winner && (
-            <span className="flex min-w-0 items-baseline gap-1.5 text-xs">
-              <span className="font-semibold">Winner {winner}</span>
-              {race.winner?.team && <span className="truncate text-muted-foreground">{race.winner.team}</span>}
-              {race.pole && <Mono className="shrink-0 text-2xs text-muted-foreground">Pole {race.pole.code}</Mono>}
-            </span>
+            <WinnerLine
+              winner={winner}
+              beside={race.winner?.team}
+              extra={race.pole && <Mono className="shrink-0 text-2xs text-muted-foreground">Pole {race.pole.code}</Mono>}
+            />
           )}
           {race.lastYear && (
             <span className="truncate text-2xs text-muted-foreground">

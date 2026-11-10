@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 
 import { safe, type ActionResult } from "@/lib/actions/safe";
-import { logImpersonatedMutation, requireEffectiveContext } from "@/lib/services/impersonation";
+import { logImpersonatedMutation } from "@/lib/services/impersonation";
+import { requireModuleContext } from "@/lib/services/module-access-service";
 import {
   applyTravelChanges,
   TravelChangeError,
@@ -31,7 +32,7 @@ export async function applyTravelChangesAction(
   input: TravelChangeSetInput
 ): Promise<ActionResult<AppliedTravelChanges>> {
   return safe("travel-assistant", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("travel");
     if (!canUseAssistant(ctx)) return { success: false, error: UNAVAILABLE };
 
     const parsed = travelChangeSetSchema.safeParse(input);
@@ -55,7 +56,7 @@ export async function applyTravelChangesAction(
 
 export async function undoTravelChangesAction(token: string): Promise<ActionResult> {
   return safe("travel-assistant", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("travel");
     if (!canUseAssistant(ctx)) return { success: false, error: UNAVAILABLE };
     if (!travelUndoTokenSchema.safeParse(token).success) {
       return { success: false, error: "This change can no longer be undone" };

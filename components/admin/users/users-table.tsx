@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import {
   Briefcase,
+  LayoutGrid,
   MoreHorizontal,
   Search,
   ShieldCheck,
@@ -52,6 +53,7 @@ import { runAction } from "@/lib/actions/run";
 
 import { startImpersonationAction } from "@/app/actions/impersonation";
 import { updateUserRoleAction } from "@/app/actions/admin-users";
+import { UserModulesDialog } from "./user-modules-dialog";
 
 import { USER_ROLES, type UserListItem, type UserRole } from "@/types";
 
@@ -78,6 +80,7 @@ export function UsersTable({ users, currentAdminId }: UsersTableProps) {
   const [query, setQuery] = useState("");
   const [pendingRoleChange, setPendingRoleChange] = useState<PendingRoleChange | null>(null);
   const [isRolePending, startRoleTransition] = useTransition();
+  const [modulesFor, setModulesFor] = useState<UserListItem | null>(null);
 
   const sortedUsers = useMemo(() => {
     // Pin the current admin to the top so it is always immediately visible.
@@ -194,6 +197,11 @@ export function UsersTable({ users, currentAdminId }: UsersTableProps) {
                           <RoleIcon aria-hidden />
                           {ROLE_META[role].label}
                         </Badge>
+                        {user.disabledModules.length > 0 && (
+                          <Badge variant="outline" className="ml-1.5">
+                            {user.disabledModules.length} off
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-right">
                         {isSelf ? (
@@ -238,6 +246,11 @@ export function UsersTable({ users, currentAdminId }: UsersTableProps) {
                                 </DropdownMenuItem>
                               )}
 
+                              <DropdownMenuItem onSelect={() => setModulesFor(user)}>
+                                <LayoutGrid />
+                                Modules…
+                              </DropdownMenuItem>
+
                               <DropdownMenuSeparator />
                               <DropdownMenuLabel>
                                 <Eyebrow size="sm">Set role</Eyebrow>
@@ -270,6 +283,8 @@ export function UsersTable({ users, currentAdminId }: UsersTableProps) {
           </CardContent>
         </Card>
       )}
+
+      <UserModulesDialog user={modulesFor} onOpenChange={(open) => !open && setModulesFor(null)} />
 
       <AlertDialog
         open={pendingRoleChange !== null}

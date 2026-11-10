@@ -897,6 +897,38 @@ describe("racquetCard", () => {
     expect(__testing.racquetCard(base, off, "ATP").event).toMatchObject({ name: "Paris Masters", status: "upcoming" });
   });
 
+  it("keeps the tournament won yesterday on the reader's calendar, with its champion, over the next one", () => {
+    const paris: RacquetTournament = {
+      ...tournament("Paris Masters", "completed"),
+      startDate: "2026-11-02",
+      endDate: "2026-11-08",
+      champion: "C. Alcaraz",
+      runnerUp: "J. Sinner",
+    };
+    const stockholm = { ...tournament("Stockholm", "live"), startDate: "2026-11-09", endDate: "2026-11-15" };
+    const week = tour([paris, stockholm]);
+    // Monday 11pm in Costa Rica, already Tuesday in UTC.
+    const monday = { timeZone: "America/Costa_Rica", now: Date.parse("2026-11-10T05:00:00Z") };
+    expect(__testing.racquetCard(base, week, "ATP", monday).event).toMatchObject({
+      name: "Paris Masters",
+      status: "completed",
+      winner: "C. Alcaraz",
+      runnerUp: "J. Sinner",
+    });
+
+    const tuesday = { timeZone: "America/Costa_Rica", now: Date.parse("2026-11-10T15:00:00Z") };
+    const next = __testing.racquetCard(base, week, "ATP", tuesday).event;
+    expect(next).toMatchObject({ name: "Stockholm", status: "live" });
+    expect(next?.winner).toBeUndefined();
+  });
+
+  it("does not lead with a finished tournament nobody is named the champion of", () => {
+    const paris = { ...tournament("Paris Masters", "completed"), endDate: "2026-11-08" };
+    const week = tour([paris, tournament("Stockholm", "upcoming")]);
+    const monday = { timeZone: "UTC", now: Date.parse("2026-11-09T12:00:00Z") };
+    expect(__testing.racquetCard(base, week, "ATP", monday).event).toMatchObject({ name: "Stockholm" });
+  });
+
   it("links the tournament to its own page, not the sport's", () => {
     const week = tour([tournament("vienna-2026", "live")]);
     expect(__testing.racquetCard(base, week, "ATP").event?.href).toBe("/portal/entertainment/sports/tennis/vienna-2026");
@@ -932,6 +964,16 @@ describe("surfCard", () => {
 
     const off = __testing.surfCard(base, data([stop("Pipe", "upcoming", "2026-12-08"), stop("Philippines", "upcoming", "2026-10-31")]));
     expect(off.event).toMatchObject({ name: "Philippines", status: "upcoming" });
+  });
+
+  it("keeps the stop won yesterday, with its winner", () => {
+    const won = { ...stop("Philippines", "completed", "2026-11-08"), winner: "Yago Dora", runnerUp: "Ítalo Ferreira" };
+    const monday = { timeZone: "UTC", now: Date.parse("2026-11-09T12:00:00Z") };
+    expect(__testing.surfCard(base, data([won, stop("Pipe", "upcoming", "2026-12-08")]), monday).event).toMatchObject({
+      name: "Philippines",
+      status: "completed",
+      winner: "Yago Dora",
+    });
   });
 });
 

@@ -7,6 +7,7 @@ import { streamAssistantTurn } from "@/lib/ai/assistant/respond";
 import { aiModel } from "@/lib/ai/models";
 import { getAiSettings, recordAiUsage } from "@/lib/services/ai-service";
 import { getEffectiveContext } from "@/lib/services/impersonation";
+import { isModuleEnabled } from "@/lib/services/module-access-service";
 import { listAssistantTrips } from "@/lib/services/travel-assistant-service";
 import { converse } from "@/lib/travel/assistant/converse";
 import { getRequestTodayIso } from "@/lib/utils/request-today";
@@ -39,6 +40,9 @@ const bodySchema = z.object({
 export async function POST(request: Request): Promise<Response> {
   const ctx = await getEffectiveContext();
   if (!ctx) return NextResponse.json({ error: "Sign in again" }, { status: 401 });
+  if (!(await isModuleEnabled(ctx.effectiveUserId, "travel"))) {
+    return NextResponse.json({ error: "This module is not enabled for your account" }, { status: 403 });
+  }
   if (!canUseAssistant(ctx)) {
     return NextResponse.json({ error: "The travel assistant is not available" }, { status: 403 });
   }

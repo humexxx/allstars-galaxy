@@ -288,15 +288,15 @@ export async function getDashboardSportCard(
     }
     case "tennis": {
       const [data, news] = await Promise.all([getTennisData(), getEspnNews("atp")]);
-      return { ...racquetCard({ ...base, sportId: "tennis" }, data.atp, "ATP"), news: cardNews(news) };
+      return { ...racquetCard({ ...base, sportId: "tennis" }, data.atp, "ATP", clock), news: cardNews(news) };
     }
     case "padel": {
       const [data, news] = await Promise.all([getPadelData(), getPadelNews()]);
-      return { ...racquetCard({ ...base, sportId: "padel" }, data.men, "Premier Padel"), news: cardNews(news) };
+      return { ...racquetCard({ ...base, sportId: "padel" }, data.men, "Premier Padel", clock), news: cardNews(news) };
     }
     case "surf": {
       const [data, news] = await Promise.all([getSurfData(), getSurfNews()]);
-      return { ...surfCard(base, data), news: cardNews(news) };
+      return { ...surfCard(base, data, clock), news: cardNews(news) };
     }
     default:
       return null;
@@ -664,18 +664,41 @@ function swissRecords(stage: SwissStage): { teamId: string; wins: number; losses
     .sort((a, b) => b.wins - a.wins || a.losses - b.losses);
 }
 
+/**
+ * The day before the reader's today, `YYYY-MM-DD`: an event whose last day is
+ * this or later and has a winner still leads its card, so a Sunday final's
+ * champion is there all Monday.
+ */
+function yesterdayOf(clock: CardClock): string {
+  const today = calendarDayInTimeZone(new Date(clock.now), clock.timeZone).getTime();
+  return new Date(today - 86_400_000).toISOString().slice(0, 10);
+}
+
+/**
+ * The event a tour's card leads with: one won yesterday or today on the
+ * reader's calendar, with its winner, then the one on, else the next to start.
+ */
+function leadEvent<E extends { status: "completed" | "live" | "upcoming"; startDate: string; endDate: string }>(
+  events: readonly E[],
+  wonBy: (e: E) => string | undefined,
+  clock: CardClock
+): E | undefined {
+  const yesterday = yesterdayOf(clock);
+  return (
+    events.findLast((e) => e.status === "completed" && e.endDate >= yesterday && wonBy(e) !== undefined) ??
+    events.find((e) => e.status === "live") ??
+    events.filter((e) => e.status === "upcoming").sort((a, b) => a.startDate.localeCompare(b.startDate))[0]
+  );
+}
+
 /** The men's tour only, so no championship to pick: the hub follows no women's tour. */
 function racquetCard(
   base: CardBase & { sportId: RacquetSport },
   data: RacquetData,
-  context: string
+  context: string,
+  clock: CardClock = utcClock()
 ): DashboardSportCard {
-  const tournaments = data.tournaments;
-  const event =
-    tournaments.find((t) => t.status === "live") ??
-    tournaments
-      .filter((t) => t.status === "upcoming")
-      .sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
+  const event = leadEvent(data.tournaments, (t) => t.champion, clock);
   return {
     ...base,
     context,
@@ -687,6 +710,7 @@ function racquetCard(
             .join(" · "),
           status: event.status,
           href: tournamentPath(base.sportId, event.id),
+          ...(event.status === "completed" && { winner: event.champion, runnerUp: event.runnerUp }),
         }
       : undefined,
     matches: [],
@@ -708,11 +732,9 @@ function racquetCard(
   };
 }
 
-/** The stop on now, else next, and the tour's rankings: the racquet card's shape. */
-function surfCard(base: CardBase, data: SurfData): DashboardSportCard {
-  const stop =
-    data.events.find((e) => e.status === "live") ??
-    data.events.filter((e) => e.status === "upcoming").sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
+/** The stop just won, on now, else next, and the tour's rankings: the racquet card's shape. */
+function surfCard(base: CardBase, data: SurfData, clock: CardClock = utcClock()): DashboardSportCard {
+  const stop = leadEvent(data.events, (e) => e.winner, clock);
   return {
     ...base,
     context: "Championship Tour",
@@ -721,6 +743,7 @@ function surfCard(base: CardBase, data: SurfData): DashboardSportCard {
           name: stop.name,
           detail: [stop.location, formatDayRange(stop.startDate, stop.endDate)].join(" · "),
           status: stop.status,
+          ...(stop.status === "completed" && { winner: stop.winner, runnerUp: stop.runnerUp }),
         }
       : undefined,
     matches: [],

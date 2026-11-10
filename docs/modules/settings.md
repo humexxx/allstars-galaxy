@@ -1,12 +1,15 @@
 # Settings
 
 > **Status:** Active
-> **Last reviewed:** 2026-11-03
+> **Last reviewed:** 2026-11-10
 
 ## Overview
 Personal portal preferences. Today it holds a single appearance toggle — the
-decorative module mascot (a clay-style bean doing a module-themed activity)
-shown after the content of module pages; on Finance it mines for gold.
+decorative module mascot (a small overworld hero doing whatever the module on
+screen is about) shown after the content of module pages: mining gold on
+Plans, watering a money tree on Portfolio, calling a chart on the Trading
+Journal, moving a card to Done on the Board, ticking each day's signpost on
+Road Paths, playing the sport on screen on Sports, reading a map on Travel.
 
 ## Routes
 - `/portal/settings` — preferences page (appearance toggles); the section rail
@@ -34,7 +37,7 @@ shown after the content of module pages; on Finance it mines for gold.
 - `ai.ts` — `AiSettings`, `AiSpend`, `AiUsageSummary`
 
 ## Components
-`components/settings/` — `preferences-form.tsx` (optimistic Switch row + live mascot preview); `ai-settings.tsx` (`AiSettingsPane`: model `Select`, spend with a `Progress` against the credit, earlier months, key status and an expiry `DateField`); `settings-shell.tsx` takes `ai` and adds the category only when it is present. `components/portal/ai-key-expiry-notice.tsx` is the admins' reminder dialog, mounted by `app/portal/layout.tsx`. The mascot itself is [`components/portal/context-avatar.tsx`](../../components/portal/context-avatar.tsx) — shared, pure SVG + CSS keyframes (no client JS), one variant per module (`finance` only so far: a bean mining a gold cube and carrying the nuggets to a chest), every part keyed to one generated timeline on a `--ctxa-cycle` clock, animations stop under `prefers-reduced-motion`.
+`components/settings/` — `preferences-form.tsx` (optimistic Switch row + live mascot preview, the finance scene imported on its own so the other scenes stay out of the settings bundle); `ai-settings.tsx` (`AiSettingsPane`: model `Select`, spend with a `Progress` against the credit, earlier months, key status and an expiry `DateField`); `settings-shell.tsx` takes `ai` and adds the category only when it is present. `components/portal/ai-key-expiry-notice.tsx` is the admins' reminder dialog, mounted by `app/portal/layout.tsx`. The mascot itself is [`components/portal/context-avatar.tsx`](../../components/portal/context-avatar.tsx), a thin entry over [`components/portal/mascot/`](../../components/portal/mascot/): `kit.tsx` (the hero — cap with a star, scarf, jacket, backpack — drawn as flat outlined vector in the style of a handheld RPG's overworld, the tiled stage and its ground tones, the palette as `--ctxa-*` custom properties re-tinted under `.dark`, and the keyframe helpers `loop` / `arc` / `stepFrames`) and one scene per variant: `finance-scene.tsx` (mines a gold-veined boulder and carries the nuggets to a chest, posed by `FinanceMood`), `sports-scene.tsx` (one short loop per `SportId`: a goal, a field goal, a jump shot, a batting cage, a slap shot, rallies against a wall, a lap, a wave, a ranked game) and `travel-scene.tsx` (a map at a crossroads, suitcase packed, destinations in a thought bubble). Pure SVG + CSS keyframes (no client JS); every part of a scene is keyed to one generated timeline on a `--ctxa-cycle` clock, each scene prefixes its classes because scenes share the page's styles, and animations stop under `prefers-reduced-motion` on a pose that still reads. [`components/portal/module-mascot.tsx`](../../components/portal/module-mascot.tsx) is the server mount: it reads the preference and renders the variant or nothing.
 
 ## DB tables — `db/schema.ts`
 - `user_preferences` — one row per user, created lazily on first write; absence of a row means "all defaults" (the service layer owns the default values)
@@ -53,7 +56,7 @@ shown after the content of module pages; on Finance it mines for gold.
   is theirs; `MAX_MILESTONES` (12) is the guard rail.
 - Conventional Commits scope: `portal` (no dedicated `settings` scope yet — add it to `commitlint.config.mjs` if the module grows).
 - Reached from the user dropdown ([`components/nav-user.tsx`](../../components/nav-user.tsx)), not the sidebar nav sections.
-- Each module's layout owns rendering the mascot (e.g. `app/portal/plans/layout.tsx` — see [finance.md](./finance.md)); this module only owns the preference itself.
+- Each module owns rendering the mascot, always inside a `<Suspense fallback={null}>` after the content so no page waits on the preference: `app/portal/plans/layout.tsx` (posed by the main plan — see [finance.md](./finance.md)), the Sports hub and its race and tournament pages (the page knows the sport; the layout does not) and `app/portal/entertainment/travel-planner/layout.tsx` — see [entertainment.md](./entertainment.md) — `app/portal/portfolio/page.tsx` ([portfolio.md](./portfolio.md)), `app/portal/trading/layout.tsx` ([finance.md](./finance.md)) and the Board's and Road Paths' layouts ([productivity.md](./productivity.md)). This module only owns the preference itself. A new variant is a scene file beside the others, a member of `ContextAvatarProps`, and a `<ModuleMascot>` in the module.
 - **AI spend is the app's own count.** An individual Claude Console account
   cannot read its balance or key expiry through the Admin API, so each call's
   `usage` is priced at the list rates in [`lib/ai/models.ts`](../../lib/ai/models.ts)

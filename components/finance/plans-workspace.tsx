@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useMemo, useRef, useState, useTransition } from "react";
-import { Copy, Highlighter, LineChart, MoreHorizontal, Star, Trash2 } from "lucide-react";
+import { Copy, Highlighter, LineChart, MoreHorizontal, Plus, Star, Trash2 } from "lucide-react";
 
 import {
   Card,
@@ -162,6 +162,8 @@ export function PlansWorkspace({
   // Net worth today leads the page, as on the dashboard: the user's real
   // position (the same under every plan) against the last closed period.
   const hero = useMemo(() => {
+    // No plan yet: the same page, at zero.
+    if (plans.length === 0) return { netWorth: 0, sinceClose: null, since: null };
     const main = plans.find((p) => p.isMain);
     const timeline = main ? timelines[main.id] : undefined;
     const now = timeline?.points[timeline.todayIndex];
@@ -281,7 +283,8 @@ export function PlansWorkspace({
                   <Mono
                     className={cn(
                       "text-3xl font-semibold sm:text-4xl",
-                      statToneClass(moneySign(hero.netWorth) >= 0 ? "positive" : "negative")
+                      moneySign(hero.netWorth) !== 0 &&
+                        statToneClass(moneySign(hero.netWorth) > 0 ? "positive" : "negative")
                     )}
                   >
                     <CountUpCurrency value={hero.netWorth} />
@@ -314,8 +317,12 @@ export function PlansWorkspace({
             {filtered.length === 0 ? (
               <EmptyState
                 icon={LineChart}
-                title="No plans in the chart"
-                description="Select at least one plan to chart."
+                title={plans.length === 0 ? "No plans yet" : "No plans in the chart"}
+                description={
+                  plans.length === 0
+                    ? "Create a plan and its projection draws here."
+                    : "Select at least one plan to chart."
+                }
                 className={cn("flex flex-col justify-center", CHART_HEIGHT)}
               />
             ) : (
@@ -352,6 +359,17 @@ export function PlansWorkspace({
           </CardHeader>
           <CardContent className="lg:min-h-0 lg:overflow-y-auto">
             <ul className="flex flex-col gap-2">
+              {plans.length === 0 && (
+                <li>
+                  <Link
+                    href="/portal/plans/new"
+                    className="flex items-center gap-2.5 rounded-lg border border-dashed p-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                  >
+                    <Plus className="size-4" aria-hidden />
+                    Create your first plan
+                  </Link>
+                </li>
+              )}
               {plans.map((plan) => {
                 const s = summaries[plan.id];
                 const end = atHorizon.get(plan.id) ?? null;

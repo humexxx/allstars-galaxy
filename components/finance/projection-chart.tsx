@@ -57,6 +57,7 @@ const PORTFOLIO = dashboardSeries("investments").color;
 const DEBT = dashboardSeries("debt").color;
 const OWED = dashboardSeries("receivables").color;
 const CASH = dashboardSeries("savings").color;
+const TRADING = dashboardSeries("trading").color;
 
 // recharts types `animationEasing` as the named curves only, but its
 // animator (react-smooth) takes any t → progress function.
@@ -236,6 +237,8 @@ type ChartRow = {
   /** See `ChartPoint.skipped`. */
   skipped?: boolean;
   savings?: number;
+  /** The trading account's balance; inside net worth. */
+  tradingValue?: number;
   totalDebt?: number;
   investments?: number;
   /** Base plan's net worth at this period (scenario ghost line). */
@@ -251,6 +254,9 @@ type ChartRow = {
   receivables?: number;
   owedPast: number | null;
   owedFuture: number | null;
+  /** The trading account, split past/future like the portfolio. */
+  tradingPast: number | null;
+  tradingFuture: number | null;
 };
 
 // Custom tooltip. The past (solid) and future (dashed) series OVERLAP at the
@@ -263,8 +269,10 @@ function PointTooltip(props: {
   payload?: Array<{ value: number | null; payload: ChartRow }>;
   lineColor: string;
   ghostLabel?: string;
+  /** The account has the trading module: its row shows, $0 included. */
+  showTrading?: boolean;
 }) {
-  const { active, payload, lineColor, ghostLabel } = props;
+  const { active, payload, lineColor, ghostLabel, showTrading } = props;
   if (!active || !payload?.length) return null;
   const row = payload.find((p) => p?.value != null)?.payload;
   if (!row) return null;
@@ -297,6 +305,9 @@ function PointTooltip(props: {
             value={formatMoneyFull(portfolioTotal)}
             valueClass={portfolioTotal < 0 ? "text-destructive" : undefined}
           />
+        )}
+        {(showTrading || moneySign(row.tradingValue ?? 0) > 0) && (
+          <TooltipRow swatch={TRADING} label="Trading" value={formatMoneyFull(row.tradingValue ?? 0)} />
         )}
         {/* Never under zero (see `shownCash`). */}
         {moneySign(row.savings ?? 0) > 0 && (
@@ -375,6 +386,7 @@ type ChartPoint = {
   /** Carried for the hover tooltip only. */
   investments?: number;
   savings?: number;
+  tradingValue?: number;
   /** A period never confirmed: on the axis, no dot, figures interpolated. */
   skipped?: boolean;
 };
@@ -408,6 +420,9 @@ type ProjectionChartProps = {
   /** Portfolio value aligned per point (its own cyan series). Nulls
    *  skip the point. Omit to render no portfolio series. */
   portfolioValues?: (number | null)[];
+  /** Draw the trading account (each point's `tradingValue`) as its own
+   *  series: for an account with the Trading module. */
+  showTrading?: boolean;
   /** Net-worth milestones to annotate, from the user's global preference.
    *  Every one that the trajectory crosses gets a labelled reference line. */
   milestones?: readonly number[];
@@ -436,6 +451,7 @@ export const ProjectionChart = memo(function ProjectionChart({
   ghostValues,
   ghostLabel,
   portfolioValues,
+  showTrading = false,
   milestones = DEFAULT_FINANCE_MILESTONES,
   todayLabel,
   markToday = true,
@@ -455,7 +471,8 @@ export const ProjectionChart = memo(function ProjectionChart({
   const reducedMotion = usePrefersReducedMotion();
   // Gradient ids, unique per chart: two charts on a page must not share them.
   const gradientId = useId().replace(/:/g, "");
-  const fillOf = (series: "net" | "portfolio" | "debt" | "owed"): string => `url(#${gradientId}-${series})`;
+  const fillOf = (series: "net" | "portfolio" | "trading" | "debt" | "owed"): string =>
+    `url(#${gradientId}-${series})`;
 
   // Build the per-point split between past (solid) and future (dashed). We use
   // a numeric x-axis (each row's `idx` is its x coordinate) so milestone
@@ -463,13 +480,18 @@ export const ProjectionChart = memo(function ProjectionChart({
   // instead of snapping to the nearest data point. That avoids two milestones
   // collapsing onto the same month when both cross between the same pair of
   // points.
-  const { data, crossings, yTicks, hasDebt, hasOwed } = useMemo(() => {
+  const { data, crossings, yTicks, hasDebt, hasOwed, hasTrading } = useMemo(() => {
     // Debt is what is still owed, so it falls to zero as it is paid; money owed
     // to the user falls the same way as it is paid back. Either draws its last
     // $0 beside the payment that cleared it, then stops: a line along zero for
     // years would read as something still owed.
     const debts = points.map((p) => p.totalDebt ?? 0);
     const owed = points.map((p) => p.receivables ?? 0);
+    const trades = points.map((p) => (showTrading ? (p.tradingValue ?? 0) : 0));
+    // An account with the module sees its trading line even at $0 (flat on
+    // zero), as it sees the Trading card; a balance that ends is drawn down to
+    // zero and stops, like debt.
+    const tradingFlat = showTrading && trades.every((t) => moneySign(t) === 0);
     const drawnAt = (values: number[], i: number): boolean =>
       moneySign(values[i]) !== 0 ||
       (i > 0 && moneySign(values[i - 1]) !== 0) ||
@@ -488,6 +510,7 @@ export const ProjectionChart = memo(function ProjectionChart({
         isBoundary && todayLabel ? TODAY_DAY.format(p.date) : MONTH_FORMATTER.format(p.date);
       const debt = drawnAt(debts, i) ? debts[i] : null;
       const owedNow = drawnAt(owed, i) ? owed[i] : null;
+      const trading = !showTrading ? null : tradingFlat ? 0 : drawnAt(trades, i) ? trades[i] : null;
       return {
         idx: i,
         monthLabel,
@@ -505,6 +528,7 @@ export const ProjectionChart = memo(function ProjectionChart({
         futureValue: isFuture || isBoundary ? value : null,
         rawValue: value,
         savings: p.savings,
+        tradingValue: p.tradingValue,
         totalDebt: p.totalDebt,
         investments: p.investments,
         ghostValue: ghostValues?.[i] ?? null,
@@ -517,6 +541,8 @@ export const ProjectionChart = memo(function ProjectionChart({
         receivables: p.receivables,
         owedPast: isPast || isBoundary ? owedNow : null,
         owedFuture: isFuture || isBoundary ? owedNow : null,
+        tradingPast: isPast || isBoundary ? trading : null,
+        tradingFuture: isFuture || isBoundary ? trading : null,
       };
     });
 
@@ -540,6 +566,7 @@ export const ProjectionChart = memo(function ProjectionChart({
       r.portfolioRaw,
       r.debtPast ?? r.debtFuture,
       r.owedPast ?? r.owedFuture,
+      r.tradingPast ?? r.tradingFuture,
     ]);
     const ticks = niceTicks(plotted.filter((v): v is number => v !== null));
 
@@ -549,8 +576,9 @@ export const ProjectionChart = memo(function ProjectionChart({
       yTicks: ticks,
       hasDebt: debts.some((d) => moneySign(d) !== 0),
       hasOwed: owed.some((d) => moneySign(d) !== 0),
+      hasTrading: showTrading,
     };
-  }, [points, pastCount, ghostValues, portfolioValues, milestones, todayLabel]);
+  }, [points, pastCount, ghostValues, portfolioValues, showTrading, milestones, todayLabel]);
 
   const xMax = Math.max(0, data.length - 1);
 
@@ -682,6 +710,7 @@ export const ProjectionChart = memo(function ProjectionChart({
               [
                 ["net", lineColor, 0.28, data.map((r) => r.rawValue)],
                 ["portfolio", PORTFOLIO, 0.18, data.map((r) => r.portfolioRaw)],
+                ["trading", TRADING, 0.16, data.map((r) => r.tradingPast ?? r.tradingFuture)],
                 ["debt", DEBT, 0.16, data.map((r) => r.debtPast ?? r.debtFuture)],
                 ["owed", OWED, 0.16, data.map((r) => r.owedPast ?? r.owedFuture)],
               ] as const
@@ -756,7 +785,7 @@ export const ProjectionChart = memo(function ProjectionChart({
             />
           ))}
           <ChartTooltip
-            content={<PointTooltip lineColor={lineColor} ghostLabel={ghostLabel} />}
+            content={<PointTooltip lineColor={lineColor} ghostLabel={ghostLabel} showTrading={showTrading} />}
           />
 
           {/* Base plan ghost (scenario comparison) — subdued and underneath the
@@ -803,6 +832,38 @@ export const ProjectionChart = memo(function ProjectionChart({
               strokeWidth={1.5}
               strokeDasharray="6 4"
               fill={fillOf("portfolio")}
+              {...draw("future", 0)}
+              connectNulls
+              dot={false}
+              activeDot={{ r: 4 }}
+            />
+          )}
+
+          {/* The trading account, its own series as on the dashboard: solid
+              past, dashed projection at its recent pace. */}
+          {hasTrading && (
+            <Area
+              dataKey="tradingPast"
+              name="Trading"
+              type="monotone"
+              stroke={TRADING}
+              strokeWidth={1.5}
+              fill={fillOf("trading")}
+              {...draw("past", 0)}
+              connectNulls
+              dot={false}
+              activeDot={{ r: 4 }}
+            />
+          )}
+          {hasTrading && (
+            <Area
+              dataKey="tradingFuture"
+              name="Trading"
+              type="monotone"
+              stroke={TRADING}
+              strokeWidth={1.5}
+              strokeDasharray="6 4"
+              fill={fillOf("trading")}
               {...draw("future", 0)}
               connectNulls
               dot={false}

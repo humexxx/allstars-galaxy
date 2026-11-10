@@ -13,7 +13,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { EmptyState } from "@/components/ui/empty-state";
 import { Spinner } from "@/components/ui/spinner";
 import { Heading, Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
@@ -154,42 +153,46 @@ export function PlanLineEditor({
         </Button>
       </div>
 
-      {lines.length === 0 ? (
-        <EmptyState title={emptyLabel} />
-      ) : (
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                {/* Phone: type and schedule ride under the name instead of
-                    pushing the Schedule column off-screen. */}
-                <TableHead className="hidden w-28 sm:table-cell">Type</TableHead>
-                <TableHead className="text-right sm:w-36 sm:text-left">Amount</TableHead>
-                <TableHead className="hidden sm:table-cell">Schedule</TableHead>
-                <TableHead className="w-20" />
+      {/* Empty, it is still the table: its headers over one line saying so. */}
+      <div className="rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              {/* Phone: type and schedule ride under the name instead of
+                  pushing the Schedule column off-screen. */}
+              <TableHead className="hidden w-28 sm:table-cell">Type</TableHead>
+              <TableHead className="text-right sm:w-36 sm:text-left">Amount</TableHead>
+              <TableHead className="hidden sm:table-cell">Schedule</TableHead>
+              <TableHead className="w-20" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {lines.length === 0 && (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={5} className="py-6 text-center text-muted-foreground">
+                  {emptyLabel}
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {ownGroups.map((group) => (
-                <GroupRows key={group.key} group={group} {...rowActions} />
-              ))}
-            </TableBody>
-            {owedLines.length > 0 && (
-              <OwedSection
-                groups={owedGroups}
-                count={owedLines.length}
-                total={
-                  todayIso === null
-                    ? null
-                    : owedStillToCome(owedLines, todayIso, schedule)
-                }
-                {...rowActions}
-              />
             )}
-          </Table>
-        </div>
-      )}
+            {ownGroups.map((group) => (
+              <GroupRows key={group.key} group={group} {...rowActions} />
+            ))}
+          </TableBody>
+          {owedLines.length > 0 && (
+            <OwedSection
+              groups={owedGroups}
+              count={owedLines.length}
+              total={
+                todayIso === null
+                  ? null
+                  : owedStillToCome(owedLines, todayIso, schedule)
+              }
+              {...rowActions}
+            />
+          )}
+        </Table>
+      </div>
 
       <LineFormDialog
         open={dialogState.open}

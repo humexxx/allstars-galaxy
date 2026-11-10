@@ -25,7 +25,7 @@ export function RotationButton({
       aria-label={`${rotation.playing ? "Pause" : "Play"} ${what}`}
       onClick={rotation.toggle}
       className={cn(
-        "grid size-6 place-items-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
+        "relative grid size-6 place-items-center rounded-full text-muted-foreground pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-1.5 transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
         className
       )}
     >

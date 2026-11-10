@@ -3,10 +3,8 @@
 import { revalidatePath } from "next/cache";
 
 import { safe, type ActionResult } from "@/lib/actions/safe";
-import {
-  logImpersonatedMutation,
-  requireEffectiveContext,
-} from "@/lib/services/impersonation";
+import { logImpersonatedMutation } from "@/lib/services/impersonation";
+import { requireModuleContext } from "@/lib/services/module-access-service";
 import {
   deleteLineOverride,
   setPlanColor,
@@ -77,7 +75,7 @@ async function planAction<T>(
   run: (c: PlanOperationContext) => Promise<ActionResult<T>>
 ): Promise<ActionResult<T>> {
   return safe<T>("finance-plans", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("plans");
     try {
       const result = await run(await planOperationContext(ctx.effectiveUserId));
       if (result.success) revalidatePlans();
@@ -119,7 +117,7 @@ export async function setMainPlanAction(planId: string): Promise<ActionResult> {
 
 export async function setPlanColorAction(input: PlanColorData): Promise<ActionResult> {
   return safe("finance-plans", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("plans");
     const parsed = planColorSchema.safeParse(input);
     if (!parsed.success) {
       return { success: false, error: "Unsupported colour" };
@@ -243,7 +241,7 @@ export async function upsertLineOverrideAction(
   input: LineOverrideData
 ): Promise<ActionResult> {
   return safe("finance-plans", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("plans");
     const idParsed = idSchema.safeParse(planId);
     const parsed = lineOverrideSchema.safeParse(input);
     if (!idParsed.success || !parsed.success) {
@@ -266,7 +264,7 @@ export async function deleteLineOverrideAction(
   input: DeleteLineOverrideData
 ): Promise<ActionResult> {
   return safe("finance-plans", async () => {
-    const ctx = await requireEffectiveContext();
+    const ctx = await requireModuleContext("plans");
     const idParsed = idSchema.safeParse(planId);
     const parsed = deleteLineOverrideSchema.safeParse(input);
     if (!idParsed.success || !parsed.success) {

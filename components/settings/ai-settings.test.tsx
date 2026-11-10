@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/app/actions/ai-settings", () => ({ updateAiSettingsAction: vi.fn() }));
 vi.mock("@/app/actions/user-preferences", () => ({ setShowContextAvatarAction: vi.fn() }));
 vi.mock("@/components/settings/milestones-form", () => ({ FinanceSettings: () => null }));
-vi.mock("@/components/portal/context-avatar", () => ({ ContextAvatar: () => null }));
+vi.mock("@/components/portal/mascot/finance-scene", () => ({ FinanceScene: () => null }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 
 import { updateAiSettingsAction } from "@/app/actions/ai-settings";

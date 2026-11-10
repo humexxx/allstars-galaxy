@@ -242,6 +242,12 @@ drop or rename, and give new `NOT NULL` columns a default.
     `@/lib/services/impersonation`, then scope every query to
     `ctx.effectiveUserId` (this is what honours an active impersonation
     session).
+  - **A product module's pages and actions** (plans, portfolio, trading,
+    board, road paths, travel, sports) open with `requireModulePage(module)` /
+    `requireModuleContext(module)` from `@/lib/services/module-access-service`
+    instead: the same context, refused when an admin turned the module off for
+    the account. A new module page or action that skips it is reachable by an
+    account that should not see it. See [`docs/modules/admin.md`](docs/modules/admin.md).
   - **Method-owner actions** → `requireProvider()` from
     `@/lib/services/auth-server` gates the *creation* of investment methods.
     Everything about a method that already exists is gated on OWNERSHIP

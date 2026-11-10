@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "disabled_modules" text[] DEFAULT '{}'::text[] NOT NULL;

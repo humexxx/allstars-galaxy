@@ -59,10 +59,10 @@ export function formatSignedCurrency(value: number | string | null | undefined):
   if (value === null || value === undefined) return "$0.00";
   const num = typeof value === "string" ? parseFloat(value) : value;
   if (Number.isNaN(num)) return "$0.00";
-  // Round first: -0.004 formats as "0.00", and a minus in front of nothing
-  // is a sign with no magnitude.
+  // Round first: -0.004 formats as "0.00", and a sign in front of nothing
+  // is a sign with no magnitude — zero prints bare.
   const rounded = Math.round(num * 100) / 100;
-  const sign = rounded >= 0 ? "+" : "-";
+  const sign = rounded > 0 ? "+" : rounded < 0 ? "-" : "";
   return `${sign}${CURRENCY_FORMATTER.format(Math.abs(rounded))}`;
 }
 

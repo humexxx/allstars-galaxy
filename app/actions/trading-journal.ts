@@ -37,12 +37,13 @@ function revalidateJournal(): void {
 /** Runs a journal write: a refusal the user should read comes back as the error. */
 async function journalWrite<T>(
   action: string,
+  entityTable: "trading_trades" | "trading_cash_movements",
   write: (userId: string) => Promise<T>
 ): Promise<ActionResult<T>> {
   const ctx = await requireModuleContext("trading");
   try {
     const data = await write(ctx.effectiveUserId);
-    await logImpersonatedMutation({ action, entityTable: "trading_trades" });
+    await logImpersonatedMutation({ action, entityTable });
     revalidateJournal();
     return { success: true, data } as ActionResult<T>;
   } catch (err) {
@@ -55,7 +56,7 @@ export async function createTradeAction(input: TradeInput): Promise<ActionResult
   return safe("trading-journal", async () => {
     const parsed = tradeSchema.safeParse(input);
     if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
-    return journalWrite("trading.trade.create", (userId) => createTrade(userId, parsed.data));
+    return journalWrite("trading.trade.create", "trading_trades", (userId) => createTrade(userId, parsed.data));
   });
 }
 
@@ -63,7 +64,7 @@ export async function updateTradeAction(input: UpdateTradeInput): Promise<Action
   return safe("trading-journal", async () => {
     const parsed = updateTradeSchema.safeParse(input);
     if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
-    return journalWrite("trading.trade.update", (userId) => updateTrade(userId, parsed.data));
+    return journalWrite("trading.trade.update", "trading_trades", (userId) => updateTrade(userId, parsed.data));
   });
 }
 
@@ -71,14 +72,16 @@ export async function closeTradeAction(input: CloseTradeInput): Promise<ActionRe
   return safe("trading-journal", async () => {
     const parsed = closeTradeSchema.safeParse(input);
     if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
-    return journalWrite("trading.trade.close", (userId) => closeTrade(userId, parsed.data));
+    return journalWrite("trading.trade.close", "trading_trades", (userId) => closeTrade(userId, parsed.data));
   });
 }
 
 export async function deleteTradeAction(id: string): Promise<ActionResult> {
   return safe("trading-journal", async () => {
     if (!idSchema.safeParse(id).success) return { success: false, error: "Trade not found" };
-    const result = await journalWrite("trading.trade.delete", (userId) => deleteTrade(userId, id));
+    const result = await journalWrite("trading.trade.delete", "trading_trades", (userId) =>
+      deleteTrade(userId, id)
+    );
     return result.success ? { success: true } : result;
   });
 }
@@ -87,7 +90,9 @@ export async function addCashMovementAction(input: CashMovementInput): Promise<A
   return safe("trading-journal", async () => {
     const parsed = cashMovementSchema.safeParse(input);
     if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
-    const result = await journalWrite("trading.cash.add", (userId) => addCashMovement(userId, parsed.data));
+    const result = await journalWrite("trading.cash.add", "trading_cash_movements", (userId) =>
+      addCashMovement(userId, parsed.data)
+    );
     return result.success ? { success: true } : result;
   });
 }
@@ -95,7 +100,9 @@ export async function addCashMovementAction(input: CashMovementInput): Promise<A
 export async function deleteCashMovementAction(id: string): Promise<ActionResult> {
   return safe("trading-journal", async () => {
     if (!idSchema.safeParse(id).success) return { success: false, error: "Movement not found" };
-    const result = await journalWrite("trading.cash.delete", (userId) => deleteCashMovement(userId, id));
+    const result = await journalWrite("trading.cash.delete", "trading_cash_movements", (userId) =>
+      deleteCashMovement(userId, id)
+    );
     return result.success ? { success: true } : result;
   });
 }

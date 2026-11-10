@@ -1,13 +1,14 @@
 import "server-only";
 
 import { cache } from "react";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import { tradingCashMovements, tradingTrades } from "@/db/schema";
 import { buildJournal, toJournalTrade } from "@/lib/finance/trading";
 import { isoDay } from "@/lib/finance/schedule";
 import { calendarDayInTimeZone } from "@/lib/utils/date";
+import { formatCurrency } from "@/lib/utils/format";
 import type {
   CashMovementData,
   CloseTradeData,
@@ -27,13 +28,28 @@ export class TradingJournalError extends Error {}
 
 const decimal = (n: number): string => String(n);
 
+export type JournalTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * One money-moving write at a time per journal: the balance a withdrawal is
+ * checked against is still the balance when its row lands. The lock is the
+ * transaction's, so it is released with it.
+ */
+export async function withJournalLock<T>(userId: string, write: (tx: JournalTx) => Promise<T>): Promise<T> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('trading_journal'), hashtext(${userId}::text))`);
+    return write(tx);
+  });
+}
+
 /** Every trade and cash movement of the user's journal. */
 export async function getJournalRows(
-  userId: string
+  userId: string,
+  reader: Pick<JournalTx, "select"> = db
 ): Promise<{ trades: TradingTradeRow[]; cash: TradingCashMovementRow[] }> {
   const [trades, cash] = await Promise.all([
-    db.select().from(tradingTrades).where(eq(tradingTrades.userId, userId)),
-    db.select().from(tradingCashMovements).where(eq(tradingCashMovements.userId, userId)),
+    reader.select().from(tradingTrades).where(eq(tradingTrades.userId, userId)),
+    reader.select().from(tradingCashMovements).where(eq(tradingCashMovements.userId, userId)),
   ]);
   return { trades, cash };
 }
@@ -123,7 +139,7 @@ export async function closeTrade(userId: string, data: CloseTradeData): Promise<
     .set({
       exitPrice: decimal(data.exitPrice),
       closedAt,
-      fees: decimal(parseFloat(trade.fees) + data.fees),
+      fees: (parseFloat(trade.fees) + data.fees).toFixed(2),
       updatedAt: new Date(),
     })
     .where(and(eq(tradingTrades.id, data.id), eq(tradingTrades.userId, userId)))
@@ -141,29 +157,44 @@ export async function addCashMovement(
   userId: string,
   data: CashMovementData
 ): Promise<TradingCashMovementRow> {
-  if (data.kind === "withdrawal") {
-    const { balance } = buildJournal(await getJournalRows(userId), utcDay, utcDay(new Date()));
+  const values = {
+    userId,
+    kind: data.kind,
+    amount: data.amount.toFixed(2),
+    occurredAt: new Date(data.occurredAt),
+    note: data.note || null,
+  };
+  if (data.kind === "deposit") {
+    const [row] = await db.insert(tradingCashMovements).values(values).returning();
+    return row;
+  }
+  return withJournalLock(userId, async (tx) => {
+    const { balance } = buildJournal(await getJournalRows(userId, tx), utcDay, utcDay(new Date()));
     if (data.amount > balance + 0.005) {
       throw new TradingJournalError(`Only $${balance.toFixed(2)} is in the account`);
     }
-  }
-  const [row] = await db
-    .insert(tradingCashMovements)
-    .values({
-      userId,
-      kind: data.kind,
-      amount: data.amount.toFixed(2),
-      occurredAt: new Date(data.occurredAt),
-      note: data.note || null,
-    })
-    .returning();
-  return row;
+    const [row] = await tx.insert(tradingCashMovements).values(values).returning();
+    return row;
+  });
 }
 
+/** Deletes a movement. A deposit the account has already spent or paid out stays. */
 export async function deleteCashMovement(userId: string, id: string): Promise<void> {
-  const deleted = await db
-    .delete(tradingCashMovements)
-    .where(and(eq(tradingCashMovements.id, id), eq(tradingCashMovements.userId, userId)))
-    .returning({ id: tradingCashMovements.id });
-  if (deleted.length === 0) throw new TradingJournalError("Movement not found");
+  await withJournalLock(userId, async (tx) => {
+    const rows = await getJournalRows(userId, tx);
+    const movement = rows.cash.find((c) => c.id === id);
+    if (!movement) throw new TradingJournalError("Movement not found");
+    if (movement.kind === "deposit") {
+      const rest = { trades: rows.trades, cash: rows.cash.filter((c) => c.id !== id) };
+      const { balance } = buildJournal(rest, utcDay, utcDay(new Date()));
+      if (balance < -0.005) {
+        throw new TradingJournalError(
+          `Deleting it would leave the account at ${formatCurrency(balance)}; it cannot go below $0.00`
+        );
+      }
+    }
+    await tx
+      .delete(tradingCashMovements)
+      .where(and(eq(tradingCashMovements.id, id), eq(tradingCashMovements.userId, userId)));
+  });
 }

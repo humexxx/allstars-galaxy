@@ -1,7 +1,7 @@
 # Admin
 
 > **Status:** Active
-> **Last reviewed:** 2026-11-08
+> **Last reviewed:** 2026-11-10
 
 ## Overview
 Admin-only operations: user management (roles and which modules each account
@@ -23,7 +23,7 @@ may use), transaction approval queue, and impersonation (with audit trail).
 - `transaction-service.ts` — `approveTransactionById` / `rejectTransactionById`
 - `snapshot-service.ts` — `createManualSnapshotsForAllPortfolios` / `deleteManualSnapshotsForAllPortfolios`
 - `impersonation.ts`
-- `module-access-service.ts` — `getDisabledModules` (request-cached), `isModuleEnabled`, `requireModulePage(module)` (a module page's gate: redirects to `/portal`), `requireModuleContext(module)` (a module action's gate: throws `ModuleDisabledError`), `setModuleEnabled`
+- `module-access-service.ts` — `getDisabledModules` (request-cached), `isModuleEnabled`, `requireModulePage(module)` (a module page's gate: redirects to `/portal`), `requireModuleContext(module)` (a module action's gate: throws `ModuleDisabledError`), `setModuleEnabled` (one `array_remove` / `array_append` statement, so two toggles at once both land)
 
 ## Schemas — `/schemas/`
 - `user.ts`

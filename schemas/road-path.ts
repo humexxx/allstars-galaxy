@@ -55,7 +55,11 @@ export type UpdateRoadPathData = z.output<typeof updateRoadPathSchema>;
 
 /** The user's road paths, in the order they now go. */
 export const reorderRoadPathsSchema = z.object({
-  ids: z.array(idSchema).min(1).max(500),
+  ids: z
+    .array(idSchema)
+    .min(1)
+    .max(500)
+    .refine((ids) => new Set(ids).size === ids.length, "A road path is listed twice"),
 });
 
 export type ReorderRoadPathsData = z.infer<typeof reorderRoadPathsSchema>;

@@ -127,6 +127,34 @@ describe("growth for the plan", () => {
     expect(j.monthlyGrowthRate).toBeCloseTo((0.1 + 50 / 1100) / 2);
   });
 
+  it("counts a day's deposit and withdrawal each in full, not their difference", () => {
+    const j = buildJournal(
+      {
+        trades: [trade({ id: "1", exitPrice: "150", openedAt: at("2026-08-03"), closedAt: at("2026-08-10") })], // +500
+        cash: [
+          cash({ id: "in", amount: "5000", occurredAt: at("2026-08-01", 9) }),
+          cash({ id: "out", kind: "withdrawal", amount: "4000", occurredAt: at("2026-08-01", 10) }),
+        ],
+      },
+      dayOf,
+      "2026-09-20"
+    );
+    expect(j.months[0].returnPct).toBeCloseTo(500 / 5000);
+    expect(j.balance).toBe(1500);
+    expect(j.equity[0]).toMatchObject({ day: "2026-08-01", balance: 1000 });
+  });
+
+  it("counts one month for at most a doubling, or a wipe-out", () => {
+    const months = [
+      { month: "2026-06", pnl: 500, returnPct: 50 },
+      { month: "2026-07", pnl: -300, returnPct: -3 },
+      { month: "2026-08", pnl: 20, returnPct: 0.02 },
+    ];
+    expect(trailingMonthlyRate(months.slice(0, 1), "2026-09-20").rate).toBe(1);
+    expect(trailingMonthlyRate(months.slice(1, 2), "2026-09-20").rate).toBe(-1);
+    expect(trailingMonthlyRate(months, "2026-09-20").rate).toBeCloseTo(0.02 / 3);
+  });
+
   it("reads no pace without a complete month", () => {
     expect(trailingMonthlyRate(journalMonths([], [], "2026-09-20"), "2026-09-20")).toEqual({ rate: 0, months: 0 });
   });

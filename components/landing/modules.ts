@@ -98,7 +98,7 @@ export const LANDING_MODULES: LandingModule[] = [
     name: "Sports",
     title: "Sports",
     description:
-      "Live scores, standings and brackets for F1, football and the World Cup, LoL, tennis, padel and the NBA. Pick the sports you follow and their highlights land on your dashboard.",
+      "Live scores, standings and brackets for F1, football and the World Cup, tennis, padel, LoL, the NBA and the NFL. Pick the sports you follow and their highlights land on your dashboard.",
     icon: Trophy,
     status: "live",
     href: "/portal/entertainment/sports",

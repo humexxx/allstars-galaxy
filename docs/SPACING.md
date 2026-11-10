@@ -221,7 +221,11 @@ to another offset.
   36px, and a `size="sm"` `ToggleGroup` gets the default 40px track, whose
   26px segments a thumb kept missing. `xs` / `icon-xs` keep their 24px look —
   they sit inside a line of text — and on a touch screen (`pointer-coarse`)
-  reach 36px through an invisible `::after` hit area, as `Switch` does. So
+  reach 36px through an invisible `::after` hit area, as `Switch` does. A
+  target that is not a `Button` — a text link on a line of its own, a
+  carousel's dots — takes the same area by hand (`relative
+  pointer-coarse:after:absolute pointer-coarse:after:inset-x-0
+  pointer-coarse:after:-inset-y-2`), growing only away from its neighbours. So
   write `size="sm"` once and let the kit step it; never pin a small control to
   `h-8` at every width. The step is `max-sm:`, never a desktop `sm:` value:
   a caller's own height (`h-6`, `size-9`) holds from `sm` up exactly as it

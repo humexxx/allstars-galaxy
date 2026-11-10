@@ -68,8 +68,9 @@ export function LeadCarousel({ label, children }: { label: string; children: Rea
           </div>
         ))}
       </div>
-      {/* 24px targets, the least a pointer is given; the dot shown is longer
-          and darker than the rest, each still clear of the card's background. */}
+      {/* 24px targets, the least a pointer is given, 36px tall under a finger;
+          the dot shown is longer and darker than the rest, each still clear of
+          the card's background. */}
       <div className="absolute right-1 bottom-0 flex">
         <RotationButton rotation={rotation} what="games" />
         {slides.map((_, i) => (
@@ -82,7 +83,7 @@ export function LeadCarousel({ label, children }: { label: string; children: Rea
               rotation.stop();
               show(i);
             }}
-            className="grid size-6 place-items-center rounded-full focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+            className="relative grid size-6 place-items-center rounded-full pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-1.5 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           >
             <span
               className={cn(

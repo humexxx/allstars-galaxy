@@ -65,7 +65,8 @@ export function BannerSlides({ slides, index }: { slides: BannerSlide[]; index: 
 
 /**
  * One dot per photo along the banner's bottom edge, the current one drawn
- * long. Inside the banner's bottom padding, so it never runs into the dates.
+ * long. Inside the banner's bottom padding, so it never runs into the dates;
+ * under a finger each one answers over a taller area than it draws.
  */
 export function BannerDots({
   slides,
@@ -78,7 +79,7 @@ export function BannerDots({
 }) {
   if (slides.length < 2) return null;
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-1 z-10 flex justify-center gap-1">
+    <div className="pointer-events-none absolute inset-x-0 bottom-1 z-10 flex justify-center">
       {slides.map((slide, i) => (
         <button
           key={slide.id}
@@ -86,7 +87,7 @@ export function BannerDots({
           onClick={() => onShow(i)}
           aria-label={`Photo ${i + 1} of ${slides.length}`}
           aria-current={i === index}
-          className="pointer-events-auto flex h-3 items-center px-0.5"
+          className="pointer-events-auto relative flex h-3 items-center px-1 pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-top-3 pointer-coarse:after:-bottom-1"
         >
           <span
             className={cn(

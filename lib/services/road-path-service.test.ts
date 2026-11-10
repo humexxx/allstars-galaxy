@@ -1,3 +1,4 @@
+import { PgDialect } from "drizzle-orm/pg-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // road-path-service uses two access shapes:
@@ -280,13 +281,24 @@ describe("reorderRoadPaths", () => {
   const owned = (rows: { id: string }[]) =>
     selectMock.mockReturnValueOnce({ from: () => ({ where: async () => rows }) });
 
-  it("numbers the user's paths in the order given", async () => {
+  it("numbers the user's paths in the order given, in one statement", async () => {
     owned([{ id: A }, { id: B }]);
     const chain = mockUpdateReturning(buildPath());
 
     await expect(reorderRoadPaths(USER_ID, [B, A])).resolves.toBe(true);
 
-    expect(chain.set.mock.calls.map((c) => c[0])).toEqual([{ position: 0 }, { position: 1 }]);
+    expect(chain.set).toHaveBeenCalledTimes(1);
+    expect(new PgDialect().sqlToQuery(chain.set.mock.calls[0][0].position)).toMatchObject({
+      sql: 'case "road_paths"."id" when $1::uuid then $2::int when $3::uuid then $4::int end',
+      params: [B, 0, A, 1],
+    });
+  });
+
+  it("writes nothing when a path is listed twice", async () => {
+    owned([{ id: A }]);
+
+    await expect(reorderRoadPaths(USER_ID, [A, A])).resolves.toBe(false);
+    expect(updateMock).not.toHaveBeenCalled();
   });
 
   it("writes nothing when a path is not the user's", async () => {

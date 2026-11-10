@@ -15,6 +15,12 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 /** How many complete months the plan's growth rate averages. */
 export const GROWTH_MONTHS = 6;
+/**
+ * The most one month counts for in that average, either way. A month's return
+ * is its P&L over the money it had, so one good trade on a nearly empty
+ * account reads as thousands of percent, and a plan would compound it.
+ */
+export const MAX_MONTHLY_RETURN = 1;
 
 const num = (v: string | null): number => (v == null ? 0 : parseFloat(v));
 const round2 = (n: number): number => Math.round(n * 100) / 100;
@@ -153,18 +159,23 @@ export function journalDays(trades: readonly JournalTrade[]): JournalDay[] {
   return [...byDay.values()].sort((a, b) => a.day.localeCompare(b.day));
 }
 
-/** Money moving into the account, by day: deposits, less withdrawals, plus realized P&L. */
+type DayFlow = { cashIn: number; cashOut: number; pnl: number };
+
+/** Money moving through the account, by day: deposits, withdrawals and realized P&L. */
 function dailyFlows(
   trades: readonly JournalTrade[],
   cash: readonly JournalCashMovement[]
-): Map<string, { cash: number; pnl: number }> {
-  const flows = new Map<string, { cash: number; pnl: number }>();
-  const at = (day: string) => {
-    const f = flows.get(day) ?? { cash: 0, pnl: 0 };
+): Map<string, DayFlow> {
+  const flows = new Map<string, DayFlow>();
+  const at = (day: string): DayFlow => {
+    const f = flows.get(day) ?? { cashIn: 0, cashOut: 0, pnl: 0 };
     flows.set(day, f);
     return f;
   };
-  for (const c of cash) at(c.day).cash += c.kind === "deposit" ? c.amount : -c.amount;
+  for (const c of cash) {
+    if (c.kind === "deposit") at(c.day).cashIn += c.amount;
+    else at(c.day).cashOut += c.amount;
+  }
   for (const t of closedInOrder(trades)) at(t.closedDay).pnl += t.pnl;
   return flows;
 }
@@ -180,7 +191,7 @@ export function equityCurve(
   return [...flows.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([day, f]) => {
-      balance += f.cash + f.pnl;
+      balance += f.cashIn - f.cashOut + f.pnl;
       cumulativePnl += f.pnl;
       return { day, balance: round2(balance), cumulativePnl: round2(cumulativePnl) };
     });
@@ -241,8 +252,8 @@ export function journalMonths(
   const byMonth = new Map<string, { cashIn: number; cashOut: number; pnl: number }>();
   for (const [day, f] of flows) {
     const m = byMonth.get(monthOf(day)) ?? { cashIn: 0, cashOut: 0, pnl: 0 };
-    if (f.cash > 0) m.cashIn += f.cash;
-    else m.cashOut -= f.cash;
+    m.cashIn += f.cashIn;
+    m.cashOut += f.cashOut;
     m.pnl += f.pnl;
     byMonth.set(monthOf(day), m);
   }
@@ -260,8 +271,9 @@ export function journalMonths(
 
 /**
  * The monthly return the plan grows the trading balance at: the plain average
- * of the last `GROWTH_MONTHS` complete months that had money to work with —
- * today's month is still running, so it is left out.
+ * of the last `GROWTH_MONTHS` complete months that had money to work with,
+ * each counted within ±`MAX_MONTHLY_RETURN` — today's month is still running,
+ * so it is left out.
  */
 export function trailingMonthlyRate(
   months: readonly JournalMonth[],
@@ -272,7 +284,8 @@ export function trailingMonthlyRate(
     .filter((m) => m.month < monthOf(today) && m.returnPct != null)
     .slice(-count);
   if (complete.length === 0) return { rate: 0, months: 0 };
-  const rate = complete.reduce((s, m) => s + (m.returnPct ?? 0), 0) / complete.length;
+  const capped = (r: number): number => Math.max(-MAX_MONTHLY_RETURN, Math.min(MAX_MONTHLY_RETURN, r));
+  const rate = complete.reduce((s, m) => s + capped(m.returnPct ?? 0), 0) / complete.length;
   return { rate, months: complete.length };
 }
 

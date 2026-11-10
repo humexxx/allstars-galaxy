@@ -2,7 +2,6 @@ import "server-only";
 
 import { and, eq } from "drizzle-orm";
 
-import { db } from "@/db";
 import { tradingCashMovements, tradingTrades } from "@/db/schema";
 import { buildJournal, tradePnl } from "@/lib/finance/trading";
 import { isoDay } from "@/lib/finance/schedule";
@@ -13,7 +12,7 @@ import { tradeSchema, type TradeInput } from "@/schemas/trading";
 import type { TradingChangeLine, TradingOutlook } from "@/types/trading-assistant";
 import type { JournalTrade, TradingCashMovementRow, TradingTradeRow } from "@/types/trading";
 
-import { getJournalRows, getTradingJournal, tradeValues } from "./trading-journal-service";
+import { getJournalRows, getTradingJournal, tradeValues, withJournalLock } from "./trading-journal-service";
 
 /** A change the model must correct: an unknown id, a closed trade closed again, an overdraft. */
 export class TradingChangeError extends Error {}
@@ -168,7 +167,7 @@ export function planTradingChanges(
             ...rowInput(trade),
             exitPrice: change.exitPrice,
             closedAt: when(change.closedAt),
-            fees: num(trade.fees) + (change.fees ?? 0),
+            fees: Math.round((num(trade.fees) + (change.fees ?? 0)) * 100) / 100,
           },
           trade.symbol
         );
@@ -285,7 +284,8 @@ export async function previewTradingChanges(
 /**
  * Writes a proposal the user approved: checked again against the journal as
  * it is now (the card is not trusted, and the journal may have moved), then
- * written in one transaction, so a proposal lands whole or not at all.
+ * written in the same transaction under the journal's lock, so a proposal
+ * lands whole or not at all and no other withdrawal slips in between.
  */
 export async function applyTradingChanges(
   userId: string,
@@ -293,8 +293,8 @@ export async function applyTradingChanges(
   set: TradingChangeSet,
   now: Date = new Date()
 ): Promise<PlannedChanges> {
-  const planned = planTradingChanges(set, await getJournalRows(userId), { now, timeZone });
-  await db.transaction(async (tx) => {
+  return withJournalLock(userId, async (tx) => {
+    const planned = planTradingChanges(set, await getJournalRows(userId, tx), { now, timeZone });
     for (const write of planned.writes) {
       switch (write.kind) {
         case "insertTrade":
@@ -321,8 +321,8 @@ export async function applyTradingChanges(
           break;
       }
     }
+    return planned;
   });
-  return planned;
 }
 
 /** Closed trades the model reads; older ones are summed in the stats. */

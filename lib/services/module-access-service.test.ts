@@ -1,13 +1,25 @@
+import type { SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.unmock("@/lib/services/module-access-service");
 
 const rows: { disabledModules: string[] }[] = [];
-const updates: unknown[] = [];
+const updates: { disabledModules: SQL }[] = [];
+const matched: { id: string }[] = [];
 vi.mock("@/db", () => ({
   db: {
     select: () => ({ from: () => ({ where: async () => rows }) }),
-    update: () => ({ set: (v: unknown) => ({ where: async () => updates.push(v) }) }),
+    update: () => ({
+      set: (v: { disabledModules: SQL }) => ({
+        where: () => ({
+          returning: async () => {
+            updates.push(v);
+            return matched;
+          },
+        }),
+      }),
+    }),
   },
 }));
 
@@ -30,6 +42,7 @@ import {
 beforeEach(() => {
   rows.length = 0;
   updates.length = 0;
+  matched.length = 0;
   requireEffectiveContext.mockResolvedValue({ effectiveUserId: "u1" });
 });
 
@@ -51,13 +64,18 @@ describe("module access", () => {
     await expect(requireModuleContext("board")).rejects.toBeInstanceOf(ModuleDisabledError);
   });
 
-  it("adds and removes a module from the off list, once", async () => {
-    rows.push({ disabledModules: ["sports"] });
-    await setModuleEnabled("u3", "trading", false);
-    await setModuleEnabled("u3", "sports", true);
-    expect(updates).toEqual([
-      expect.objectContaining({ disabledModules: ["sports", "trading"] }),
-      expect.objectContaining({ disabledModules: [] }),
+  it("adds and removes a module in the statement itself, so the list is never read first", async () => {
+    matched.push({ id: "u3" });
+    await expect(setModuleEnabled("u3", "trading", false)).resolves.toBe(true);
+    await expect(setModuleEnabled("u3", "sports", true)).resolves.toBe(true);
+
+    const written = updates.map((u) => new PgDialect().sqlToQuery(u.disabledModules));
+    expect(written).toMatchObject([
+      {
+        sql: 'array_append(array_remove("users"."disabled_modules", $1::text), $2::text)',
+        params: ["trading", "trading"],
+      },
+      { sql: 'array_remove("users"."disabled_modules", $1::text)', params: ["sports"] },
     ]);
   });
 

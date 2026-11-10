@@ -1,6 +1,6 @@
 import "server-only";
 
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 
@@ -48,15 +48,19 @@ export async function requireModuleContext(module: AppModule): Promise<Effective
   return ctx;
 }
 
-/** Turns one module on or off for an account. False when no user has that id. */
+/**
+ * Turns one module on or off for an account. False when no user has that id.
+ * The list is edited in the statement itself, so two toggles at once both land.
+ */
 export async function setModuleEnabled(userId: string, module: AppModule, enabled: boolean): Promise<boolean> {
-  const [row] = await db
-    .select({ disabledModules: users.disabledModules })
-    .from(users)
-    .where(eq(users.id, userId));
-  if (!row) return false;
-  const current = parseDisabledModules(row.disabledModules);
-  const next = enabled ? current.filter((m) => m !== module) : [...new Set([...current, module])];
-  await db.update(users).set({ disabledModules: next, updatedAt: new Date() }).where(eq(users.id, userId));
-  return true;
+  const without = sql<string[]>`array_remove(${users.disabledModules}, ${module}::text)`;
+  const updated = await db
+    .update(users)
+    .set({
+      disabledModules: enabled ? without : sql<string[]>`array_append(${without}, ${module}::text)`,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, userId))
+    .returning({ id: users.id });
+  return updated.length > 0;
 }

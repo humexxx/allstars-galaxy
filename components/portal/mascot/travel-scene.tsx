@@ -4,6 +4,8 @@
  */
 import type { ReactElement } from "react";
 
+import type { MascotCharacter } from "@/types/preferences";
+
 import { Cast, Flower, Hero, loop, rot, Shadow, Stage, tr, Tree, Tuft, type Frame } from "./kit";
 
 const INK = { stroke: "var(--ctxa-ink)", strokeLinejoin: "round", strokeLinecap: "round" } as const;
@@ -211,7 +213,7 @@ const DREAM_ICONS: ReactElement[] = [
   </g>,
 ];
 
-export function TravelScene({ className }: { className?: string }): ReactElement {
+export function TravelScene({ character, className }: { character?: MascotCharacter; className?: string }): ReactElement {
   return (
     <Stage
       styles={STYLES}
@@ -248,7 +250,7 @@ export function TravelScene({ className }: { className?: string }): ReactElement
         <g transform={`translate(${HERO_X} 0)`}>
           <Shadow />
           <g className="ctxa-loop trv-hop">
-            <Hero face="happy" arm="ctxa-loop trv-arm" farArm="ctxa-loop trv-far" head="ctxa-loop trv-head" tool={<TravelMap />} />
+            <Hero character={character} face="happy" arm="ctxa-loop trv-arm" farArm="ctxa-loop trv-far" head="ctxa-loop trv-head" tool={<TravelMap />} />
             <g strokeWidth="1.4" {...INK}>
               <circle cx="17" cy="-65" r="1.5" fill="var(--ctxa-white)" />
               <circle cx="21.5" cy="-69.5" r="2.3" fill="var(--ctxa-white)" />

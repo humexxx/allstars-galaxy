@@ -1485,6 +1485,9 @@ export const userPreferences = pgTable("user_preferences", {
   // Decorative module mascot shown after page content (e.g. the miner on
   // finance pages). Toggleable from /portal/settings.
   showContextAvatar: boolean("show_context_avatar").notNull().default(true),
+  // Who that mascot is drawn as: a `MascotCharacter` id. Text, not an enum, so
+  // adding a character is a code change and never a migration.
+  mascotCharacter: text("mascot_character").notNull().default("explorer"),
   // Net-worth milestones annotated on the projection charts. Global (not
   // per-plan) and editable from /portal/settings. NULL means "never touched
   // it" and falls back to the built-in list in code — a default here would

@@ -188,13 +188,16 @@ function MoneyTree(): ReactElement {
     <g>
       <path d="M-4.5 0 Q-2.5 -14 -3 -36 H3 Q2.5 -14 4.5 0 Z" fill="var(--ctxa-wood-2)" strokeWidth="2" {...INK} />
       {CROWN.map(([cx, cy, r]) => (
-        <circle key={cx} cx={cx} cy={cy} r={r} fill="var(--ctxa-g3)" stroke="var(--ctxa-ink)" strokeWidth="4" />
+        <circle key={cx} cx={cx} cy={cy} r={r} fill="var(--ctxa-leaf-2)" stroke="var(--ctxa-ink)" strokeWidth="4" />
       ))}
       {CROWN.map(([cx, cy, r]) => (
-        <circle key={cx} cx={cx} cy={cy} r={r} fill="var(--ctxa-g3)" />
+        <circle key={cx} cx={cx} cy={cy} r={r} fill="var(--ctxa-leaf-2)" />
       ))}
-      <path d="M-8 -64 a10 7 0 0 1 11 -5" fill="none" stroke="var(--ctxa-g)" strokeWidth="2.6" strokeLinecap="round" />
-      <path d="M-15 -47 a6 5 0 0 1 4 -6" fill="none" stroke="var(--ctxa-g)" strokeWidth="2.2" strokeLinecap="round" />
+      {CROWN.map(([cx, cy, r]) => (
+        <circle key={cx} cx={cx - 1.8} cy={cy - 1.8} r={r - 2.6} fill="var(--ctxa-leaf)" />
+      ))}
+      <path d="M-8 -64 a10 7 0 0 1 11 -5" fill="none" stroke="var(--ctxa-leaf-0)" strokeWidth="2.6" strokeLinecap="round" />
+      <path d="M-15 -47 a6 5 0 0 1 4 -6" fill="none" stroke="var(--ctxa-leaf-0)" strokeWidth="2.2" strokeLinecap="round" />
     </g>
   );
 }

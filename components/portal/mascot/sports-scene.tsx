@@ -1019,9 +1019,6 @@ function f1(): Scene {
         ))}
         <Shadow rx={46} x={2} y={1} />
         <g className="f1-bob" strokeWidth="2" {...INK}>
-          <g transform="translate(-2 11)">
-            <path className="ctxa-scarf" d="M-8 -30 q-9 0 -13 7 l5 2.5 q2 -4 8 -4.5 z" fill="var(--ctxa-scarf)" />
-          </g>
           <g transform="translate(-3 12) scale(0.85)">
             <HeroHead face="happy" />
           </g>

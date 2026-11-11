@@ -69,6 +69,7 @@ export const BASE_STYLES = `
     --ctxa-skin:#FFD9B8; --ctxa-skin-2:#F0B48C; --ctxa-blush:#FF7A90;
     --ctxa-hair:#7A4A2B; --ctxa-hair-2:#5A331C;
     --ctxa-cap:#22B8A6; --ctxa-cap-2:#15877B; --ctxa-cap-0:#6FE0CF;
+    --ctxa-hat:#465070; --ctxa-hat-2:#333B56; --ctxa-hat-0:#6C78A0;
     --ctxa-jacket:#5B6CF0; --ctxa-jacket-2:#4350C4; --ctxa-jacket-0:#8E9BFF;
     --ctxa-scarf:#FFC53D; --ctxa-scarf-2:#E59A12;
     --ctxa-pants:#3F4566; --ctxa-pants-2:#2F3450;
@@ -88,6 +89,7 @@ export const BASE_STYLES = `
     --ctxa-skin:#F3C9A6; --ctxa-skin-2:#D9A680;
     --ctxa-hair:#5F381F; --ctxa-hair-2:#452611;
     --ctxa-cap:#1FA394; --ctxa-cap-2:#127267; --ctxa-cap-0:#4CC7B6;
+    --ctxa-hat:#5A6688; --ctxa-hat-2:#434D6B; --ctxa-hat-0:#7E8BB3;
     --ctxa-jacket:#5261DB; --ctxa-jacket-2:#3A46AE; --ctxa-jacket-0:#7886F0;
     --ctxa-scarf:#EDB32F; --ctxa-scarf-2:#C48A14;
     --ctxa-shoe-2:#B3362F; --ctxa-pack-2:#C2701E;
@@ -138,8 +140,6 @@ export const BASE_STYLES = `
   /* Flowers and flags flick between two poses, the way overworld tiles do. */
   .ctxa-sway { animation: ctxa-sway 1.4s steps(1) infinite; transform-box: fill-box; transform-origin: 50% 100%; }
   @keyframes ctxa-sway { 0%, 100% { transform: rotate(-9deg); } 50% { transform: rotate(9deg); } }
-  .ctxa-scarf { animation: ctxa-scarf 0.9s steps(1) infinite; transform-origin: -8px -30px; }
-  @keyframes ctxa-scarf { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-10deg); } }
   .ctxa-twinkle { animation: ctxa-twinkle 3.2s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
   @keyframes ctxa-twinkle { 0%, 70%, 100% { opacity: 0; transform: scale(0.4); } 80% { opacity: 1; transform: scale(1); } }
   @keyframes ctxa-breathe { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.02, 0.97); } }
@@ -319,7 +319,6 @@ export function Tree({ x, y, scale = 1 }: { x: number; y: number; scale?: number
   );
 }
 
-export const STAR = "M0 -3.8 L1.1 -1.2 L3.6 -1.2 L1.6 0.5 L2.3 3.1 L0 1.6 L-2.3 3.1 L-1.6 0.5 L-3.6 -1.2 L-1.1 -1.2 Z";
 export const SPARK = "M0 -6 l1.8 4.2 4.2 1.8 -4.2 1.8 -1.8 4.2 -1.8 -4.2 -4.2 -1.8 4.2 -1.8 Z";
 
 export type HeroFace = "calm" | "happy" | "tired";
@@ -327,6 +326,7 @@ export type HeroFace = "calm" | "happy" | "tired";
 const SKULL = { cx: 1, cy: -46, r: 14.5 } as const;
 const HAIR =
   "M-7 -58 C-12 -55 -14.5 -50 -14.5 -45 C-14.5 -40 -13 -36 -11 -33.5 L-8.5 -38 L-5.5 -34.5 L-4.5 -40.5 L-1.5 -38.5 L-1.5 -45 L2 -49.5 L4 -45.5 L7 -50 L9.5 -47 L13 -53 L10 -59 Z";
+const BOLT = "M0.9 -3.7 L-2.3 0.5 H-0.3 L-1 3.7 L2.4 -0.7 H0.3 Z";
 const CAP = "M-13.5 -50 C-13.5 -62 -3 -64.5 3 -64 C11 -63.5 16 -58 16 -51.5 Q1 -55.5 -13.5 -50 Z";
 
 /** The head alone, so a scene can seat it in a car. Centre (1, -46), facing right. */
@@ -353,26 +353,24 @@ export function HeroHead({ face = "calm" }: { face?: HeroFace }): ReactElement {
         </>
       ) : (
         <>
-          <ellipse cx="6.5" cy="-42.2" rx="2.1" ry="3.6" fill="var(--ctxa-ink)" stroke="none" />
-          <ellipse cx="12.3" cy="-42.2" rx="1.5" ry="3.3" fill="var(--ctxa-ink)" stroke="none" />
-          <circle cx="7.1" cy="-44" r="0.95" fill="#FFFFFF" stroke="none" />
-          <circle cx="12.7" cy="-44" r="0.7" fill="#FFFFFF" stroke="none" />
+          <path d="M4.9 -44.7 L8.1 -43.7 V-40.9 A1.6 1.6 0 0 1 4.9 -40.9 Z" fill="var(--ctxa-ink)" stroke="none" />
+          <path d="M11.3 -43.8 L13.7 -44.5 V-41.1 A1.2 1.2 0 0 1 11.3 -41.1 Z" fill="var(--ctxa-ink)" stroke="none" />
           {face === "happy" ? (
-            <path d="M7.6 -36.8 q2.1 3 4.2 0 z" fill="#C0392B" strokeWidth="1.2" />
+            <path d="M7.8 -36.9 q2.3 1.9 4.4 -0.5" strokeWidth="1.4" fill="none" />
           ) : (
-            <path d="M8.4 -36.2 q1.6 1.2 3.2 0" strokeWidth="1.4" fill="none" />
+            <path d="M8.6 -36.3 h3" strokeWidth="1.4" fill="none" />
           )}
         </>
       )}
-      <path d={CAP} fill="var(--ctxa-cap)" />
-      <g fill="var(--ctxa-cap-2)" stroke="none">
+      <path d={CAP} fill="var(--ctxa-hat)" />
+      <g fill="var(--ctxa-hat-2)" stroke="none">
         <path d="M-13.5 -50 C-13.5 -62 -3 -64.5 3 -64 C-3.5 -62.5 -8 -58 -8.4 -51.6 Q-11 -51 -13.5 -50 Z" />
         <path d="M-13.5 -50 Q1 -55.5 16 -51.5 L16 -54.2 Q1 -58.2 -13.5 -52.8 Z" />
       </g>
-      <path d="M7.4 -60.6 Q11.8 -59 13.2 -56.4" fill="none" stroke="var(--ctxa-cap-0)" strokeWidth="2" />
+      <path d="M7.4 -60.6 Q11.8 -59 13.2 -56.4" fill="none" stroke="var(--ctxa-hat-0)" strokeWidth="2" />
       <path d={CAP} fill="none" />
-      <path d="M11 -54 C17 -55 24 -53.5 25 -50.5 C21 -49.5 16 -50 12.5 -50.5 Z" fill="var(--ctxa-cap-2)" />
-      <path d={STAR} transform="translate(1 -58.7)" fill="var(--ctxa-gold)" strokeWidth="1" />
+      <path d="M11 -54 C17 -55 24 -53.5 25 -50.5 C21 -49.5 16 -50 12.5 -50.5 Z" fill="var(--ctxa-hat-2)" />
+      <path d={BOLT} transform="translate(1.6 -58.6)" fill="var(--ctxa-gold)" strokeWidth="1" />
     </g>
   );
 }
@@ -392,8 +390,8 @@ type HeroProps = {
 };
 
 /**
- * The hero, facing right, feet at (0, 0). A kid in a starred cap with a scarf
- * and a backpack — the app's own figure, in the proportions of a handheld
+ * The hero, facing right, feet at (0, 0). A kid in a dark cap with a bolt on
+ * it, a striped jacket and a backpack — the app's own figure, in the proportions of a handheld
  * overworld sprite.
  */
 export function Hero({ face = "calm", tool, load, arm = "", farArm = "", nearLeg = "", farLeg = "", head = "" }: HeroProps): ReactElement {
@@ -425,13 +423,11 @@ export function Hero({ face = "calm", tool, load, arm = "", farArm = "", nearLeg
         fill="var(--ctxa-jacket-2)"
         stroke="none"
       />
-      <path d="M6.8 -26 q0.9 1.8 0.8 4.6" fill="none" stroke="var(--ctxa-jacket-0)" strokeWidth="1.6" />
+      <path d="M-6.5 -22.4 H9" stroke="var(--ctxa-white)" strokeWidth="2.2" strokeLinecap="butt" fill="none" />
       <path d="M3 -28 v11.5" stroke="var(--ctxa-jacket-2)" strokeWidth="1.3" fill="none" />
       <rect x="-10" y="-31" width="19" height="19" rx="6" fill="none" />
-      <path className="ctxa-scarf" d="M-8 -30 q-9 0 -13 7 l5 2.5 q2 -4 8 -4.5 z" fill="var(--ctxa-scarf)" />
-      <rect x="-9" y="-34" width="18" height="6" rx="3" fill="var(--ctxa-scarf)" />
-      <path d="M-9 -30.6 h18 a3 3 0 0 1 -3 2.6 h-12 a3 3 0 0 1 -3 -2.6 z" fill="var(--ctxa-scarf-2)" stroke="none" />
-      <rect x="-9" y="-34" width="18" height="6" rx="3" fill="none" />
+      <rect x="-8.5" y="-34" width="17" height="5.6" rx="2.6" fill="var(--ctxa-jacket-2)" />
+      <path d="M4.6 -34 h1.3 a2.6 2.6 0 0 1 2.6 2.6 v0.4 a2.6 2.6 0 0 1 -2.6 2.6 h-1.3 z" fill="var(--ctxa-white)" strokeWidth="1.2" />
       <g className={`ctxa-head ${head}`}>
         <HeroHead face={face} />
       </g>

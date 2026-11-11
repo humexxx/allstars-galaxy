@@ -1,12 +1,13 @@
 /**
  * The parts every mascot scene is built from: the keyframe timeline helpers,
- * the hero, the ground it stands on and the stage that frames a scene.
+ * the ground a figure stands on and the stage that frames a scene. The hero
+ * itself — whichever character the reader picked — is in `characters.tsx`.
  *
- * The look is a handheld-era overworld drawn smooth: a chibi figure two heads
- * tall, one dark outline around colours shaded in two flat steps, conifers in
- * scalloped tiers, and a block of textured ground seen from above. No
- * gradients and no filters, so nothing needs an id but the ground's clip and
- * its texture pattern.
+ * The look is a handheld-era overworld: a chibi figure two heads tall drawn in
+ * sprite squares, on scenery drawn smooth — one dark outline around colours
+ * shaded in two flat steps, conifers in scalloped tiers, and a block of
+ * textured ground seen from above. No gradients and no filters, so nothing
+ * needs an id but the ground's clip and its texture pattern.
  *
  * A shade is painted over its shape and the outline drawn again on top, so the
  * shade never has to be clipped to the outline it sits inside.
@@ -82,6 +83,7 @@ export const BASE_STYLES = `
     --ctxa-white:#FFFFFF;
     --ctxa-dirt:#D9BC8C;
     --ctxa-shadow-a:0.2;
+    --ctxa-lit:100%;
     --ctxa-cycle:10s;
   }
   .dark .ctxa {
@@ -100,6 +102,7 @@ export const BASE_STYLES = `
     --ctxa-white:#E9EAF2;
     --ctxa-dirt:#7A6A4E;
     --ctxa-shadow-a:0.4;
+    --ctxa-lit:88%;
   }
   .ctxa-tone-grass   { --ctxa-g:#8ED36B; --ctxa-g2:#7FC85E; --ctxa-g3:#4E9F44; --ctxa-gs:#B88A5B; }
   .ctxa-tone-cave    { --ctxa-g:#C9B089; --ctxa-g2:#BFA57D; --ctxa-g3:#8E7651; --ctxa-gs:#8A6B48; }
@@ -321,126 +324,8 @@ export function Tree({ x, y, scale = 1 }: { x: number; y: number; scale?: number
 
 export const SPARK = "M0 -6 l1.8 4.2 4.2 1.8 -4.2 1.8 -1.8 4.2 -1.8 -4.2 -4.2 -1.8 4.2 -1.8 Z";
 
-export type HeroFace = "calm" | "happy" | "tired";
-
-const SKULL = { cx: 1, cy: -46, r: 14.5 } as const;
-const HAIR =
-  "M-7 -58 C-12 -55 -14.5 -50 -14.5 -45 C-14.5 -40 -13 -36 -11 -33.5 L-8.5 -38 L-5.5 -34.5 L-4.5 -40.5 L-1.5 -38.5 L-1.5 -45 L2 -49.5 L4 -45.5 L7 -50 L9.5 -47 L13 -53 L10 -59 Z";
-const BOLT = "M0.9 -3.7 L-2.3 0.5 H-0.3 L-1 3.7 L2.4 -0.7 H0.3 Z";
-const CAP = "M-13.5 -50 C-13.5 -62 -3 -64.5 3 -64 C11 -63.5 16 -58 16 -51.5 Q1 -55.5 -13.5 -50 Z";
-
-/** The head alone, so a scene can seat it in a car. Centre (1, -46), facing right. */
-export function HeroHead({ face = "calm" }: { face?: HeroFace }): ReactElement {
-  return (
-    <g {...OUTLINE}>
-      <circle {...SKULL} fill="var(--ctxa-skin)" />
-      <g fill="var(--ctxa-skin-2)" stroke="none">
-        <path d="M-12.2 -40 A14.5 14.5 0 0 0 14.2 -40 A24 24 0 0 1 -12.2 -40 Z" />
-        <path d="M-3 -53 Q7 -54.6 15.6 -51 L15.2 -47.8 Q7 -51 -3 -49.6 Z" />
-      </g>
-      <circle {...SKULL} fill="none" />
-      <path d={HAIR} fill="var(--ctxa-hair)" />
-      <path
-        d="M-14.5 -46 C-14.5 -40 -13 -36 -11 -33.5 L-8.5 -38 L-5.5 -34.5 L-4.5 -40.5 L-2.5 -39.2 Q-9 -41 -14.5 -46 Z"
-        fill="var(--ctxa-hair-2)"
-        stroke="none"
-      />
-      <path d={HAIR} fill="none" />
-      {face === "tired" ? (
-        <>
-          <path d="M4.6 -41.5 h3.8 M11 -41.5 h2.6" strokeWidth="1.8" fill="none" />
-          <path d="M8 -36 h3.6" strokeWidth="1.5" fill="none" />
-        </>
-      ) : (
-        <>
-          <path d="M4.9 -44.7 L8.1 -43.7 V-40.9 A1.6 1.6 0 0 1 4.9 -40.9 Z" fill="var(--ctxa-ink)" stroke="none" />
-          <path d="M11.3 -43.8 L13.7 -44.5 V-41.1 A1.2 1.2 0 0 1 11.3 -41.1 Z" fill="var(--ctxa-ink)" stroke="none" />
-          {face === "happy" ? (
-            <path d="M7.8 -36.9 q2.3 1.9 4.4 -0.5" strokeWidth="1.4" fill="none" />
-          ) : (
-            <path d="M8.6 -36.3 h3" strokeWidth="1.4" fill="none" />
-          )}
-        </>
-      )}
-      <path d={CAP} fill="var(--ctxa-hat)" />
-      <g fill="var(--ctxa-hat-2)" stroke="none">
-        <path d="M-13.5 -50 C-13.5 -62 -3 -64.5 3 -64 C-3.5 -62.5 -8 -58 -8.4 -51.6 Q-11 -51 -13.5 -50 Z" />
-        <path d="M-13.5 -50 Q1 -55.5 16 -51.5 L16 -54.2 Q1 -58.2 -13.5 -52.8 Z" />
-      </g>
-      <path d="M7.4 -60.6 Q11.8 -59 13.2 -56.4" fill="none" stroke="var(--ctxa-hat-0)" strokeWidth="2" />
-      <path d={CAP} fill="none" />
-      <path d="M11 -54 C17 -55 24 -53.5 25 -50.5 C21 -49.5 16 -50 12.5 -50.5 Z" fill="var(--ctxa-hat-2)" />
-      <path d={BOLT} transform="translate(1.6 -58.6)" fill="var(--ctxa-gold)" strokeWidth="1" />
-    </g>
-  );
-}
-
-type HeroProps = {
-  face?: HeroFace;
-  /** Painted in the near arm's space, so it swings with it. The hand is at (-0.8, -15). */
-  tool?: ReactNode;
-  /** Painted over the backpack, in the hero's space. */
-  load?: ReactNode;
-  /** Extra classes for the parts a scene animates. */
-  arm?: string;
-  farArm?: string;
-  nearLeg?: string;
-  farLeg?: string;
-  head?: string;
-};
-
-/**
- * The hero, facing right, feet at (0, 0). A kid in a dark cap with a bolt on
- * it, a striped jacket and a backpack — the app's own figure, in the proportions of a handheld
- * overworld sprite.
- */
-export function Hero({ face = "calm", tool, load, arm = "", farArm = "", nearLeg = "", farLeg = "", head = "" }: HeroProps): ReactElement {
-  return (
-    <g {...OUTLINE}>
-      <g className={`ctxa-arm-far ${farArm}`}>
-        <rect x="1" y="-29" width="6.5" height="13" rx="3.2" fill="var(--ctxa-jacket-2)" />
-        <circle cx="4.2" cy="-15" r="3.1" fill="var(--ctxa-skin-2)" />
-      </g>
-      <g className={`ctxa-leg-far ${farLeg}`}>
-        <rect x="-1" y="-14" width="7" height="11" rx="3" fill="var(--ctxa-pants-2)" />
-        <path d="M-2 -5 h7 a5 5 0 0 1 5 5 h-12 z" fill="var(--ctxa-shoe-2)" />
-      </g>
-      <rect x="-18" y="-31" width="11" height="16" rx="4" fill="var(--ctxa-pack)" />
-      <path d="M-18 -22.5 h11 v3.5 a4 4 0 0 1 -4 4 h-3 a4 4 0 0 1 -4 -4 z" fill="var(--ctxa-pack-2)" stroke="none" />
-      <rect x="-18" y="-31" width="11" height="16" rx="4" fill="none" />
-      <path d="M-18 -22.5 h8" strokeWidth="1.4" fill="none" />
-      <rect x="-15.6" y="-24.4" width="3.4" height="3.8" rx="1" fill="var(--ctxa-gold-0)" strokeWidth="1.1" />
-      {load}
-      <g className={`ctxa-leg-near ${nearLeg}`}>
-        <rect x="-7" y="-14" width="7" height="11" rx="3" fill="var(--ctxa-pants)" />
-        <path d="M-8 -5 h7 a5 5 0 0 1 5 5 h-12 z" fill="var(--ctxa-shoe)" />
-        <path d="M0.4 -4.8 A5 5 0 0 1 4 0 H0.4 Z" fill="var(--ctxa-white)" stroke="none" />
-        <path d="M-8 -5 h7 a5 5 0 0 1 5 5 h-12 z" fill="none" />
-      </g>
-      <rect x="-10" y="-31" width="19" height="19" rx="6" fill="var(--ctxa-jacket)" />
-      <path
-        d="M-10 -27 V-18 A6 6 0 0 0 -4 -12 H3 A6 6 0 0 0 8.66 -16 H-4.5 Q-6.5 -16 -6.5 -18 V-27 Z"
-        fill="var(--ctxa-jacket-2)"
-        stroke="none"
-      />
-      <path d="M-6.5 -22.4 H9" stroke="var(--ctxa-white)" strokeWidth="2.2" strokeLinecap="butt" fill="none" />
-      <path d="M3 -28 v11.5" stroke="var(--ctxa-jacket-2)" strokeWidth="1.3" fill="none" />
-      <rect x="-10" y="-31" width="19" height="19" rx="6" fill="none" />
-      <rect x="-8.5" y="-34" width="17" height="5.6" rx="2.6" fill="var(--ctxa-jacket-2)" />
-      <path d="M4.6 -34 h1.3 a2.6 2.6 0 0 1 2.6 2.6 v0.4 a2.6 2.6 0 0 1 -2.6 2.6 h-1.3 z" fill="var(--ctxa-white)" strokeWidth="1.2" />
-      <g className={`ctxa-head ${head}`}>
-        <HeroHead face={face} />
-      </g>
-      <g className={`ctxa-arm ${arm}`}>
-        {tool}
-        <rect x="-4" y="-29" width="6.5" height="13" rx="3.2" fill="var(--ctxa-jacket)" />
-        <path d="M-4 -21.5 H2.5 V-19.2 A3.2 3.2 0 0 1 -0.7 -16 H-0.8 A3.2 3.2 0 0 1 -4 -19.2 Z" fill="var(--ctxa-jacket-2)" stroke="none" />
-        <rect x="-4" y="-29" width="6.5" height="13" rx="3.2" fill="none" />
-        <circle cx="-0.8" cy="-15" r="3.3" fill="var(--ctxa-skin)" />
-      </g>
-    </g>
-  );
-}
+export { Hero, HeroHead, HeroPortrait, type HeroProps } from "./characters";
+export type { HeroFace } from "./looks";
 
 /** The soft patch a figure throws on the ground under it. */
 export function Shadow({ rx = 14, x = 0, y = 0 }: { rx?: number; x?: number; y?: number }): ReactElement {

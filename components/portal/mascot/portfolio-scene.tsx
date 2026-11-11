@@ -4,6 +4,8 @@
  */
 import type { ReactElement } from "react";
 
+import type { MascotCharacter } from "@/types/preferences";
+
 import { arc, Cast, Flower, Hero, loop, rot, Shadow, SPARK, Stage, tr, Tree, Tuft, type Frame, type Point } from "./kit";
 
 const INK = { stroke: "var(--ctxa-ink)", strokeLinejoin: "round", strokeLinecap: "round" } as const;
@@ -244,7 +246,7 @@ function WateringCan(): ReactElement {
   );
 }
 
-export function PortfolioScene({ className }: { className?: string }): ReactElement {
+export function PortfolioScene({ character, className }: { character?: MascotCharacter; className?: string }): ReactElement {
   return (
     <Stage styles={STYLES} tone="grass" className={className}>
       <Tree x={30} y={121} scale={0.75} />
@@ -291,7 +293,7 @@ export function PortfolioScene({ className }: { className?: string }): ReactElem
         <g transform={`translate(${HERO_X} 0)`}>
           <Shadow />
           <g className="ctxa-loop pf-hop">
-            <Hero
+            <Hero character={character}
               face="happy"
               arm="ctxa-loop pf-arm"
               farArm="ctxa-loop pf-far"

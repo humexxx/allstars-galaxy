@@ -6,6 +6,7 @@
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 
 import type { SportId } from "@/types/sports";
+import type { MascotCharacter } from "@/types/preferences";
 
 import {
   arc,
@@ -157,15 +158,15 @@ function kickStyles(p: string, k: number, cheer: number): string {
   ].join("\n");
 }
 
-function Kicker({ p, x }: { p: string; x: number }): ReactElement {
+function Kicker({ p, x, character }: { p: string; x: number; character?: MascotCharacter }): ReactElement {
   return (
     <Player x={x} hop={`${p}-hop`}>
-      <Hero face="happy" arm={`ctxa-loop ${p}-arm`} farArm={`ctxa-loop ${p}-far`} nearLeg={`ctxa-loop ${p}-leg`} />
+      <Hero character={character} face="happy" arm={`ctxa-loop ${p}-arm`} farArm={`ctxa-loop ${p}-far`} nearLeg={`ctxa-loop ${p}-leg`} />
     </Player>
   );
 }
 
-function football(): Scene {
+function football(character?: MascotCharacter): Scene {
   const X = -46;
   const K = 22;
   const GOAL_X = 56;
@@ -213,7 +214,7 @@ function football(): Scene {
     ),
     cast: (
       <>
-        <Kicker p="fb" x={X} />
+        <Kicker p="fb" x={X} character={character} />
         <g className="ctxa-loop ctxa-linear fb-ball" strokeWidth="1.3" {...INK}>
           <circle r="4.6" fill="var(--ctxa-white)" />
           <path d="M0 -2 L1.9 -0.6 L1.2 1.7 L-1.2 1.7 L-1.9 -0.6 Z" fill="var(--ctxa-ink)" strokeWidth="0.6" />
@@ -240,7 +241,7 @@ function football(): Scene {
   };
 }
 
-function nfl(): Scene {
+function nfl(character?: MascotCharacter): Scene {
   const X = -52;
   const K = 22;
   const POSTS_X = 58;
@@ -303,7 +304,7 @@ function nfl(): Scene {
           </g>
         </g>
         <path transform={`translate(${tee[0]} 0)`} d="M-3 0 L0 -4 L3 0 Z" fill="var(--ctxa-pack)" strokeWidth="1.1" {...INK} />
-        <Kicker p="nfl" x={X} />
+        <Kicker p="nfl" x={X} character={character} />
         <g className="ctxa-loop ctxa-linear nfl-ball">
           <g transform="rotate(-35)" strokeWidth="1.3" {...INK}>
             <ellipse rx="5.6" ry="3.5" fill="var(--ctxa-wood-2)" />
@@ -319,7 +320,7 @@ function nfl(): Scene {
 
 // ---------- NBA: dribble, then a jump shot ----------
 
-function nba(): Scene {
+function nba(character?: MascotCharacter): Scene {
   const X = -50;
   const HOOP_X = 58;
   const RIM_Y = -68;
@@ -430,7 +431,7 @@ function nba(): Scene {
           <rect x={HOOP_X + 9} y={RIM_Y - 20} width="4" height="26" rx="1" fill="var(--ctxa-white)" />
         </g>
         <Player x={X} hop="nba-hop">
-          <Hero face="happy" arm="ctxa-loop nba-arm" farArm="ctxa-loop nba-far" />
+          <Hero character={character} face="happy" arm="ctxa-loop nba-arm" farArm="ctxa-loop nba-far" />
         </Player>
         <g className="ctxa-loop ctxa-linear nba-ball" strokeWidth="1.3" {...INK}>
           <circle r="5.2" fill="var(--ctxa-pack)" />
@@ -460,7 +461,7 @@ function nba(): Scene {
 
 // ---------- MLB: batting practice ----------
 
-function mlb(): Scene {
+function mlb(character?: MascotCharacter): Scene {
   const X = -44;
   const MACHINE_X = 66;
   const mouth: Point = [MACHINE_X - 12, -27];
@@ -543,7 +544,7 @@ function mlb(): Scene {
           </g>
         </g>
         <Player x={X} hop="mlb-hop">
-          <Hero
+          <Hero character={character}
             face="happy"
             arm="ctxa-loop mlb-arm"
             farArm="mlb-far"
@@ -563,7 +564,7 @@ function mlb(): Scene {
 
 // ---------- NHL: a slap shot ----------
 
-function nhl(): Scene {
+function nhl(character?: MascotCharacter): Scene {
   const X = -46;
   const NET_X = 58;
   const S = 26;
@@ -672,7 +673,7 @@ function nhl(): Scene {
           <g className="ctxa-loop nhl-lean" style={{ transformOrigin: "0px 0px" }}>
             <path d="M-9 1.2 h13 M-3 1.2 h13" fill="none" strokeWidth="2.6" {...INK} />
             <path d="M-9 1.2 h13 M-3 1.2 h13" fill="none" stroke="var(--ctxa-steel)" strokeWidth="1.1" strokeLinecap="round" />
-            <Hero
+            <Hero character={character}
               face="happy"
               arm="ctxa-loop nhl-arm"
               farArm="nhl-far"
@@ -751,13 +752,25 @@ function rallyStyles({ p, legs, hit, puffs }: Rally): string {
   ].join("\n");
 }
 
-function RallyCast({ rally, x, racket, children }: { rally: Rally; x: number; racket: ReactNode; children: ReactNode }): ReactElement {
+function RallyCast({
+  rally,
+  x,
+  racket,
+  character,
+  children,
+}: {
+  rally: Rally;
+  x: number;
+  racket: ReactNode;
+  character?: MascotCharacter;
+  children: ReactNode;
+}): ReactElement {
   const { p, puffs } = rally;
   return (
     <>
       {children}
       <Player x={x} hop={`${p}-hop`}>
-        <Hero
+        <Hero character={character}
           face="happy"
           arm={`ctxa-loop ${p}-arm`}
           farArm={`${p}-far`}
@@ -793,7 +806,7 @@ function CourtNet({ x }: { x: number }): ReactElement {
 
 const LIME = `.ctxa { --ctxa-lime:#D9F03D; } .dark .ctxa { --ctxa-lime:#C6DC30; }`;
 
-function tennis(): Scene {
+function tennis(character?: MascotCharacter): Scene {
   const X = -56;
   const NET_X = 14;
   const WALL_X = 76;
@@ -826,6 +839,7 @@ function tennis(): Scene {
     ),
     cast: (
       <RallyCast
+        character={character}
         rally={rally}
         x={X}
         racket={
@@ -850,7 +864,7 @@ function tennis(): Scene {
   };
 }
 
-function padel(): Scene {
+function padel(character?: MascotCharacter): Scene {
   const X = -52;
   const NET_X = 20;
   const GLASS_X = 76;
@@ -885,6 +899,7 @@ function padel(): Scene {
     ),
     cast: (
       <RallyCast
+        character={character}
         rally={rally}
         x={X}
         racket={
@@ -928,7 +943,7 @@ function padel(): Scene {
 
 // ---------- F1: a lap, the track scrolling under the car ----------
 
-function f1(): Scene {
+function f1(character?: MascotCharacter): Scene {
   const styles = `
     .f1-road { animation: f1-road 0.4s linear infinite; }
     @keyframes f1-road { to { transform: translateX(-32px); } }
@@ -1020,7 +1035,7 @@ function f1(): Scene {
         <Shadow rx={46} x={2} y={1} />
         <g className="f1-bob" strokeWidth="2" {...INK}>
           <g transform="translate(-3 12) scale(0.85)">
-            <HeroHead face="happy" />
+            <HeroHead face="happy" character={character} />
           </g>
           <rect x="-43" y="-30" width="13" height="4.5" rx="1.5" fill="var(--ctxa-pants)" />
           <rect x="-40" y="-27" width="4.5" height="14" fill="var(--ctxa-pants)" />
@@ -1048,7 +1063,7 @@ function f1(): Scene {
 
 // ---------- surf: riding a wave ----------
 
-function surf(): Scene {
+function surf(character?: MascotCharacter): Scene {
   const styles = `
     .surf-ride { animation: surf-ride 2.6s ease-in-out infinite; transform-origin: 0px 0px; }
     @keyframes surf-ride {
@@ -1128,7 +1143,7 @@ function surf(): Scene {
             <path d="M-20 -3.6 Q4 -6.5 28 -3.6" fill="none" stroke="var(--ctxa-shoe)" strokeWidth="1.8" />
           </g>
           <g transform="translate(0 -5)">
-            <Hero face="happy" arm="surf-arm" farArm="surf-far" nearLeg="surf-leg-near" farLeg="surf-leg-far" />
+            <Hero character={character} face="happy" arm="surf-arm" farArm="surf-far" nearLeg="surf-leg-near" farLeg="surf-leg-far" />
           </g>
         </g>
       </g>
@@ -1138,7 +1153,7 @@ function surf(): Scene {
 
 // ---------- LoL: a match at the desk ----------
 
-function lol(): Scene {
+function lol(character?: MascotCharacter): Scene {
   const X = -12;
   const styles = `
     .lol-arm { transform: rotate(-78deg); animation: lol-tap 0.26s steps(1) infinite; }
@@ -1177,7 +1192,7 @@ function lol(): Scene {
           <rect x="1" y="-24.5" width="62" height="5" rx="2" fill="var(--ctxa-wood)" />
         </g>
         <Player x={X} hop="lol-hop">
-          <Hero face="happy" arm="lol-arm" farArm="lol-far" head="ctxa-loop lol-nod" />
+          <Hero character={character} face="happy" arm="lol-arm" farArm="lol-far" head="ctxa-loop lol-nod" />
           <g className="ctxa-head ctxa-loop lol-nod" strokeWidth="1.6" {...INK}>
             <path d="M-12 -47 C-13 -68 15 -68 13.5 -52" fill="none" strokeWidth="4.4" />
             <path d="M-12 -47 C-13 -68 15 -68 13.5 -52" fill="none" stroke="var(--ctxa-pants)" strokeWidth="2" />
@@ -1210,10 +1225,18 @@ function lol(): Scene {
   };
 }
 
-const SCENES: Record<SportId, () => Scene> = { football, padel, f1, nba, tennis, nfl, mlb, nhl, surf, lol };
+const SCENES: Record<SportId, (character?: MascotCharacter) => Scene> = { football, padel, f1, nba, tennis, nfl, mlb, nhl, surf, lol };
 
-export function SportsScene({ sport, className }: { sport: SportId; className?: string }): ReactElement {
-  const scene = SCENES[sport]();
+export function SportsScene({
+  sport,
+  character,
+  className,
+}: {
+  sport: SportId;
+  character?: MascotCharacter;
+  className?: string;
+}): ReactElement {
+  const scene = SCENES[sport](character);
   return (
     <Stage styles={scene.styles} tone={scene.tone} plain={scene.plain} cycle={scene.cycle} ground={scene.ground} className={className}>
       {scene.backdrop}

@@ -16,6 +16,7 @@
 import type { CSSProperties, ReactElement } from "react";
 
 import type { FinanceMood } from "@/types/finance";
+import type { MascotCharacter } from "@/types/preferences";
 
 import {
   arc,
@@ -406,7 +407,15 @@ const FACES: Record<FinanceMood, HeroFace> = {
   idle: "calm",
 };
 
-export function FinanceScene({ mood, className }: { mood: FinanceMood; className?: string }): ReactElement {
+export function FinanceScene({
+  mood,
+  character,
+  className,
+}: {
+  mood: FinanceMood;
+  character?: MascotCharacter;
+  className?: string;
+}): ReactElement {
   const thriving = mood === "thriving";
   const sparks = thriving ? [...SPARKS, ...THRIVING_SPARKS] : SPARKS;
 
@@ -457,7 +466,7 @@ export function FinanceScene({ mood, className }: { mood: FinanceMood; className
               <Shadow />
               <g className="ctxa-loop fin-hop">
                 <g className="fin-rest">
-                  <Hero
+                  <Hero character={character}
                     face={FACES[mood]}
                     tool={<Pickaxe />}
                     arm="ctxa-loop fin-arm"

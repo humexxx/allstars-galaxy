@@ -674,6 +674,10 @@ describe("the LoL card across a season", () => {
     expect(card.context).toBe("Worlds 2026 · Quarterfinals");
     expect(card.tables).toEqual([]);
     expect(card.swiss).toBeUndefined();
+    // The knockouts as far as they are drawn, in the table's place.
+    expect(card.bracket?.label).toBe("Worlds 2026 bracket");
+    expect(card.bracket?.rounds[0]).toMatchObject({ label: "Quarterfinals" });
+    expect(card.bracket?.rounds[0].ties).toHaveLength(4);
     expect([card.featured!, ...card.following!].map(line)).toEqual([
       "KT v TES result",
       "AL v T1 upcoming",
@@ -905,6 +909,34 @@ describe("swissRecords", () => {
   });
 });
 
+describe("footballCard", () => {
+  it("draws the knockout from the quarter-finals on, a two-legged tie by its aggregate", () => {
+    const league = getFootballLeague("uefa-champions-league");
+    const [a, b] = league.teams;
+    const knockout: BracketRound[] = [
+      // Eight ties: left to the league's own page.
+      {
+        id: "round-of-16",
+        label: "Round of 16",
+        matches: Array.from({ length: 8 }, (_, i) => ({ id: `r${i}`, homeTeamId: a.id, awayTeamId: b.id })),
+      },
+      {
+        id: "quarter-final",
+        label: "Quarter-finals",
+        matches: [
+          { id: "q1", homeTeamId: a.id, awayTeamId: b.id, homeScore: 1, awayScore: 1, aggregateHome: 3, aggregateAway: 2, winnerTeamId: a.id },
+        ],
+      },
+    ];
+    const card = __testing.footballCard({ sportId: "football", label: "Football", emoji: "⚽" }, { ...league, knockout });
+    expect(card.bracket?.label).toBe(`${league.league.name} knockout`);
+    expect(card.bracket?.rounds.map((r) => r.label)).toEqual(["Quarter-finals"]);
+    expect(card.bracket?.rounds[0].ties[0]).toMatchObject({ home: { score: 3, winner: true }, away: { score: 2 } });
+    // No knockout drawn: the table alone.
+    expect(__testing.footballCard({ sportId: "football", label: "Football", emoji: "⚽" }, { ...league, knockout: [] }).bracket).toBeUndefined();
+  });
+});
+
 describe("leadOrChampion", () => {
   const club = (id: string, shortName: string): Team => ({ id, name: shortName, shortName, code: id.toUpperCase() });
   const teams = new Map([club("mil", "Brewers"), club("tb", "Rays")].map((t) => [t.id, t]));
@@ -965,8 +997,28 @@ describe("leadOrChampion", () => {
       away: { code: "MIL", score: 4, winner: true },
       playedAt: "2026-10-28T23:00:00Z",
     });
-    // While games are still listed, the card keeps them and draws no bracket.
-    expect(__testing.leadOrChampion([game], postseason, teams, { ...clock, now: Date.parse("2026-10-29T12:00:00Z") }).bracket).toBeUndefined();
+  });
+
+  it("draws the bracket while the postseason is played, from the round a card has room for", () => {
+    const clock = { timeZone: "UTC", now: Date.parse("2026-10-10T12:00:00Z") };
+    const drawn = (id: string, winnerTeamId?: string) => ({ id, homeTeamId: "tb", awayTeamId: "mil", winnerTeamId });
+    const undrawn = (id: string) => ({ id, homeTeamId: null, awayTeamId: null });
+    // Eight first-round ties and nothing drawn after them: no bracket yet.
+    const first: BracketRound[] = [
+      { id: "round-of-16", label: "First round", matches: Array.from({ length: 8 }, (_, i) => drawn(`r${i}`)) },
+      { id: "quarter-final", label: "Division Series", matches: [undrawn("d1"), undrawn("d2")] },
+    ];
+    expect(__testing.leadOrChampion([game], first, teams, clock).bracket).toBeUndefined();
+    // The last eight drawn: the bracket, beside the games still listed.
+    const eight: BracketRound[] = [
+      first[0],
+      { id: "quarter-final", label: "Division Series", matches: [drawn("d1", "mil"), drawn("d2"), drawn("d3"), drawn("d4")] },
+      { id: "semi-final", label: "League Championship Series", matches: [undrawn("l1"), undrawn("l2")] },
+    ];
+    const lead = __testing.leadOrChampion([game], eight, teams, clock);
+    expect(lead.featured).toBeDefined();
+    expect(lead.event).toBeUndefined();
+    expect(lead.bracket?.rounds.map((r) => `${r.label} ${r.ties.length}`)).toEqual(["Division Series 4"]);
   });
 
   it("says Just finished for two weeks after the final", () => {

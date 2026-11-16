@@ -381,6 +381,8 @@ function footballCard(base: CardBase, data: FootballLeagueData, clock: CardClock
     context: data.league.name,
     ...featuredAndFollowing(data.matches, teams, clock),
     tables,
+    // From the quarter-finals on, beside the table (or the groups) it came out of.
+    bracket: teamBracket(`${data.league.name} knockout`, data.knockout, teams),
   };
 }
 
@@ -535,6 +537,8 @@ function lolSplitCard(base: CardBase, data: LolData, split: LolSplit | undefined
     matches: [],
     tables: swiss ? [] : lolTables(split, teams),
     swiss,
+    // Once the knockouts are down to a card's size, while they are played.
+    bracket: swiss ? undefined : lolBracket(split, teams),
   };
 }
 
@@ -677,8 +681,19 @@ function teamBracket(
           ? [
               {
                 id: m.id,
-                home: side(teams.get(m.homeTeamId), m.homeTeamId, m.homeScore ?? null, m.winnerTeamId === m.homeTeamId),
-                away: side(teams.get(m.awayTeamId), m.awayTeamId, m.awayScore ?? null, m.winnerTeamId === m.awayTeamId),
+                // A two-legged tie is read by its aggregate.
+                home: side(
+                  teams.get(m.homeTeamId),
+                  m.homeTeamId,
+                  m.aggregateHome ?? m.homeScore ?? null,
+                  m.winnerTeamId === m.homeTeamId
+                ),
+                away: side(
+                  teams.get(m.awayTeamId),
+                  m.awayTeamId,
+                  m.aggregateAway ?? m.awayScore ?? null,
+                  m.winnerTeamId === m.awayTeamId
+                ),
                 decided: Boolean(m.winnerTeamId),
                 playedAt: m.date,
               },
@@ -1096,7 +1111,10 @@ function leadOrChampion(
   teams: Map<string, Team>,
   clock: CardClock
 ): Pick<DashboardSportCard, "featured" | "following" | "matches" | "event" | "bracket"> {
-  const lead = featuredAndFollowing(games, teams, clock);
+  // The bracket from the round it fits a card (the last eight) on, games or
+  // no games: it is how the postseason is read while it is played, too.
+  const bracket = teamBracket("Postseason bracket", playoffs, teams);
+  const lead = { ...featuredAndFollowing(games, teams, clock), bracket };
   if (lead.featured) return lead;
   const round = playoffs?.find((r) => r.id === "final");
   const final = round?.matches.at(-1);
@@ -1106,8 +1124,7 @@ function leadOrChampion(
   const recent = final.date !== undefined && clock.now - new Date(final.date).getTime() < JUST_FINISHED_MS;
   return {
     matches: [],
-    // How they got there, in the slot the standings share.
-    bracket: teamBracket("Postseason bracket", playoffs, teams),
+    bracket,
     event: {
       name: round.label,
       detail: [final.bestOf && `Best of ${final.bestOf}`, final.date && formatDay(final.date, clock.timeZone)]
@@ -1217,4 +1234,4 @@ function matchTone(match: Match): DashboardMatch["status"] {
 }
 
 /** Pure helpers, exported for their tests. */
-export const __testing = { leadGames, leadOrChampion, lolCard, lolSwiss, racquetCard, surfCard, swissRecords, f1Highlight };
+export const __testing = { footballCard, leadGames, leadOrChampion, lolCard, lolSwiss, racquetCard, surfCard, swissRecords, f1Highlight };

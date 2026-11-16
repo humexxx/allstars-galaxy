@@ -79,7 +79,9 @@ function BracketSide({ side, decided }: { side: DashboardBracketSide; decided: b
       <span className={cn("min-w-0 flex-1 truncate", side.winner && "font-semibold")} title={side.name}>
         {side.code}
       </span>
-      {side.score !== null && <Mono className={cn("text-2xs", side.winner && "font-semibold")}>{side.score}</Mono>}
+      {side.score !== null && (
+        <Mono className={cn("text-2xs", side.winner && "font-semibold")}>{side.scoreLabel ?? side.score}</Mono>
+      )}
     </span>
   );
 }

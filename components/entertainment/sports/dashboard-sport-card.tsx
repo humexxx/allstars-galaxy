@@ -195,7 +195,13 @@ export async function DashboardSportCard({
             <FeaturedEvent
               event={card.event}
               href={card.event.href ?? href}
-              faces={card.sportId === "padel" ? "pair" : card.sportId === "tennis" ? "player" : "team"}
+              faces={
+                card.sportId === "padel"
+                  ? "pair"
+                  : card.sportId === "tennis" || card.sportId === "surf"
+                    ? "player"
+                    : "team"
+              }
             />
           )}
         </PendingArea>

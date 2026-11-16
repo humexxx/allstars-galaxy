@@ -101,7 +101,11 @@ export type DashboardBracket = {
  * `flag` instead — the flag emoji, or "" for none — and `code` carries the
  * surname(s) the tie prints.
  */
-export type DashboardBracketSide = DashboardSide & { flag?: string };
+export type DashboardBracketSide = DashboardSide & {
+  flag?: string;
+  /** The score as it is written where a bare number is not it: a surf heat total, "16.90". */
+  scoreLabel?: string;
+};
 
 export type DashboardTable = {
   id: string;

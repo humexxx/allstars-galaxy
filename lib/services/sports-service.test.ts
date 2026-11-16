@@ -1123,6 +1123,36 @@ describe("surfCard", () => {
     expect(off.event).toMatchObject({ name: "Philippines", status: "upcoming" });
   });
 
+  it("draws the stop's head-to-head heats and puts a face to its winner", () => {
+    const surfer = (athleteId: string, name: string, score: number, place: number) => ({ athleteId, name, score, place, imageUrl: `${athleteId}.png` });
+    const heat = (id: string, surfers: ReturnType<typeof surfer>[]) => ({ id, number: 1, status: "completed" as const, surfers });
+    const won = { ...stop("Philippines", "completed", "2026-11-08"), winner: "Yago Dora", runnerUp: "Ítalo Ferreira" };
+    const draw = {
+      eventId: "Philippines",
+      rounds: [
+        // Three in the water: not a tie of two.
+        { label: "Round 1", heats: [heat("r1", [surfer("1", "Yago Dora", 14, 1), surfer("2", "Ítalo Ferreira", 12, 2), surfer("3", "Jack Robinson", 9, 3)])] },
+        { label: "Semifinals", heats: [heat("s1", [surfer("1", "Yago Dora", 15.5, 1), surfer("3", "Jack Robinson", 11, 2)])] },
+        { label: "Final", heats: [heat("f", [surfer("2", "Ítalo Ferreira", 13.17, 2), surfer("1", "Yago Dora", 16.9, 1)])] },
+      ],
+    };
+    const monday = { timeZone: "UTC", now: Date.parse("2026-11-09T12:00:00Z") };
+    const card = __testing.surfCard(base, { ...data([won]), draw }, monday);
+    expect(card.bracket).toMatchObject({ label: "Philippines heats", short: "Heats" });
+    expect(card.bracket?.rounds.map((r) => r.label)).toEqual(["Semifinals", "Final"]);
+    expect(card.bracket?.rounds[1].ties[0]).toMatchObject({
+      home: { code: "Ferreira", score: 13.17, winner: false },
+      away: { code: "Dora", score: 16.9, winner: true },
+      decided: true,
+    });
+    expect(card.event?.winnerFace).toMatchObject({ shortName: "Yago Dora", logoUrl: "1.png" });
+
+    // Another stop's draw says nothing of this one.
+    const other = __testing.surfCard(base, { ...data([won]), draw: { ...draw, eventId: "Pipe" } }, monday);
+    expect(other.bracket).toBeUndefined();
+    expect(other.event?.winnerFace).toBeUndefined();
+  });
+
   it("keeps the stop won yesterday, with its winner", () => {
     const won = { ...stop("Philippines", "completed", "2026-11-08"), winner: "Yago Dora", runnerUp: "Ítalo Ferreira" };
     const monday = { timeZone: "UTC", now: Date.parse("2026-11-09T12:00:00Z") };

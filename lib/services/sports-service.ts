@@ -57,6 +57,7 @@ import type {
   RacquetDraw,
   RacquetSport,
   SurfData,
+  SurfDraw,
   SportId,
   Standing,
   SwissStage,
@@ -897,6 +898,10 @@ function racquetCard(
 /** The stop just won, on now, else next, and the tour's rankings: the racquet card's shape. */
 function surfCard(base: CardBase, data: SurfData, clock: CardClock = utcClock()): DashboardSportCard {
   const stop = leadEvent(data.events, (e) => e.winner, clock);
+  // The feed carries one draw; it is the lead stop's only while that stop is the one on or last surfed.
+  const draw = stop && stop.status !== "upcoming" && data.draw?.eventId === stop.id ? data.draw : undefined;
+  const bracket = stop && draw ? surfBracket(stop.name, draw) : undefined;
+  const champion = draw?.rounds.at(-1)?.heats.at(-1)?.surfers.find((s) => s.place === 1 && s.athleteId);
   return {
     ...base,
     context: "Championship Tour",
@@ -906,9 +911,20 @@ function surfCard(base: CardBase, data: SurfData, clock: CardClock = utcClock())
           detail: [stop.location, formatDayRange(stop.startDate, stop.endDate)].join(" · "),
           status: stop.status,
           ...(stop.status === "completed" && { winner: stop.winner, runnerUp: stop.runnerUp }),
+          ...(stop.status === "completed" &&
+            champion && {
+              winnerFace: {
+                id: champion.athleteId!,
+                name: "",
+                shortName: champion.name,
+                code: "",
+                logoUrl: champion.imageUrl,
+              },
+            }),
         }
       : undefined,
     matches: [],
+    bracket,
     tables: [
       {
         id: "wsl",
@@ -924,6 +940,35 @@ function surfCard(base: CardBase, data: SurfData, clock: CardClock = utcClock())
       },
     ].filter((t) => t.rows.length > 0),
   };
+}
+
+/**
+ * A stop's closing rounds for its card: the last heats that are one surfer
+ * against another, each by surname with the heat total (the two best waves).
+ * Earlier rounds put three or four in the water, which a tie's two rows
+ * cannot say, and a heat whose surfers are still seeds' places is left out.
+ */
+function surfBracket(name: string, draw: SurfDraw): DashboardBracket | undefined {
+  const rounds = draw.rounds
+    .map((round) => ({
+      label: round.label,
+      ties: round.heats.flatMap((heat) => {
+        const [a, b] = heat.surfers;
+        if (heat.surfers.length !== 2 || !a.athleteId || !b.athleteId) return [];
+        const entrant = (s: typeof a): DashboardBracket["rounds"][number]["ties"][number]["home"] => ({
+          name: s.name,
+          code: s.name.split(" ").at(-1) ?? s.name,
+          score: s.score,
+          scoreLabel: s.score?.toFixed(2),
+          winner: s.place === 1,
+          flag: "",
+        });
+        return [{ id: heat.id, home: entrant(a), away: entrant(b), decided: heat.status === "completed" }];
+      }),
+    }))
+    .filter((round) => round.ties.length > 0)
+    .slice(-BRACKET_ROUNDS);
+  return rounds.length > 0 ? { label: `${name} heats`, short: "Heats", rounds } : undefined;
 }
 
 /**

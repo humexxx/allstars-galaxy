@@ -105,12 +105,15 @@ export type DashboardBracket = {
 };
 
 /**
- * A side of a bracket tie. A team shows its crest; a player or a pair sets
- * `flag` instead — the flag emoji, or "" for none — and `code` carries the
- * surname(s) the tie prints.
+ * A side of a bracket tie. A team shows its crest. A player or a pair sets
+ * `photos` instead (one face, or a pair's two; null where none is published):
+ * the tie prints `code`, the surname(s), behind the seed, and its tooltip
+ * shows the faces.
  */
 export type DashboardBracketSide = DashboardSide & {
-  flag?: string;
+  photos?: Array<string | null>;
+  /** The seed in this event, for an entry that has one. */
+  seed?: string;
   /** The score as it is written where a bare number is not it: a surf heat total, "16.90". */
   scoreLabel?: string;
 };

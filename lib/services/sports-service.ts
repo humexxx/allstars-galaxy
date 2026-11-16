@@ -696,7 +696,8 @@ function racquetBracket(
       code: pairs ? shortName.replace(" / ", "/") : (shortName.split(" ").at(-1) ?? shortName),
       score: sets,
       winner,
-      flag: pairs ? "" : (p?.name ?? ""),
+      photos: pairs ? (p?.photos ?? []) : [p?.logoUrl ?? null],
+      seed: p && /^\d+$/.test(p.code.trim()) ? p.code.trim() : undefined,
     };
   };
   const drawn = (rounds ?? [])
@@ -999,7 +1000,7 @@ function surfBracket(name: string, draw: SurfDraw): DashboardBracket | undefined
           score: s.score,
           scoreLabel: s.score?.toFixed(2),
           winner: s.place === 1,
-          flag: "",
+          photos: [s.imageUrl ?? null],
         });
         return [{ id: heat.id, home: entrant(a), away: entrant(b), decided: heat.status === "completed" }];
       }),

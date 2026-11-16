@@ -76,7 +76,7 @@ function RowImage({ row }: { row: DashboardTableRow }): React.ReactElement {
     return (
       <span className="relative size-6 shrink-0 overflow-hidden rounded-full bg-muted ring-1 ring-border">
         {/* eslint-disable-next-line @next/next/no-img-element -- ESPN's and the padel API's CDNs; an allowlist breaks the day either moves. */}
-        <img src={row.image.url} alt="" className="size-full object-cover object-top" />
+        <img src={row.image.url} alt="" loading="lazy" decoding="async" className="size-full object-cover object-top" />
         {row.flagEmoji && (
           <span aria-hidden className="absolute -bottom-0.5 -right-0.5 text-2xs leading-none">
             {row.flagEmoji}

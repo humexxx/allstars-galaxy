@@ -195,7 +195,7 @@ describe("DashboardSportCard", () => {
   });
 
   it("switches one slot between an event's draw and the rankings rather than stacking them", async () => {
-    const entrant = (code: string, score: number, winner: boolean) => ({ name: code, code, score, winner, flag: "" });
+    const entrant = (code: string, score: number, winner: boolean) => ({ name: code, code, score, winner, photos: [null] });
     await renderCard({
       ...card([]),
       sportId: "tennis",

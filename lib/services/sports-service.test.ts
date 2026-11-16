@@ -1091,8 +1091,9 @@ describe("racquetCard", () => {
       expect(bracket).toMatchObject({ label: "Stockholm draw", short: "Draw" });
       expect(bracket.rounds.map((r) => r.label)).toEqual(["Semi-finals", "Final"]);
       expect(bracket.rounds[1].ties[0]).toMatchObject({
-        home: { code: "Fritz", score: 2, winner: true, flag: "🇺🇸" },
-        away: { code: "tirante", score: 0, winner: false },
+        // The seed and the face, not the flag; an unseeded player has no seed.
+        home: { code: "Fritz", score: 2, winner: true, seed: "1", photos: ["fritz.png"] },
+        away: { code: "tirante", score: 0, winner: false, seed: undefined, photos: ["tirante.png"] },
         decided: true,
         playedAt: "2026-10-25",
       });

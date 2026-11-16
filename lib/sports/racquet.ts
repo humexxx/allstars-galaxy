@@ -184,9 +184,19 @@ function startsInDays(startDate: string, today: string): string {
   return `Starts in ${days} days`;
 }
 
-/** Where play stands: the round under way, when it starts, or nothing to say. */
+/**
+ * Where play stands: the round under way, the one next, when it starts, or
+ * nothing to say. A round is under way once one of its ties is decided or has
+ * a score: a feed names both sides of a tie days ahead (ESPN fills the ATP
+ * Finals' semi-finals with "TBD" players that carry ids), so two names alone
+ * do not say anybody has played.
+ */
 export function playLine(t: RacquetTournament, rounds: BracketRound[] | undefined, today: string): string | null {
   if (t.status === "upcoming") return startsInDays(t.startDate, today);
   const round = t.status === "live" && rounds ? roundInPlay(rounds) : undefined;
-  return round ? `${round.label} under way` : null;
+  if (!round) return null;
+  const begun = round.matches.some(
+    (m) => m.winnerTeamId || m.legs?.some((leg) => leg.homeScore !== null || leg.awayScore !== null)
+  );
+  return `${round.label} ${begun ? "under way" : "next"}`;
 }

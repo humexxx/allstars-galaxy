@@ -72,8 +72,9 @@ export function TileSection({
 }
 
 /**
- * The events played, none until asked for — or, with nothing left to come
- * (`open`), the last few from the start — and three more a tap. The new tiles
+ * The events played: the latest one from the start, so its winner needs no
+ * tap — or, with nothing left to come (`open`), the last few — and three more
+ * a tap. The new tiles
  * land under the ones shown and fade in without moving the page; the focus
  * stays on the pill while there is more, then goes to the first tile it
  * brought in. Each tile carries its id in `attr`.
@@ -82,7 +83,7 @@ export function useRevealEarlier<T extends { id: string }>(
   played: readonly T[],
   { open, attr }: { open: boolean; attr: "data-race" | "data-tournament" }
 ): { listRef: RefObject<HTMLDivElement | null>; earlier: T[]; next: T[]; reveal: () => void } {
-  const [shown, setShown] = useState(open ? EARLIER_STEP : 0);
+  const [shown, setShown] = useState(open ? EARLIER_STEP : 1);
   const listRef = useRef<HTMLDivElement>(null);
   const added = useRef<string[] | null>(null);
   const earlier = played.slice(0, shown);

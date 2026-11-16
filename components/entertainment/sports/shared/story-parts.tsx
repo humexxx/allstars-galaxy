@@ -1,7 +1,9 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
 import { ExternalLink, Play } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
@@ -35,6 +37,10 @@ export function StoryLink({
   );
 }
 
+/**
+ * A story's picture, or nothing once it fails to load: the card then reads as
+ * the text card a story without a picture already is, not a grey box.
+ */
 export function StoryImage({
   story,
   sizes,
@@ -44,7 +50,8 @@ export function StoryImage({
   sizes: string;
   className: string;
 }): React.ReactElement | null {
-  if (!story.image) return null;
+  const [failed, setFailed] = useState(false);
+  if (!story.image || failed) return null;
   return (
     <div className={cn("relative overflow-hidden bg-muted", className)}>
       {/* The headline is the link's own text: an alt repeating it is read twice. */}
@@ -54,6 +61,11 @@ export function StoryImage({
         fill
         sizes={sizes}
         className="object-cover"
+        onError={() => setFailed(true)}
+        // A picture that failed before hydration never fires `onError`.
+        ref={(img) => {
+          if (img?.complete && img.naturalWidth === 0) setFailed(true);
+        }}
         // The wire's CDN is whatever the provider uses that week; an
         // allowlist would break the day it changes.
         unoptimized

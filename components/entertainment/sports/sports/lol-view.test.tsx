@@ -7,7 +7,7 @@ vi.mock("@/app/actions/lol", () => ({ getLolSplitAction: vi.fn() }));
 import { getLolSplitAction } from "@/app/actions/lol";
 
 import { ReaderTimeZoneProvider } from "@/components/reader-time-zone";
-import type { BracketMatch, LolData, LolSplit, Team } from "@/types/sports";
+import type { BracketMatch, LolData, LolSplit, NewsStory, Team } from "@/types/sports";
 
 import { LolView } from "./lol-view";
 
@@ -80,7 +80,24 @@ const lck: LolSplit = {
   matches: [],
 };
 
-function renderView(data: LolData, link: { initialTab?: string; initialRegion?: string } = {}): void {
+const NEWS: NewsStory[] = [
+  {
+    id: "n1",
+    headline: "T1 lift the Summoner's Cup",
+    description: null,
+    href: "https://lolesports.com/news/n1",
+    external: true,
+    image: null,
+    at: "2026-11-15T04:00:00Z",
+    kind: "story",
+    about: [],
+  },
+];
+
+function renderView(
+  data: LolData,
+  link: { initialTab?: string; initialRegion?: string; news?: NewsStory[] } = {},
+): void {
   render(
     <ReaderTimeZoneProvider timeZone="America/Costa_Rica">
       <LolView data={data} {...link} />
@@ -164,6 +181,42 @@ describe("LolView after a final", () => {
 
     expect(screen.getByText("Worlds 2026 champions")).toBeInTheDocument();
     expect(screen.queryByText("Next up")).not.toBeInTheDocument();
+  });
+
+  it("leaves the champion off the news tab, and brings it back on the others", () => {
+    renderView({ splits: [worlds, lck] }, { news: NEWS });
+
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "News" }), { button: 0 });
+    expect(openTab()).toBe("News");
+    expect(screen.queryByText("Worlds 2026 champions")).not.toBeInTheDocument();
+
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Playoffs" }), { button: 0 });
+    expect(screen.getByText("Worlds 2026 champions")).toBeInTheDocument();
+  });
+
+  it("leads the tabs with the playoffs and the news once the split is won", () => {
+    const won: LolSplit = { ...worlds, international: undefined, standings: lck.standings };
+    renderView({ splits: [won, lck] }, { news: NEWS });
+
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
+      "Playoffs",
+      "News",
+      "Matches",
+      "Standings",
+    ]);
+    expect(openTab()).toBe("Playoffs");
+  });
+
+  it("keeps the tabs in the order of play while nobody has won", () => {
+    const open: LolSplit = { ...worlds, international: undefined, champion: undefined, standings: lck.standings };
+    renderView({ splits: [open, lck] }, { news: NEWS });
+
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
+      "Matches",
+      "Standings",
+      "Playoffs",
+      "News",
+    ]);
   });
 
   it("has no banner for a split nobody has won yet", () => {
@@ -277,7 +330,7 @@ describe("LolView, an international event's stages", () => {
   });
 
   it("gives an event with no Swiss stage, as MSI, its play-ins and its playoffs", () => {
-    const msi: LolSplit = { ...worlds, region: "msi", name: "MSI 2026", playIns, swiss: undefined };
+    const msi: LolSplit = { ...worlds, region: "msi", name: "MSI 2026", champion: undefined, playIns, swiss: undefined };
     renderView({ splits: [msi, lck] });
     expect(tabs()).toEqual(["Play-ins", "Playoffs"]);
     expect(openTab()).toBe("Playoffs");

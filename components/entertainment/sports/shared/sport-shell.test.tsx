@@ -80,6 +80,24 @@ function placeSideways(selected: [number, number]): void {
   });
 }
 
+type ReportScroll = (entries: Partial<IntersectionObserverEntry>[]) => void;
+
+/** Replaces IntersectionObserver; the returned function reports the name row's position. */
+function stubScrolledAway(): ReportScroll {
+  let report: ReportScroll = () => {};
+  vi.stubGlobal(
+    "IntersectionObserver",
+    class {
+      constructor(callback: ReportScroll) {
+        report = callback;
+      }
+      observe(): void {}
+      disconnect(): void {}
+    }
+  );
+  return (entries) => report(entries);
+}
+
 const pick = (name: string): void => {
   fireEvent.mouseDown(screen.getByRole("tab", { name }), { button: 0 });
 };
@@ -214,6 +232,44 @@ describe("SportShell", () => {
 
     act(() => report([{ isIntersecting: true, boundingClientRect: rect(120, 180) }]));
     expect(within(row).queryByText("UEFA Champions League")).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
+  it("shows only the emoji in the stuck bar on a phone, the name too from @xl", () => {
+    const report = stubScrolledAway();
+    renderShell();
+    act(() => report([{ isIntersecting: false, boundingClientRect: rect(-80, -10) }]));
+
+    const copy = within(tabsRow()).getByText("UEFA Champions League");
+    expect(copy).toHaveClass("hidden", "@xl:block");
+    expect(within(tabsRow()).getByText("⚽")).not.toHaveClass("hidden");
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps the name in the stuck bar at every width when there is no emoji", () => {
+    const report = stubScrolledAway();
+    render(
+      <SportShell title="Kuwait Major" tabs={<div role="tablist" />}>
+        <div />
+      </SportShell>
+    );
+    act(() => report([{ isIntersecting: false, boundingClientRect: rect(-80, -10) }]));
+
+    expect(within(tabsRow()).getByText("Kuwait Major")).not.toHaveClass("hidden");
+    vi.unstubAllGlobals();
+  });
+
+  it("slides the tabs row back to the selected tab when the compact name takes its room", () => {
+    const report = stubScrolledAway();
+    placeSideways([100, 180]);
+    renderShell("knockout");
+    const scroller = screen.getByRole("tablist").parentElement!;
+    expect(scroller.scrollLeft).toBe(0);
+
+    placeSideways([260, 340]);
+    act(() => report([{ isIntersecting: false, boundingClientRect: rect(-80, -10) }]));
+
+    expect(scroller.scrollLeft).toBe(40);
     vi.unstubAllGlobals();
   });
 

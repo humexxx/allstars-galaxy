@@ -53,4 +53,24 @@ describe("ManageFavoritesSheet", () => {
     });
     expect(screen.getByRole("button", { name: "Manage favorites (1)", hidden: true })).toBeInTheDocument();
   });
+
+  it("toggles a sport from anywhere on its row, not just the switch", async () => {
+    vi.mocked(setSportFavoriteAction).mockResolvedValue({ success: true } as never);
+    render(<ManageFavoritesSheet favoriteSportIds={[]} trigger="icon" />);
+    fireEvent.click(screen.getByRole("button", { name: "Manage favorites" }));
+    const row = screen.getByRole("switch", { name: "Toggle NBA as favorite" }).closest("label");
+    expect(row).not.toBeNull();
+    await act(async () => {
+      fireEvent.click(within(row as HTMLElement).getByText("Scores and conference standings"));
+    });
+    expect(setSportFavoriteAction).toHaveBeenCalledWith({ sportId: "nba", isFavorite: true });
+  });
+
+  it("fills a phone's width, where three quarters wrapped the names", () => {
+    render(<ManageFavoritesSheet favoriteSportIds={[]} trigger="icon" />);
+    fireEvent.click(screen.getByRole("button", { name: "Manage favorites" }));
+    const sheet = screen.getByRole("dialog");
+    expect(sheet).toHaveClass("data-[side=right]:w-full");
+    expect(sheet).not.toHaveClass("data-[side=right]:w-3/4");
+  });
 });

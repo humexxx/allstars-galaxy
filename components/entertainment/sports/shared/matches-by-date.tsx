@@ -29,6 +29,7 @@ import { useTeamPicks } from "./team-picks";
 import { useMatchTime, useSportsToday } from "./time-zone-context";
 
 const FINISHED: ReadonlySet<MatchStatus> = new Set<MatchStatus>(["ft", "aet", "pen"]);
+const UPCOMING: ReadonlySet<MatchStatus> = new Set<MatchStatus>(["live", "scheduled"]);
 
 /** Days one tap of the clock brings in: a matchday, a week of the NFL, three NBA nights. */
 const EARLIER_STEP = 3;
@@ -41,8 +42,16 @@ const TEAM_RESULTS = 3;
  * so the freshest lead and what is next follows. The whole list needs one
  * day's; a season with no result yet opens on its first day, and one with
  * fewer than asked for on its first result.
+ *
+ * The whole list opens on today instead while today still has a game on or
+ * to come: yesterday's results would push those a screen or two down a phone,
+ * and they are one tap on "Earlier" away.
  */
 export function openingDayIndex(days: MatchDay[], today: string, results = 1): number {
+  if (results === 1) {
+    const now = days.findIndex((d) => d.day === today);
+    if (now >= 0 && days[now].matches.some((m) => UPCOMING.has(m.status))) return now;
+  }
   let seen = 0;
   let first = -1;
   for (let i = days.length - 1; i >= 0; i--) {
@@ -240,7 +249,7 @@ export function MatchesByDate({
                 </Eyebrow>
                 <ul role="list" className="grid gap-2 @xl:grid-cols-2 @5xl:grid-cols-3">
                   {list.map((match) => (
-                    <ScoreCard key={match.id} as="li" match={match} teams={teams} />
+                    <ScoreCard key={match.id} as="li" match={match} teams={teams} hideDay />
                   ))}
                 </ul>
               </div>

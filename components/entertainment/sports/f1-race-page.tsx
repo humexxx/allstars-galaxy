@@ -108,6 +108,15 @@ export function F1RacePage({
     if (document.activeElement === document.body) classificationHeading.current?.focus();
   }, [classification]);
 
+  // Once the race is run its times are history: the podium goes ahead of them.
+  const weekend = hasSessions && (
+    <Section title="Weekend">
+      <div className="rounded-lg border bg-card px-3">
+        <SessionList race={race} format={format} now={now} results={sessions} drivers={drivers} />
+      </div>
+    </Section>
+  );
+
   return (
     <SportPageControls sport="f1" favoriteSportIds={favoriteSportIds}>
       <Tabs defaultValue={initialTab === "results" && hasTables ? "results" : "overview"} className="gap-6">
@@ -158,13 +167,7 @@ export function F1RacePage({
               </Card>
 
               <div className="flex min-w-0 flex-col gap-6">
-                {hasSessions && (
-                  <Section title="Weekend">
-                    <div className="rounded-lg border bg-card px-3">
-                      <SessionList race={race} format={format} now={now} results={sessions} drivers={drivers} />
-                    </div>
-                  </Section>
-                )}
+                {!race.podium && weekend}
 
                 {race.podium && (
                   <Section title="Podium">
@@ -191,6 +194,8 @@ export function F1RacePage({
                     )}
                   </dl>
                 )}
+
+                {race.podium && weekend}
               </div>
             </div>
           </TabsContent>
@@ -313,8 +318,9 @@ function SessionResults({
           aria-label="Session"
           className="self-start"
         >
+          {/* Both widths: the segment's own phone floor is `max-sm:min-w-fit`, which a bare min-w-11 loses to. */}
           {sessions.map((s) => (
-            <ToggleGroupItem key={s.kind} value={s.kind}>
+            <ToggleGroupItem key={s.kind} value={s.kind} className="min-w-11 max-sm:min-w-11">
               {SHORT_SESSION[s.kind]}
               {/* "P1 (Practice 1)": the name starts with what is on the button. The
                   space sits outside the span, as some readers trim an element's own text. */}

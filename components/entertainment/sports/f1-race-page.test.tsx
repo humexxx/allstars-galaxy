@@ -125,6 +125,22 @@ describe("F1RacePage", () => {
     expect(screen.queryByRole("heading", { name: "Classification" })).toBeNull();
   });
 
+  it("puts a finished race's podium and marks ahead of its weekend", () => {
+    renderPage(SINGAPORE, { classification: null });
+    const podium = section("Podium");
+    const weekend = section("Weekend");
+    expect(podium.compareDocumentPosition(weekend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const pole = screen.getByText("Pole");
+    expect(pole.compareDocumentPosition(weekend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("gives each session pick a thumb's width", () => {
+    const fp1 = { kind: "fp1" as const, rows: [{ position: "1", code: "LEC", name: "C. Leclerc", team: "Ferrari", time: "1:36.052" }] };
+    const fp2 = { kind: "fp2" as const, rows: [{ position: "1", code: "VER", name: "M. Verstappen", team: "Red Bull Racing", time: "1:35.900" }] };
+    renderPage(AUSTIN, { tab: "results", sessions: [fp1, fp2] });
+    for (const pick of screen.getAllByRole("radio")) expect(pick).toHaveClass("min-w-11", "max-sm:min-w-11");
+  });
+
   it("puts the podium with each driver's gap to the winner", () => {
     renderPage(SINGAPORE, { classification: null });
     const steps = within(section("Podium")).getAllByRole("listitem");

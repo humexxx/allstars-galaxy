@@ -15,6 +15,8 @@ type ScoreCardProps = {
   teams: Map<string, Team>;
   /** `li` for a card in a list, so a card with a team missing leaves no empty item. */
   as?: "div" | "li";
+  /** Under a heading that already names the day: the card leaves it out. */
+  hideDay?: boolean;
   className?: string;
 };
 
@@ -68,6 +70,7 @@ export function ScoreCard({
   match,
   teams,
   as: Root = "div",
+  hideDay = false,
   className,
 }: ScoreCardProps): React.ReactElement | null {
   const format = useMatchTime();
@@ -140,12 +143,10 @@ export function ScoreCard({
             <span className="sr-only">{spokenStatus(match)}</span>
           </span>
         )}
-        {!isLive && (
+        {!isLive && !hideDay && (
           <Mono className="text-2xs text-muted-foreground">{format.shortDay(match.kickoff)}</Mono>
         )}
-        {scheduled && (
-          <Mono className="text-2xs text-muted-foreground">{format.time(match.kickoff)}</Mono>
-        )}
+        {scheduled && <Mono className="text-xs text-foreground">{format.time(match.kickoff)}</Mono>}
         {(scheduled || isLive) && match.broadcasts?.length ? (
           <Channels names={match.broadcasts} />
         ) : null}

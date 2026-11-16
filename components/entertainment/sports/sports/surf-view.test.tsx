@@ -106,6 +106,27 @@ describe("SurfView", () => {
     );
   });
 
+  it("keeps the draw locked while its heats hold seed places, nobody named yet", () => {
+    const seeded: SurfData = {
+      ...SURF_DATA,
+      draw: {
+        ...SURF_DATA.draw!,
+        rounds: SURF_DATA.draw!.rounds.map((r) => ({
+          ...r,
+          heats: r.heats.map((h) => ({
+            ...h,
+            status: "upcoming" as const,
+            surfers: h.surfers.map((s, i) => ({ name: `Event seed #${i + 1}`, score: null })),
+          })),
+        })),
+      },
+    };
+    render(<SurfView data={seeded} />);
+    expect(openTab()).toBe("Overview");
+    expect(screen.getByRole("tab", { name: "Draw" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "View draw" })).toBeNull();
+  });
+
   it("calls the last stop surfed the last event once the season is over", () => {
     const events = SURF_DATA.events.map((e): SurfEvent => ({
       ...e,

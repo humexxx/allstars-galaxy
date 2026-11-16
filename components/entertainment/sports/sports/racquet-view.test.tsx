@@ -153,7 +153,7 @@ const tile = (id: string): HTMLElement => document.querySelector<HTMLElement>(`[
 const section = (title: string): HTMLElement => screen.getByRole("heading", { name: title }).closest("section")!;
 const tiles = (title: string): string[] =>
   [...section(title).querySelectorAll("[data-tournament]")].map((t) => t.getAttribute("data-tournament")!);
-/** The tournaments played come in from the pill on their heading, three a tap. */
+/** The latest tournament played is there from the start; the rest come in from the pill, three a tap. */
 const earlier = (): void => {
   fireEvent.click(screen.getByRole("button", { name: /^Earlier:/ }));
 };
@@ -203,6 +203,18 @@ describe("RacquetView, the tabs", () => {
     expect(down.querySelector("svg")).toHaveClass("text-destructive");
   });
 
+  it("leaves the Move cell of a player who did not move empty, said as no change", () => {
+    const still: PadelData = {
+      ...PADEL,
+      men: { ...MEN, rankings: [ranking(1), { ...ranking(2), movement: 1 }] },
+    };
+    renderPadel(still);
+    const cell = within(screen.getByRole("table", { name: "Rankings" })).getAllByRole("row")[1].lastElementChild!;
+    expect(cell).toHaveTextContent(/^No change$/);
+    expect(cell.firstElementChild).toHaveClass("sr-only");
+    expect(cell.querySelector("svg")).toBeNull();
+  });
+
   it("leaves the tournaments the whole row when the tour publishes no rankings", () => {
     renderPadel();
     expect(screen.queryByText("Rankings")).toBeNull();
@@ -230,18 +242,34 @@ describe("RacquetView, Overview", () => {
     expect(details).toHaveAttribute("href", "/portal/entertainment/sports/padel/padelapi-748");
   });
 
-  it("says the round under way at the card's foot, in the secondary text, beside View details", () => {
-    const final = finalRounds("kuwait").map((r) =>
-      r.id === "final" ? { ...r, matches: r.matches.map((m) => ({ ...m, winnerTeamId: undefined, legs: [] })) } : r
+  const kuwaitFinal = (legs: NonNullable<BracketRound["matches"][number]["legs"]>): BracketRound[] =>
+    finalRounds("kuwait").map((r) =>
+      r.id === "final" ? { ...r, matches: r.matches.map((m) => ({ ...m, winnerTeamId: undefined, legs })) } : r
     );
+
+  it("says the round under way at the card's foot, in the secondary text, beside View details", () => {
     renderPadel(
-      padelWith((t) => (t.id === "padelapi-748" ? { ...t, status: "live", bracket: final } : t)),
+      padelWith((t) =>
+        t.id === "padelapi-748"
+          ? { ...t, status: "live", bracket: kuwaitFinal([{ homeScore: 4, awayScore: 3 }]) }
+          : t
+      ),
       "2026-10-27"
     );
     const card = cardOf("Kuwait P1 2026");
     const line = within(card).getByText("Final under way");
     expect(line).toHaveClass("text-muted-foreground");
     expect(line.parentElement).toBe(within(card).getByRole("link", { name: /^View details/ }).parentElement);
+  });
+
+  it("calls a round next, not under way, until one of its ties has a score", () => {
+    renderPadel(
+      padelWith((t) => (t.id === "padelapi-748" ? { ...t, status: "live", bracket: kuwaitFinal([]) } : t)),
+      "2026-10-27"
+    );
+    const card = cardOf("Kuwait P1 2026");
+    expect(within(card).getByText("Final next")).toBeInTheDocument();
+    expect(within(card).queryByText(/under way/)).toBeNull();
   });
 
   it("shows the next tournament's seeds once the feed ships its draw, days before it starts", () => {
@@ -273,12 +301,9 @@ describe("RacquetView, Overview", () => {
     expect(tile("padelapi-749")).toHaveAttribute("href", "/portal/entertainment/sports/padel/padelapi-749");
   });
 
-  it("brings in the tournaments played three a tap, latest first, the calendar's own included", () => {
+  it("shows the tournament just played with its winner, and brings in the rest three a tap", () => {
     renderPadel();
-    expect(tiles("Earlier tournaments")).toEqual([]);
-
-    earlier();
-    expect(tiles("Earlier tournaments")).toEqual(["padelapi-747", "padelapi-746", "padelapi-744"]);
+    expect(tiles("Earlier tournaments")).toEqual(["padelapi-747"]);
     // "d." on screen, "defeated" for a screen reader.
     const runnerUp = within(tile("padelapi-747")).getByText("L. Augsburger / J. Lebron");
     expect(within(runnerUp).getByText("d.")).toHaveAttribute("aria-hidden", "true");
@@ -286,13 +311,12 @@ describe("RacquetView, Overview", () => {
     expect(tile("padelapi-747")).toHaveTextContent("A. Coello / A. Tapia d.defeated L. Augsburger / J. Lebron");
     // jsdom's name drops the space before an sr-only piece; a browser keeps it.
     expect(tile("padelapi-747")).toHaveAccessibleName(/A\. Tapia\s*defeated L\. Augsburger \/ J\. Lebron$/);
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: /^Earlier:/ }));
 
     earlier();
     expect(tiles("Earlier tournaments")).toEqual(["padelapi-747", "padelapi-746", "padelapi-744", "padelapi-701"]);
-    // Nothing older: the pill goes, and the keyboard lands on what it brought in.
+    // Nothing older: the pill goes, and the keyboard lands on the first it brought in.
     expect(screen.queryByRole("button", { name: /^Earlier:/ })).toBeNull();
-    expect(document.activeElement).toBe(tile("padelapi-701"));
+    expect(document.activeElement).toBe(tile("padelapi-746"));
   });
 });
 
@@ -540,7 +564,8 @@ describe("RacquetView, tennis", () => {
     expect(screen.getByRole("heading", { name: "On now" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Erste Bank Open" })).toBeInTheDocument();
     expect(screen.getByText("defends the title", { exact: false })).toBeInTheDocument();
-    earlier();
+    // Last week's is under Earlier from the start, the only one played.
+    expect(screen.queryByRole("button", { name: /^Earlier:/ })).toBeNull();
     expect(within(tile("espn-315-2026-mens-singles")).getByText("Shanghai, China PR")).toBeInTheDocument();
 
     // Its draw, asked for when the feed did not ship one: for the round under way.

@@ -176,6 +176,16 @@ export function LolView({ data, news = [], initialTab, initialRegion }: LolViewP
     setTab(opening);
   }
 
+  // Once the final is played the bracket and the news are what is read, so
+  // they lead the strip; until then the tabs keep the order of play.
+  const playoffsTrigger = playoffs && (
+    <TabsTrigger value="playoffs" disabled={stages && !playoffsDrawn}>
+      {stages && !playoffsDrawn && <Lock aria-hidden />}
+      Playoffs
+    </TabsTrigger>
+  );
+  const newsTrigger = hasNews && <TabsTrigger value="news">News</TabsTrigger>;
+
   return (
     <Tabs value={tab} onValueChange={setTab} className="gap-6">
       <SportShell
@@ -208,6 +218,8 @@ export function LolView({ data, news = [], initialTab, initialRegion }: LolViewP
         }
         tabs={
           <TabsList variant="line">
+            {split.champion && playoffsTrigger}
+            {split.champion && newsTrigger}
             {!stages && <TabsTrigger value="matches">Matches</TabsTrigger>}
             {stages && playIns && <TabsTrigger value="play-ins">Play-ins</TabsTrigger>}
             {/* Worlds' Swiss stage publishes no table until it is played. */}
@@ -215,13 +227,8 @@ export function LolView({ data, news = [], initialTab, initialRegion }: LolViewP
               <TabsTrigger value="standings">Standings</TabsTrigger>
             )}
             {swiss && <TabsTrigger value="swiss">Swiss stage</TabsTrigger>}
-            {playoffs && (
-              <TabsTrigger value="playoffs" disabled={stages && !playoffsDrawn}>
-                {stages && !playoffsDrawn && <Lock aria-hidden />}
-                Playoffs
-              </TabsTrigger>
-            )}
-            {hasNews && <TabsTrigger value="news">News</TabsTrigger>}
+            {!split.champion && playoffsTrigger}
+            {!split.champion && newsTrigger}
           </TabsList>
         }
       >
@@ -256,7 +263,7 @@ export function LolView({ data, news = [], initialTab, initialRegion }: LolViewP
             // Drawn anew for each split: its champion, brackets and the
             // table's "Show more" start over.
             <Fragment key={viewKey}>
-              {split.champion && (
+              {split.champion && tab !== "news" && (
                 <LolSeasonEnd
                   split={split}
                   champion={split.champion}

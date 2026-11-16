@@ -10,6 +10,7 @@ import { isBracketDrawn } from "@/lib/sports/bracket";
 import { cn } from "@/lib/utils";
 import type { BracketRound, Match, NewsStory, SportId, Team } from "@/types/sports";
 
+import { ChampionCard } from "./champion-card";
 import { KnockoutBracket } from "./knockout-bracket";
 import { MatchesByDate } from "./matches-by-date";
 import { TeamNewsTab } from "./news-list";
@@ -73,6 +74,8 @@ export function LeagueView({
 }): React.ReactElement {
   const hasPlayoffs = isBracketDrawn(playoffs);
   const hasNews = news.length > 0;
+  const finalRound = playoffs.find((round) => round.id === "final");
+  const final = finalRound?.matches.at(-1);
   const opening =
     initialTab === "news" && hasNews
       ? "news"
@@ -103,7 +106,11 @@ export function LeagueView({
           {lead}
           <TeamPicksProvider matches={games}>
             <OverviewSplit
-              matches={<MatchesByDate matches={games} teams={teams} emptyTitle={emptyTitle} />}
+              matches={
+                games.length === 0 && table ? null : (
+                  <MatchesByDate matches={games} teams={teams} emptyTitle={emptyTitle} />
+                )
+              }
               table={table}
               tableLabel="Standings"
             />
@@ -112,11 +119,21 @@ export function LeagueView({
 
         {hasPlayoffs && (
           <TabsContent value="bracket">
-            <Card size="sm">
-              <CardContent>
-                <KnockoutBracket rounds={playoffs} teams={teams} />
-              </CardContent>
-            </Card>
+            <div className="flex flex-col gap-4">
+              {finalRound && final?.winnerTeamId && (
+                <ChampionCard
+                  competition={finalRound.label}
+                  championId={final.winnerTeamId}
+                  final={final}
+                  teams={teams}
+                />
+              )}
+              <Card size="sm">
+                <CardContent>
+                  <KnockoutBracket rounds={playoffs} teams={teams} />
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
         )}
 

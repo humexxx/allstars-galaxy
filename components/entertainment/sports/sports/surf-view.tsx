@@ -47,11 +47,12 @@ type SurfTab = "overview" | "draw" | "news";
  * Overview (the stop on now, else next, else the last surfed, the season
  * around it and the rankings beside them) and Draw (the featured stop's heats,
  * round by round), and with news, News. Draw stays on the strip, locked,
- * until a draw exists.
+ * until a draw has a surfer in it: the feed ships the heats as seed slots
+ * before anybody is named.
  */
 export function SurfView({ data, news = [], initialTab }: SurfViewProps): React.ReactElement {
   const featured = data.events.find((e) => e.id === data.draw?.eventId) ?? featuredEvent(data.events);
-  const draw = data.draw && data.draw.rounds.length > 0 ? data.draw : undefined;
+  const draw = data.draw && isDrawn(data.draw) ? data.draw : undefined;
   const hasNews = news.length > 0;
   const opening: SurfTab =
     initialTab === "news" && hasNews
@@ -190,6 +191,10 @@ function SurfOverview({
       )}
     </div>
   );
+}
+
+function isDrawn(draw: SurfDraw): boolean {
+  return draw.rounds.some((r) => r.heats.some((h) => h.surfers.some((s) => s.athleteId)));
 }
 
 /**

@@ -56,6 +56,8 @@ type SportShellProps = {
   className?: string;
 };
 
+const SELECTED_TAB = '[role="tab"][aria-selected="true"]';
+
 /**
  * Generic header + body wrapper used by every sport view, and the page's
  * heading: the sports hub has no `PageHeader`, so the sport or competition is
@@ -100,11 +102,11 @@ export function SportShell({
     if (!tabsRow || !scroller || !content) return;
     // A view can open on its last tab (LoL's playoffs), past a phone's edge.
     const revealSelectedTab = (): void =>
-      revealInRow(scroller, scroller.querySelector('[role="tab"][aria-selected="true"]'));
+      revealInRow(scroller, scroller.querySelector(SELECTED_TAB));
     revealSelectedTab();
     // A switch of league can bring its opening tab in already selected.
     const isPicked = (node: Node): boolean =>
-      node instanceof Element && node.matches('[role="tab"][aria-selected="true"]');
+      node instanceof Element && node.matches(SELECTED_TAB);
     const observer = new MutationObserver((records) => {
       const picked = records.some((record) =>
         record.type === "childList" ? Array.from(record.addedNodes).some(isPicked) : isPicked(record.target)
@@ -117,6 +119,13 @@ export function SportShell({
     observer.observe(tabsRow, { subtree: true, childList: true, attributes: true, attributeFilter: ["aria-selected"] });
     return () => observer.disconnect();
   }, [hasTabs]);
+
+  // The compact name takes its width out of the tabs' scroller, which can
+  // leave the selected tab past the edge (LoL's fourth).
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (titleGone && scroller) revealInRow(scroller, scroller.querySelector(SELECTED_TAB));
+  }, [titleGone]);
 
   // With a menu, the heading is pulled out by the button's padding, so the
   // name still lines up with the subtitle. Pulling the button out instead
@@ -201,14 +210,15 @@ export function SportShell({
           className="sticky top-14 z-20 flex h-12 min-w-0 items-end gap-4 border-b bg-background md:top-0"
         >
           {/* The name again, small, only while the row above is out of
-              sight; the h1 is still there for a screen reader. */}
+              sight; the h1 is still there for a screen reader. On a phone the
+              emoji stands for it, or the name pushes the tabs off the edge. */}
           {titleGone && (
             <span
               aria-hidden
               className="flex max-w-40 min-w-0 shrink-0 items-center gap-2 self-center text-sm font-medium @xl:max-w-64"
             >
               {emoji && <span className="text-base leading-none">{emoji}</span>}
-              <span className="truncate">{title}</span>
+              <span className={cn("truncate", emoji && "hidden @xl:block")}>{title}</span>
             </span>
           )}
           {/* Scrolls sideways when the tabs outrun a phone (LoL's four

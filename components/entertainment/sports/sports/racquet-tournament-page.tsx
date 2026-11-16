@@ -13,6 +13,7 @@ import type { DrawState, RacquetSport, RacquetTournament, SportId } from "@/type
 
 import { SportShell } from "../shared/sport-shell";
 import { StatusPill } from "../shared/status-pill";
+import { WinnerLine } from "../shared/winner-line";
 import { SportPageControls } from "../sport-page-controls";
 import { DrawBody } from "./racquet-draw";
 import { TournamentCard, TournamentFacts } from "./racquet-tournaments";
@@ -22,7 +23,7 @@ import { TournamentCard, TournamentFacts } from "./racquet-tournaments";
  * sport's page is: the same name row, the favourites and the sport picker
  * at its end, its title a breadcrumb back to the sport ("Padel › Kuwait
  * Major 2026"). Two tabs: the Bracket, which it opens on, the whole draw the
- * width of the page; and the Overview, a card with the poster, the facts
+ * width of the page under the champion's name once it is over; and the Overview, a card with the poster, the facts
  * (the champions among them, once there are some) and the three best seeds.
  *
  * The draw comes with the page (read on the server); one that failed is
@@ -57,6 +58,8 @@ export function RacquetTournamentPage({
   const runnerUp = ready?.runnerUp ?? t.runnerUp;
   const now = playLine(t, ready?.rounds, today);
   const kinds = [t.tier, t.surface].filter((k): k is string => Boolean(k));
+  // Only over a drawn bracket: a draw with no rounds left already leads with its champions.
+  const drawn = Boolean(ready && !ready.resultsHidden && ready.rounds.length > 0);
 
   return (
     <SportPageControls sport={sport} favoriteSportIds={favoriteSportIds}>
@@ -99,13 +102,18 @@ export function RacquetTournamentPage({
             </TournamentCard>
           </TabsContent>
           <TabsContent value="bracket">
-            <DrawBody
-              tournament={t}
-              state={draw}
-              variant={variant}
-              retrying={retrying}
-              onRetry={() => startRetry(() => router.refresh())}
-            />
+            <div className="flex flex-col gap-4">
+              {t.status === "completed" && champion && drawn && (
+                <WinnerLine winner={champion} beside={runnerUp && `def. ${runnerUp}`} />
+              )}
+              <DrawBody
+                tournament={t}
+                state={draw}
+                variant={variant}
+                retrying={retrying}
+                onRetry={() => startRetry(() => router.refresh())}
+              />
+            </div>
           </TabsContent>
         </SportShell>
       </Tabs>

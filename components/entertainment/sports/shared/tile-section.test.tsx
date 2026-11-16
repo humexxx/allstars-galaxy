@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { render, renderHook, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { showNames, TILE, TILE_FRAME, TileSection } from "./tile-section";
+import { showNames, TILE, TILE_FRAME, TileSection, useRevealEarlier } from "./tile-section";
 
 describe("TileSection", () => {
   it("heads its section at level 2, the level under the sport's h1", () => {
@@ -35,3 +35,20 @@ describe("showNames", () => {
   });
 });
 
+
+describe("useRevealEarlier", () => {
+  const played = ["e", "d", "c", "b", "a"].map((id) => ({ id }));
+  const ids = (list: readonly { id: string }[]): string[] => list.map((item) => item.id);
+
+  it("shows the latest event played from the start, the three before it a tap away", () => {
+    const { result } = renderHook(() => useRevealEarlier(played, { open: false, attr: "data-tournament" }));
+    expect(ids(result.current.earlier)).toEqual(["e"]);
+    expect(ids(result.current.next)).toEqual(["d", "c", "b"]);
+  });
+
+  it("shows the last three once nothing is left to come", () => {
+    const { result } = renderHook(() => useRevealEarlier(played, { open: true, attr: "data-tournament" }));
+    expect(ids(result.current.earlier)).toEqual(["e", "d", "c"]);
+    expect(ids(result.current.next)).toEqual(["b", "a"]);
+  });
+});

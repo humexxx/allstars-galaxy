@@ -33,6 +33,19 @@ export function BracketTie({ tie, when }: { tie: Tie; when: string }): React.Rea
         {[tie.home, tie.away].map((side, i) => (
           <span key={i} className="flex items-center justify-between gap-4">
             <span className={cn("flex items-center gap-2", side.winner ? "font-semibold" : tie.decided && "opacity-70")}>
+              {/* A team's crest, as the tie itself draws it; a player's or a pair's face below. */}
+              {side.photos === undefined && !side.tbd && (
+                <TeamBadge
+                  team={{
+                    name: side.name,
+                    shortName: side.name,
+                    code: side.code,
+                    primaryColor: side.color,
+                    logoUrl: side.logoUrl,
+                  }}
+                  size="sm"
+                />
+              )}
               {side.photos && side.photos.length > 0 && (
                 <span className="flex shrink-0">
                   {side.photos.map((src, n) =>
@@ -77,10 +90,10 @@ export function BracketTie({ tie, when }: { tie: Tie; when: string }): React.Rea
 }
 
 function BracketSide({ side, decided }: { side: DashboardBracketSide; decided: boolean }): React.ReactElement {
-  const lost = decided && !side.winner;
+  const lost = (decided && !side.winner) || side.tbd;
   return (
     <span className={cn("flex h-5 items-center gap-1 text-2xs", lost && "text-muted-foreground")}>
-      {side.photos !== undefined ? (
+      {side.tbd ? null : side.photos !== undefined ? (
         // A fixed slot, seeded or not, so the names of a column line up.
         <Mono aria-hidden className="w-4 shrink-0 text-center text-2xs text-muted-foreground">
           {side.seed ?? ""}

@@ -29,6 +29,7 @@ import { topSeeds } from "@/lib/sports/racquet";
 import type {
   BracketRound,
   DashboardBracket,
+  DashboardBracketSide,
   DashboardCompetitions,
   DashboardMatch,
   DashboardSide,
@@ -381,6 +382,8 @@ function footballCard(base: CardBase, data: FootballLeagueData, clock: CardClock
     context: data.league.name,
     ...featuredAndFollowing(data.matches, teams, clock),
     tables,
+    // From the quarter-finals on, beside the table (or the groups) it came out of.
+    bracket: teamBracket(`${data.league.name} knockout`, data.knockout, teams),
   };
 }
 
@@ -535,6 +538,8 @@ function lolSplitCard(base: CardBase, data: LolData, split: LolSplit | undefined
     matches: [],
     tables: swiss ? [] : lolTables(split, teams),
     swiss,
+    // Once the knockouts are down to a card's size, while they are played.
+    bracket: swiss ? undefined : lolBracket(split, teams),
   };
 }
 
@@ -655,31 +660,94 @@ const BRACKET_TIES = 4;
 const fitsCard = (round: { ties: unknown[] }): boolean => round.ties.length > 0 && round.ties.length <= BRACKET_TIES;
 
 /**
+ * The round a knockout is in — the first with a tie still open that somebody
+ * is drawn into — when it is bigger than a card's bracket: the draw waits for
+ * the last eight, and until then the card shows neither.
+ */
+function bigRoundOn(rounds: BracketRound[] | undefined): BracketRound | undefined {
+  const round = (rounds ?? []).find((r) => r.matches.some((m) => !m.winnerTeamId && (m.homeTeamId || m.awayTeamId)));
+  return round && round.matches.length > BRACKET_TIES ? round : undefined;
+}
+
+/**
  * An event's knockouts for its card: the last rounds, each tie with both
  * sides drawn. A double elimination's lower half is left to the event's own
  * page — a column a round has no room for two trees.
  */
 function lolBracket(event: LolSplit, teams: Map<string, Team>): DashboardBracket | undefined {
-  const rounds = (event.playoffs ?? [])
+  return teamBracket(`${event.name} bracket`, event.playoffs, teams);
+}
+
+/**
+ * A two-legged tie nobody is drawn into yet reaches us as one tie per leg —
+ * a feed cannot pair fixtures without clubs. Read as they come, a semi-final
+ * showed four slots, or the one club already through twice.
+ */
+type BracketTie = DashboardBracket["rounds"][number]["ties"][number];
+
+function withoutSpareLegs(ties: BracketTie[], feeding: number | undefined): BracketTie[] {
+  const alone = new Set<string>();
+  const once = ties.filter((t) => {
+    if (t.home.tbd === t.away.tbd) return true;
+    const known = t.home.tbd ? t.away : t.home;
+    const key = known.code + known.name;
+    if (alone.has(key)) return false;
+    alone.add(key);
+    return true;
+  });
+  const slots = feeding === undefined ? once.length : Math.ceil(feeding / 2);
+  if (feeding === undefined || once.length <= slots || once.length > feeding) return once;
+  let spare = once.length - slots;
+  return once.filter((t) => !(t.home.tbd && t.away.tbd && spare-- > 0));
+}
+
+/** A knockout between teams, for a card: LoL's events, a league's postseason. */
+function teamBracket(
+  label: string,
+  playoffs: BracketRound[] | undefined,
+  teams: Map<string, Team>
+): DashboardBracket | undefined {
+  const nobody: DashboardBracketSide = { name: "To be decided", code: "TBD", score: null, winner: false, tbd: true };
+  // A feed's own stand-in for a slot ("TBD Away", ESPN's for the winner of
+  // MLS's wild card) is nobody yet either, not a club with a crest.
+  const entrant = (id: string | null, score: number | null | undefined, winner: boolean): DashboardBracketSide => {
+    const team = id ? teams.get(id) : undefined;
+    if (!id || /^tbd\b/i.test(team?.shortName ?? team?.name ?? "")) return nobody;
+    return side(team, id, score ?? null, winner);
+  };
+  const all = (playoffs ?? [])
+    // The third-place game is no step towards the final, and would take a column from one.
+    .filter((round) => round.id !== "third-place")
     .map((round) => ({
       label: round.label,
-      ties: round.matches.flatMap((m) =>
-        m.homeTeamId && m.awayTeamId && m.side !== "lower"
-          ? [
-              {
-                id: m.id,
-                home: side(teams.get(m.homeTeamId), m.homeTeamId, m.homeScore ?? null, m.winnerTeamId === m.homeTeamId),
-                away: side(teams.get(m.awayTeamId), m.awayTeamId, m.awayScore ?? null, m.winnerTeamId === m.awayTeamId),
-                decided: Boolean(m.winnerTeamId),
-                playedAt: m.date,
-              },
-            ]
-          : []
-      ),
+      ties: round.matches
+        .filter((m) => m.side !== "lower")
+        .map((m) => ({
+          id: m.id,
+          // A two-legged tie is read by its aggregate.
+          home: entrant(m.homeTeamId, m.aggregateHome ?? m.homeScore, Boolean(m.homeTeamId) && m.winnerTeamId === m.homeTeamId),
+          away: entrant(m.awayTeamId, m.aggregateAway ?? m.awayScore, Boolean(m.awayTeamId) && m.winnerTeamId === m.awayTeamId),
+          decided: Boolean(m.winnerTeamId),
+          playedAt: m.date,
+        })),
     }))
-    .filter(fitsCard)
-    .slice(-BRACKET_ROUNDS);
-  return rounds.length > 0 ? { label: `${event.name} bracket`, short: "Bracket", rounds } : undefined;
+    .filter((round) => round.ties.length > 0)
+    .map((round, i, list) => ({ ...round, ties: withoutSpareLegs(round.ties, list[i - 1]?.ties.length) }))
+    // A preliminary round — fewer ties than the round it feeds (MLS's wild
+    // card) — is no column of the bracket: alone, it read as the whole of it.
+    .filter((round, i, list) => i === list.length - 1 || round.ties.length >= list[i + 1].ties.length);
+  // Only from the last eight: a round of sixteen has no room on a card, so
+  // while one is being played there is no bracket. Then the last three
+  // rounds, their sides "TBD" until known.
+  const playing = all.findIndex((round) => round.ties.some((t) => !t.decided));
+  if (playing !== -1 && all[playing].ties.length > BRACKET_TIES) return undefined;
+  // The round being played leads, unless too few follow it to fill the card.
+  const tail = Math.max(0, all.length - BRACKET_ROUNDS);
+  let start = playing === -1 ? tail : Math.min(playing, tail);
+  while (start < all.length && all[start].ties.length > BRACKET_TIES) start++;
+  const rounds = all.slice(start, start + BRACKET_ROUNDS);
+  const drawn = rounds.some((round) => round.ties.some((t) => !t.home.tbd || !t.away.tbd));
+  return drawn ? { label, short: "Bracket", rounds } : undefined;
 }
 
 /**
@@ -707,6 +775,7 @@ function racquetBracket(
       seed: p && /^\d+$/.test(p.code.trim()) ? p.code.trim() : undefined,
     };
   };
+  if (bigRoundOn(rounds)) return undefined;
   const drawn = (rounds ?? [])
     .map((round) => ({
       label: round.label,
@@ -906,10 +975,9 @@ function racquetCard(
   const players = draw?.players ?? data.drawPlayers ?? [];
   const faces = event ? eventFaces(rounds, players, data.rankings, base.sportId === "padel") : {};
   // An event still to start has no draw worth a column: the rankings stand alone.
+  const pairs = base.sportId === "padel";
   const bracket =
-    event && event.status !== "upcoming"
-      ? racquetBracket(event.name, rounds, players, base.sportId === "padel")
-      : undefined;
+    event && event.status !== "upcoming" ? racquetBracket(event.name, rounds, players, pairs) : undefined;
   return {
     ...base,
     context,
@@ -999,6 +1067,9 @@ function surfCard(base: CardBase, data: SurfData, clock: CardClock = utcClock())
  * cannot say, and a heat whose surfers are still seeds' places is left out.
  */
 function surfBracket(name: string, draw: SurfDraw): DashboardBracket | undefined {
+  // Until the heats are one against one and down to the last eight, the rankings stand alone.
+  const on = draw.rounds.find((r) => r.heats.some((h) => h.status !== "completed"));
+  if (on && (on.heats.length > BRACKET_TIES || on.heats.some((h) => h.surfers.length !== 2))) return undefined;
   const rounds = draw.rounds
     .map((round) => ({
       label: round.label,
@@ -1086,8 +1157,11 @@ function leadOrChampion(
   playoffs: BracketRound[] | undefined,
   teams: Map<string, Team>,
   clock: CardClock
-): Pick<DashboardSportCard, "featured" | "following" | "matches" | "event"> {
-  const lead = featuredAndFollowing(games, teams, clock);
+): Pick<DashboardSportCard, "featured" | "following" | "matches" | "event" | "bracket"> {
+  // The bracket from the round it fits a card (the last eight) on, games or
+  // no games: it is how the postseason is read while it is played, too.
+  const bracket = teamBracket("Postseason bracket", playoffs, teams);
+  const lead = { ...featuredAndFollowing(games, teams, clock), bracket };
   if (lead.featured) return lead;
   const round = playoffs?.find((r) => r.id === "final");
   const final = round?.matches.at(-1);
@@ -1097,6 +1171,7 @@ function leadOrChampion(
   const recent = final.date !== undefined && clock.now - new Date(final.date).getTime() < JUST_FINISHED_MS;
   return {
     matches: [],
+    bracket,
     event: {
       name: round.label,
       detail: [final.bestOf && `Best of ${final.bestOf}`, final.date && formatDay(final.date, clock.timeZone)]
@@ -1206,4 +1281,4 @@ function matchTone(match: Match): DashboardMatch["status"] {
 }
 
 /** Pure helpers, exported for their tests. */
-export const __testing = { leadGames, leadOrChampion, lolCard, lolSwiss, racquetCard, surfCard, swissRecords, f1Highlight };
+export const __testing = { footballCard, leadGames, leadOrChampion, lolCard, lolSwiss, racquetCard, surfCard, swissRecords, f1Highlight };

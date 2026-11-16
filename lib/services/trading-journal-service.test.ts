@@ -231,6 +231,16 @@ describe("adjustBalance", () => {
     expect(inserted).toEqual([]);
   });
 
+  it("checks a cost dated this very minute against the balance as it is now", async () => {
+    // The dialog sends the minute; a deposit written seconds ago is after it on the clock.
+    journal.cash = [{ ...cash("d1", "deposit", "100.00"), occurredAt: new Date() }];
+    const thisMinute = new Date(Math.floor(Date.now() / 60_000) * 60_000).toISOString();
+
+    await adjustBalance(USER, { balance: 88, occurredAt: thisMinute, note: null });
+
+    expect(inserted).toEqual([expect.objectContaining({ amount: "-12.00" })]);
+  });
+
   it("backdates a cost the account could pay then, and any credit", async () => {
     const before = new Date("2026-11-01T15:00:00Z");
     journal.cash = [{ ...cash("d0", "deposit", "50.00"), occurredAt: before }, cash("d1", "deposit", "100.00")];

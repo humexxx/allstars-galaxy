@@ -58,7 +58,12 @@ const TEAM_RESULTS = 3;
 export function openingDayIndex(days: MatchDay[], today: string, results = 1): number {
   if (results === 1) {
     const now = days.findIndex((d) => d.day === today);
-    if (now >= 0 && days[now].matches.some((m) => UPCOMING.has(m.status))) return now;
+    if (now >= 0 && days[now].matches.some((m) => UPCOMING.has(m.status))) {
+      // A late game still in play started on the reader's yesterday: it is not "earlier".
+      let open = now;
+      while (open > 0 && days[open - 1].matches.some((m) => m.status === "live")) open--;
+      return open;
+    }
   }
   let seen = 0;
   let first = -1;

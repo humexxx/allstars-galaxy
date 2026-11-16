@@ -243,7 +243,12 @@ export async function adjustBalance(userId: string, data: BalanceAdjustmentData)
     }
     if (amount < 0) {
       // Dated before the money that covers it, a cost would draw the account below zero for the days between.
-      const held = balanceAt(journal.trades, journal.cash, journal.adjustments, new Date(data.occurredAt).toISOString());
+      // The dialog sends the minute; an entry written seconds ago in that same minute counts as before it.
+      const at = new Date(data.occurredAt);
+      const held =
+        Date.now() - at.getTime() < 60_000
+          ? balance
+          : balanceAt(journal.trades, journal.cash, journal.adjustments, at.toISOString());
       if (held + amount < -0.005) {
         throw new TradingJournalError(
           `The account held only ${formatCurrency(held)} then: it cannot take ${formatSignedCurrency(amount)}`

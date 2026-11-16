@@ -193,6 +193,15 @@ describe("openingDayIndex", () => {
     expect(openingDayIndex(days(mixed), TODAY)).toBe(3);
   });
 
+  it("opens a day back while a game that started yesterday is still in play", () => {
+    // A late game crossing the reader's midnight is under yesterday, and is not "earlier".
+    const late = [...season, match("late", "2026-10-17T23:30:00Z", "live", "atm", "sev")];
+    const list = days(late);
+    const open = openingDayIndex(list, TODAY);
+    expect(list[open].matches.some((m) => m.id === "late")).toBe(true);
+    expect(list[open].day < TODAY).toBe(true);
+  });
+
   it("does not open on a today whose only game is off", () => {
     const list = season.map((m) => (m.id === "oct-18" ? { ...m, status: "postponed" as const } : m));
     expect(openingDayIndex(days(list), TODAY)).toBe(2);

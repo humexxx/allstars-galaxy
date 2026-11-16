@@ -646,6 +646,13 @@ function lolOffSeasonCard(
 
 /** How many rounds a card's bracket has room for: the last ones, down to the final. */
 const BRACKET_ROUNDS = 3;
+/**
+ * And how many ties a round may have: the quarter-finals' four. An event in
+ * its round of 32 has no bracket on the card — a column of sixteen ties made
+ * the card, and the one beside it, several screens tall.
+ */
+const BRACKET_TIES = 4;
+const fitsCard = (round: { ties: unknown[] }): boolean => round.ties.length > 0 && round.ties.length <= BRACKET_TIES;
 
 /**
  * An event's knockouts for its card: the last rounds, each tie with both
@@ -670,7 +677,7 @@ function lolBracket(event: LolSplit, teams: Map<string, Team>): DashboardBracket
           : []
       ),
     }))
-    .filter((round) => round.ties.length > 0)
+    .filter(fitsCard)
     .slice(-BRACKET_ROUNDS);
   return rounds.length > 0 ? { label: `${event.name} bracket`, short: "Bracket", rounds } : undefined;
 }
@@ -706,10 +713,14 @@ function racquetBracket(
       ties: round.matches.flatMap((m) => {
         if (!m.homeTeamId || !m.awayTeamId) return [];
         const played = (m.legs ?? []).filter((leg) => leg.homeScore !== null && leg.awayScore !== null);
+        // A set is won at six with two clear, or at seven: the one in play is nobody's yet.
+        const took = (a: number, b: number): boolean => a > b && a >= 6 && (a - b >= 2 || a === 7);
         const sets = (home: boolean): number | null =>
           played.length === 0
             ? null
-            : played.filter((leg) => (home ? leg.homeScore! > leg.awayScore! : leg.awayScore! > leg.homeScore!)).length;
+            : played.filter((leg) =>
+                home ? took(leg.homeScore!, leg.awayScore!) : took(leg.awayScore!, leg.homeScore!)
+              ).length;
         return [
           {
             id: m.id,
@@ -721,7 +732,7 @@ function racquetBracket(
         ];
       }),
     }))
-    .filter((round) => round.ties.length > 0)
+    .filter(fitsCard)
     .slice(-BRACKET_ROUNDS);
   return drawn.length > 0 ? { label: `${name} draw`, short: "Draw", rounds: drawn } : undefined;
 }
@@ -1005,7 +1016,7 @@ function surfBracket(name: string, draw: SurfDraw): DashboardBracket | undefined
         return [{ id: heat.id, home: entrant(a), away: entrant(b), decided: heat.status === "completed" }];
       }),
     }))
-    .filter((round) => round.ties.length > 0)
+    .filter(fitsCard)
     .slice(-BRACKET_ROUNDS);
   return rounds.length > 0 ? { label: `${name} heats`, short: "Heats", rounds } : undefined;
 }

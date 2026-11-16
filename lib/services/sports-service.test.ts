@@ -1099,6 +1099,27 @@ describe("racquetCard", () => {
       });
     });
 
+    it("counts a set only once it is won, not the one in play", () => {
+      const live = rounds();
+      live[1].matches[0] = {
+        ...live[1].matches[0],
+        legs: [
+          { homeScore: 6, awayScore: 4 },
+          { homeScore: 2, awayScore: 3 },
+        ],
+      };
+      const week = { ...tour([{ ...tournament("Stockholm", "live"), bracket: live }]), drawPlayers: players };
+      const tie = __testing.racquetCard(base, week, "ATP", sunday).bracket!.rounds.at(-1)!.ties[0];
+      expect([tie.home.score, tie.away.score]).toEqual([1, 0]);
+    });
+
+    it("draws no bracket while the event is in rounds too big for a card", () => {
+      const sixteen = Array.from({ length: 16 }, (_, i) => ({ id: `r${i}`, homeTeamId: "fritz", awayTeamId: "paul" }));
+      const early = [{ id: "round-of-32", label: "Round of 32", matches: sixteen }];
+      const week = { ...tour([{ ...tournament("Stockholm", "live"), bracket: early }]), drawPlayers: players };
+      expect(__testing.racquetCard(base, week, "ATP", sunday).bracket).toBeUndefined();
+    });
+
     it("draws no bracket for an event still to start", () => {
       const next = { ...tournament("Stockholm", "upcoming"), bracket: rounds() };
       const week = { ...tour([next]), drawPlayers: players };

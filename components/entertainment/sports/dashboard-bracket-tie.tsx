@@ -93,8 +93,12 @@ function BracketSide({ side, decided }: { side: DashboardBracketSide; decided: b
         />
       )}
       <span className={cn("min-w-0 flex-1 truncate", side.winner && "font-semibold")}>
-        {side.code}
-        {side.seed && <span className="sr-only"> (seed {side.seed})</span>}
+        {/* The tooltip is a pointer's; a screen reader gets the full name here. */}
+        <span aria-hidden>{side.code}</span>
+        <span className="sr-only">
+          {side.name}
+          {side.seed ? ` (seed ${side.seed})` : ""}
+        </span>
       </span>
       {side.score !== null && (
         <Mono className={cn("text-2xs", side.winner && "font-semibold")}>{side.scoreLabel ?? side.score}</Mono>

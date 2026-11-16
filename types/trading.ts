@@ -1,10 +1,36 @@
-import type { tradingCashMovements, tradingTrades } from "@/db/schema";
+import type { tradingBalanceAdjustments, tradingCashMovements, tradingTrades } from "@/db/schema";
 
 export type TradingTradeRow = typeof tradingTrades.$inferSelect;
 export type TradingCashMovementRow = typeof tradingCashMovements.$inferSelect;
+export type TradingBalanceAdjustmentRow = typeof tradingBalanceAdjustments.$inferSelect;
+
+/** Everything a journal is built from. */
+export type TradingJournalRows = {
+  trades: TradingTradeRow[];
+  cash: TradingCashMovementRow[];
+  adjustments: TradingBalanceAdjustmentRow[];
+};
 
 export type TradeSide = TradingTradeRow["side"];
 export type TradingCashKind = TradingCashMovementRow["kind"];
+
+/** The numbers a trade's P&L is worked out from. */
+export type TradeLegs = {
+  side: TradeSide;
+  quantity: number;
+  multiplier: number;
+  entryPrice: number;
+  exitPrice: number | null;
+  fees: number;
+};
+
+/** An instrument the trade form offers: a ticker and what it is. */
+export type TradingInstrument = {
+  symbol: string;
+  name: string | null;
+  /** The provider's market — stocks, crypto, fx, indices, otc; null when unknown. */
+  market: string | null;
+};
 
 /**
  * A trade as the journal reads it: numbers parsed, its days on the reader's
@@ -30,7 +56,10 @@ export type JournalTrade = {
   status: "open" | "closed";
   /** Realized P&L after fees; null while open. */
   pnl: number | null;
-  /** P&L as a share of the position's cost (entry × quantity × multiplier). */
+  /**
+   * P&L as a share of the account's balance just before the trade closed;
+   * null while open, and when the account held nothing.
+   */
   returnPct: number | null;
   /** Calendar days from open to close (0 for a day trade); null while open. */
   holdDays: number | null;
@@ -39,6 +68,19 @@ export type JournalTrade = {
 export type JournalCashMovement = {
   id: string;
   kind: TradingCashKind;
+  amount: number;
+  occurredAt: string;
+  day: string;
+  note: string | null;
+};
+
+/**
+ * What the account gained or lost outside its trades — a swap, a commission —
+ * recorded as the difference to the balance the account really held.
+ */
+export type JournalAdjustment = {
+  id: string;
+  /** Signed: negative for a cost, positive for a credit. */
   amount: number;
   occurredAt: string;
   day: string;
@@ -58,7 +100,7 @@ export type JournalDay = {
 export type EquityPoint = {
   day: string;
   balance: number;
-  /** Realized P&L to date, without deposits and withdrawals. */
+  /** Realized P&L to date — trades and balance adjustments — without deposits and withdrawals. */
   cumulativePnl: number;
 };
 
@@ -97,6 +139,7 @@ export type JournalBreakdownRow = {
 export type JournalMonth = {
   /** YYYY-MM. */
   month: string;
+  /** What the month's closed trades made, and its balance adjustments. */
   pnl: number;
   /** P&L over the balance the month opened with; null when that was zero. */
   returnPct: number | null;
@@ -107,10 +150,14 @@ export type TradingJournal = {
   today: string;
   trades: JournalTrade[];
   cash: JournalCashMovement[];
+  adjustments: JournalAdjustment[];
   balance: number;
   deposited: number;
   withdrawn: number;
+  /** What the closed trades made. */
   realizedPnl: number;
+  /** The balance adjustments, summed: `balance` is deposits − withdrawals + `realizedPnl` + this. */
+  adjusted: number;
   /** Cost of the positions still open (entry × quantity × multiplier). */
   openExposure: number;
   stats: JournalStats;

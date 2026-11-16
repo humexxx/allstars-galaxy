@@ -216,6 +216,13 @@ describe("getF1Data", () => {
     expect(data.drivers[0]).toMatchObject({ code: "VER", podiums: 1 });
   });
 
+  it("says which round the standings count, and nothing when the feed's is unreadable", async () => {
+    expect((await settle(service.getF1Data())).standingsRound).toBe(17);
+    // The earlier of the two tables: one can refresh a round ahead of the other.
+    expect(service.__testing.standingsRound("18", "17")).toBe(17);
+    expect(service.__testing.standingsRound("", "17")).toBeUndefined();
+  });
+
   it("never starts more than four Jolpica calls inside the limit's window", async () => {
     await settle(service.getF1Data());
     expect(starts).toHaveLength(9);

@@ -29,9 +29,18 @@ import { useTeamPicks } from "./team-picks";
 import { useMatchTime, useSportsToday } from "./time-zone-context";
 
 const FINISHED: ReadonlySet<MatchStatus> = new Set<MatchStatus>(["ft", "aet", "pen"]);
+const UPCOMING: ReadonlySet<MatchStatus> = new Set<MatchStatus>(["live", "scheduled"]);
 
 /** Days one tap of the clock brings in: a matchday, a week of the NFL, three NBA nights. */
 const EARLIER_STEP = 3;
+
+/**
+ * Match days from today on that the list opens with, the rest behind "Later":
+ * a season listed whole put the table thirteen phone screens down (the NHL's
+ * 118 cards). A team plays once a day, so its own fixtures get a few more.
+ */
+const AHEAD_DAYS = 3;
+const TEAM_AHEAD_DAYS = 5;
 
 /** Results a team's own fixtures open on: one is a single day, too little to read its form by. */
 const TEAM_RESULTS = 3;
@@ -41,8 +50,21 @@ const TEAM_RESULTS = 3;
  * so the freshest lead and what is next follows. The whole list needs one
  * day's; a season with no result yet opens on its first day, and one with
  * fewer than asked for on its first result.
+ *
+ * The whole list opens on today instead while today still has a game on or
+ * to come: yesterday's results would push those a screen or two down a phone,
+ * and they are one tap on "Earlier" away.
  */
 export function openingDayIndex(days: MatchDay[], today: string, results = 1): number {
+  if (results === 1) {
+    const now = days.findIndex((d) => d.day === today);
+    if (now >= 0 && days[now].matches.some((m) => UPCOMING.has(m.status))) {
+      // A late game still in play started on the reader's yesterday: it is not "earlier".
+      let open = now;
+      while (open > 0 && days[open - 1].matches.some((m) => m.status === "live")) open--;
+      return open;
+    }
+  }
   let seen = 0;
   let first = -1;
   for (let i = days.length - 1; i >= 0; i--) {
@@ -55,6 +77,39 @@ export function openingDayIndex(days: MatchDay[], today: string, results = 1): n
     if (seen >= results) return i;
   }
   return Math.max(first, 0);
+}
+
+/**
+ * Where the list stops, as the index after its last day: `ahead` match days
+ * from today on, counted from the day it opens on. A single day left over is
+ * shown rather than hidden behind a tap of its own.
+ */
+export function closingDayIndex(
+  days: MatchDay[],
+  today: string,
+  from: number,
+  ahead: number
+): number {
+  let seen = 0;
+  for (let i = from; i < days.length; i++) {
+    if (days[i].day < today) continue;
+    seen += 1;
+    if (seen === ahead) return days.length - (i + 1) <= 1 ? days.length : i + 1;
+  }
+  return days.length;
+}
+
+/** The stage every match of a day shares ("Matchday 5"), for its heading to say once. */
+function sharedStage(list: Match[]): string | null {
+  const stage = list[0]?.stageLabel;
+  return stage && list.every((m) => m.stageLabel === stage) ? stage : null;
+}
+
+/** A run of days by its dates: "Oct 10 – Oct 14", or the one day. */
+function dateRange(batch: MatchDay[], shortDay: (day: string) => string): string {
+  if (batch.length === 0) return "";
+  const first = shortDay(batch[0].day);
+  return batch.length > 1 ? `${first} – ${shortDay(batch[batch.length - 1].day)}` : first;
 }
 
 /**
@@ -71,7 +126,9 @@ export function openingDayIndex(days: MatchDay[], today: string, results = 1): n
  * had no box of its own to scroll. Each tap brings in a few more days above
  * without moving the page: the days on screen slide down to make room, the
  * new ones fade in where the reader is looking, and the clock stays on top
- * for the next few.
+ * for the next few. Ahead it stops a few match days from today, the rest
+ * behind "Later" under the last day, which brings them in the same few at a
+ * time and hands the focus to the first of them.
  *
  * It opens on a day heading, not a label of its own, so that a column beside
  * it which opens on a line like one (`OverviewSplit`'s table) starts its card
@@ -98,7 +155,9 @@ export function MatchesByDate({
   const [filterOpen, setFilterOpen] = useState(false);
   const pickedAtOpen = useRef("");
   const listRef = useRef<HTMLDivElement>(null);
-  const reveal = useRef<{ tops: Map<string, number>; added: string[] } | null>(null);
+  const reveal = useRef<{ tops: Map<string, number>; added: string[]; later?: boolean } | null>(
+    null
+  );
 
   const options = useMemo(() => {
     const ids = new Set(matches.flatMap((m) => [m.homeTeamId, m.awayTeamId]));
@@ -125,17 +184,21 @@ export function MatchesByDate({
     .map((id) => options.find((t) => t.id === id))
     .filter((t): t is Team => Boolean(t));
 
-  // How many days before the opening one are shown. Other teams, picked here
-  // or anywhere on the view, open on their own freshest results.
+  // How many days before the opening one, and past the closing one, are
+  // shown. Other teams, picked here or anywhere on the view, open on their
+  // own freshest results and next few fixtures.
   const pickKey = sameTeams(picked);
-  const [shownEarlier, setShownEarlier] = useState({ pickKey, extra: 0 });
-  const extra = shownEarlier.pickKey === pickKey ? shownEarlier.extra : 0;
-  const setExtra = (next: number): void => setShownEarlier({ pickKey, extra: next });
+  const [revealed, setRevealed] = useState({ pickKey, extra: 0, more: 0 });
+  const { extra, more } = revealed.pickKey === pickKey ? revealed : { extra: 0, more: 0 };
 
-  const opening = openingDayIndex(days, today, picked.length > 0 ? TEAM_RESULTS : 1);
+  const ofTeams = picked.length > 0;
+  const ahead = ofTeams ? TEAM_AHEAD_DAYS : AHEAD_DAYS;
+  const opening = openingDayIndex(days, today, ofTeams ? TEAM_RESULTS : 1);
   const earlier = Math.max(0, opening - extra);
-  const shown = days.slice(earlier);
+  const end = Math.min(days.length, closingDayIndex(days, today, opening, ahead) + more);
+  const shown = days.slice(earlier, end);
   const step = Math.min(EARLIER_STEP, earlier);
+  const laterBatch = days.slice(end, end + ahead);
 
   // The new days are in, above the ones that were shown, and the page has
   // not scrolled. The focus goes to the clock on the new first heading, for
@@ -145,10 +208,15 @@ export function MatchesByDate({
     const list = listRef.current;
     reveal.current = null;
     if (!done || !list) return;
-    const clock = list.querySelector<HTMLElement>("[data-earlier]");
-    (clock ?? list.querySelector<HTMLElement>("[data-day]"))?.focus({ preventScroll: true });
+    // Later days go in under the ones shown: nothing slides, and the focus
+    // goes to the first of them, which is what the tap asked to read.
+    const target = done.later
+      ? list.querySelector<HTMLElement>(`[data-day="${done.added[0]}"]`)
+      : (list.querySelector<HTMLElement>("[data-earlier]") ??
+        list.querySelector<HTMLElement>("[data-day]"));
+    target?.focus({ preventScroll: true });
     slideIn(list, done.tops, done.added);
-  }, [extra]);
+  }, [extra, more]);
 
   // A pick can leave the new, shorter list starting above the screen: the
   // filter rides the first day's heading, stuck under the bar while that day
@@ -172,7 +240,13 @@ export function MatchesByDate({
     }
     holdScrollStill(list);
     reveal.current = { tops, added: days.slice(earlier - step, earlier).map((d) => d.day) };
-    setExtra(extra + step);
+    setRevealed({ pickKey, extra: extra + step, more });
+  };
+
+  const revealLater = (): void => {
+    if (laterBatch.length === 0) return;
+    reveal.current = { tops: new Map(), added: laterBatch.map((d) => d.day), later: true };
+    setRevealed({ pickKey, extra, more: more + laterBatch.length });
   };
 
   // Saved once, when the menu closes having changed: a run of ticks is one write.
@@ -183,14 +257,9 @@ export function MatchesByDate({
   };
 
   // What a tap brings in, by its dates: "Show Oct 10 – Oct 14", or one day.
-  const batch = days.slice(earlier - step, earlier);
-  const earlierDates =
-    batch.length > 1
-      ? `${format.shortDay(batch[0].day)} – ${format.shortDay(batch[batch.length - 1].day)}`
-      : batch[0]
-        ? format.shortDay(batch[0].day)
-        : "";
-  const earlierLabel = `Show ${earlierDates}`;
+  const earlierLabel = `Show ${dateRange(days.slice(earlier - step, earlier), format.shortDay)}`;
+  const laterLabel = `Show ${dateRange(laterBatch, format.shortDay)}`;
+  const daysLeft = days.length - end;
 
   const heading = (day: string): string => {
     const name = format.longDay(day);
@@ -207,44 +276,66 @@ export function MatchesByDate({
       ) : (
         <Popover open={filterOpen} onOpenChange={openFilter}>
           <div ref={listRef} className="flex flex-col gap-4">
-            {shown.map(({ day, matches: list }, i) => (
-              // The heading's offset clears the sport bar (and on a phone the
-              // app header above it), as the scroller's scroll padding does
-              // for a day scrolled to: SPACING.md.
-              <div key={day} data-day={day} tabIndex={-1} className="flex flex-col gap-2 outline-none">
-                <Eyebrow
-                  size="sm"
-                  as="div"
-                  className={cn(
-                    "sticky top-26 z-10 flex items-center justify-between gap-2 bg-background py-1 md:top-12",
-                    day === today && "text-foreground"
-                  )}
-                >
-                  {/* The day alone: the controls beside it stay out of its name. */}
-                  <h2 className="min-w-0">{heading(day)}</h2>
-                  {/* On the first day's line: the teams, then the days before. */}
-                  {i === 0 && (filtering || earlier > 0) && (
-                    <span className="flex items-center gap-1.5">
-                      {filtering && <TeamFilterPill crests={crests} />}
-                      {earlier > 0 && (
-                        <RevealPill
-                          icon={History}
-                          label="Earlier"
-                          detail={earlierLabel}
-                          data-earlier
-                          onClick={revealEarlier}
-                        />
-                      )}
-                    </span>
-                  )}
-                </Eyebrow>
-                <ul role="list" className="grid gap-2 @xl:grid-cols-2 @5xl:grid-cols-3">
-                  {list.map((match) => (
-                    <ScoreCard key={match.id} as="li" match={match} teams={teams} />
-                  ))}
-                </ul>
-              </div>
-            ))}
+            {shown.map(({ day, matches: list }, i) => {
+              const stage = sharedStage(list);
+              return (
+                // The heading's offset clears the sport bar (and on a phone the
+                // app header above it), as the scroller's scroll padding does
+                // for a day scrolled to: SPACING.md.
+                <div key={day} data-day={day} tabIndex={-1} className="flex flex-col gap-2 outline-none">
+                  <Eyebrow
+                    size="sm"
+                    as="div"
+                    className={cn(
+                      "sticky top-26 z-10 flex items-center justify-between gap-2 bg-background py-1 md:top-12",
+                      day === today && "text-foreground"
+                    )}
+                  >
+                    {/* The day alone: the controls beside it stay out of its name. */}
+                    <h2 className="min-w-0">
+                      {heading(day)}
+                      {stage && ` · ${stage}`}
+                    </h2>
+                    {/* On the first day's line: the teams, then the days before. */}
+                    {i === 0 && (filtering || earlier > 0) && (
+                      <span className="flex items-center gap-1.5">
+                        {filtering && <TeamFilterPill crests={crests} />}
+                        {earlier > 0 && (
+                          <RevealPill
+                            icon={History}
+                            label="Earlier"
+                            detail={earlierLabel}
+                            data-earlier
+                            onClick={revealEarlier}
+                          />
+                        )}
+                      </span>
+                    )}
+                  </Eyebrow>
+                  <ul role="list" className="grid gap-2 @xl:grid-cols-2 @5xl:grid-cols-3">
+                    {list.map((match) => (
+                      <ScoreCard key={match.id} as="li" match={match} teams={teams} hideDay hideStage={stage !== null} />
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+            {daysLeft > 0 && (
+              // Set as a day's heading line is, the pill at its end: what is
+              // left, then the tap that brings the next few in.
+              <Eyebrow size="sm" as="div" className="flex items-center justify-between gap-2 py-1">
+                <span className="min-w-0">
+                  {daysLeft} more match {daysLeft === 1 ? "day" : "days"}
+                </span>
+                <RevealPill
+                  icon={ChevronDown}
+                  label="Later"
+                  detail={laterLabel}
+                  data-later
+                  onClick={revealLater}
+                />
+              </Eyebrow>
+            )}
           </div>
           {filtering && <TeamFilterMenu options={options} picked={picked} onPick={setPicks} />}
         </Popover>

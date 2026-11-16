@@ -80,6 +80,24 @@ function placeSideways(selected: [number, number]): void {
   });
 }
 
+type ReportScroll = (entries: Partial<IntersectionObserverEntry>[]) => void;
+
+/** Replaces IntersectionObserver; the returned function reports the name row's position. */
+function stubScrolledAway(): ReportScroll {
+  let report: ReportScroll = () => {};
+  vi.stubGlobal(
+    "IntersectionObserver",
+    class {
+      constructor(callback: ReportScroll) {
+        report = callback;
+      }
+      observe(): void {}
+      disconnect(): void {}
+    }
+  );
+  return (entries) => report(entries);
+}
+
 const pick = (name: string): void => {
   fireEvent.mouseDown(screen.getByRole("tab", { name }), { button: 0 });
 };
@@ -174,6 +192,8 @@ describe("SportShell", () => {
     const favorites = screen.getByRole("button", { name: "Manage favorites (2)" });
     const sport = screen.getByRole("button", { name: "⚽ Football, change sport" });
     const end = nameRow().lastElementChild!;
+    expect(end).toHaveClass("flex");
+    expect(end).not.toHaveClass("hidden");
     expect(end).toContainElement(favorites);
     expect(end).toContainElement(sport);
     expect(end).not.toContainElement(screen.getByRole("heading", { level: 1 }));
@@ -182,6 +202,20 @@ describe("SportShell", () => {
     // They scroll away with the name.
     expect(tabsRow()).not.toContainElement(favorites);
     expect(tabsRow()).not.toContainElement(sport);
+  });
+
+  it("keeps the hub's controls off a phone on a page under a sport, where the breadcrumb leads back", () => {
+    render(
+      <SportHubControls.Provider value={HUB}>
+        <SportShell sportId="f1" title="Monaco Grand Prix" parent={{ label: "Formula 1", href: "/f1" }}>
+          Race
+        </SportShell>
+      </SportHubControls.Provider>
+    );
+    const end = screen.getByRole("button", { name: "Manage favorites (2)" }).parentElement!;
+    expect(end).toHaveClass("hidden", "@5xl:flex");
+    expect(end).not.toHaveClass("flex");
+    expect(screen.getByRole("link", { name: "Formula 1" })).toHaveAttribute("href", "/f1");
   });
 
   it("leaves the name row to the name outside the hub", () => {
@@ -214,6 +248,44 @@ describe("SportShell", () => {
 
     act(() => report([{ isIntersecting: true, boundingClientRect: rect(120, 180) }]));
     expect(within(row).queryByText("UEFA Champions League")).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
+  it("shows only the emoji in the stuck bar on a phone, the name too from @xl", () => {
+    const report = stubScrolledAway();
+    renderShell();
+    act(() => report([{ isIntersecting: false, boundingClientRect: rect(-80, -10) }]));
+
+    const copy = within(tabsRow()).getByText("UEFA Champions League");
+    expect(copy).toHaveClass("hidden", "@xl:block");
+    expect(within(tabsRow()).getByText("⚽")).not.toHaveClass("hidden");
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps the name in the stuck bar at every width when there is no emoji", () => {
+    const report = stubScrolledAway();
+    render(
+      <SportShell title="Kuwait Major" tabs={<div role="tablist" />}>
+        <div />
+      </SportShell>
+    );
+    act(() => report([{ isIntersecting: false, boundingClientRect: rect(-80, -10) }]));
+
+    expect(within(tabsRow()).getByText("Kuwait Major")).not.toHaveClass("hidden");
+    vi.unstubAllGlobals();
+  });
+
+  it("slides the tabs row back to the selected tab when the compact name takes its room", () => {
+    const report = stubScrolledAway();
+    placeSideways([100, 180]);
+    renderShell("knockout");
+    const scroller = screen.getByRole("tablist").parentElement!;
+    expect(scroller.scrollLeft).toBe(0);
+
+    placeSideways([260, 340]);
+    act(() => report([{ isIntersecting: false, boundingClientRect: rect(-80, -10) }]));
+
+    expect(scroller.scrollLeft).toBe(40);
     vi.unstubAllGlobals();
   });
 

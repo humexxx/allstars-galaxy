@@ -168,7 +168,22 @@ const FLAGS: Record<string, string> = {
   Uruguay: "🇺🇾", Uzbekistan: "🇺🇿", Venezuela: "🇻🇪",
 };
 
+/** The round robin of a tour's finals: played, but no part of the knockout draw. */
+const GROUP_STAGE = "Group Stage";
+
+/**
+ * A side nobody holds yet. ESPN fills an undrawn tie with two competitors
+ * named "TBD" under negative ids ("-4" against "-3") — the ATP Finals'
+ * semi-finals and final carry them all through the group stage.
+ */
+function isPlaceholder(c: EspnCompetitor): boolean {
+  const name = c.athlete?.shortName || c.athlete?.displayName;
+  const id = c.athlete?.id ?? c.id;
+  return name?.trim().toUpperCase() === "TBD" || /^-\d+$/.test(id ?? "");
+}
+
 function playerFrom(c: EspnCompetitor): Team | null {
+  if (isPlaceholder(c)) return null;
   const athlete = c.athlete;
   const name = athlete?.shortName || athlete?.displayName;
   const id = athlete?.id ?? c.id;
@@ -284,9 +299,25 @@ function finalistsOf(
   const final = competitions.find((c) => c.round?.displayName === "Final");
   if (final?.status?.type?.state !== "post") return {};
   const winner = final.competitors?.find((c) => c.winner);
+  if (!winner || isPlaceholder(winner)) return {};
   const loser = final.competitors?.find((c) => c !== winner);
-  const name = (c?: EspnCompetitor) => c?.athlete?.shortName ?? c?.athlete?.displayName;
-  return winner ? { champion: name(winner), runnerUp: name(loser) } : {};
+  const name = (c?: EspnCompetitor) =>
+    c && !isPlaceholder(c) ? (c.athlete?.shortName ?? c.athlete?.displayName) : undefined;
+  return { champion: name(winner), runnerUp: name(loser) };
+}
+
+/**
+ * The group stage while it is being played: some of it started, some of it
+ * left. It is not a round of the draw, so without this a card would read the
+ * finals as waiting on semi-finals nobody has qualified for.
+ */
+function stageInPlayOf(competitions: EspnCompetition[]): string | undefined {
+  const states = competitions
+    .filter((c) => c.round?.displayName === GROUP_STAGE)
+    .map((c) => c.status?.type?.state);
+  const begun = states.some((s) => s === "in" || s === "post");
+  const left = states.some((s) => s !== "post");
+  return begun && left ? "Group stage" : undefined;
 }
 
 export type EspnDraw = {
@@ -340,6 +371,7 @@ function tournamentFrom(event: EspnEvent, slug: string, now = Date.now()): EspnD
   }
 
   const place = event.venue?.displayName;
+  const stageInPlay = stageInPlayOf(competitions);
   const defending = event.previousWinners?.find((w) => w.type?.slug === slug);
   return {
     tournament: {
@@ -350,6 +382,7 @@ function tournamentFrom(event: EspnEvent, slug: string, now = Date.now()): EspnD
       endDate: espnDay(event.endDate ?? event.date, "end"),
       status: statusOf(event, competitions, now),
       ...finalistsOf(competitions),
+      ...(stageInPlay && { stageInPlay }),
       bracket: rounds.length > 0 ? rounds : undefined,
       tier: event.major ? "Grand Slam" : undefined,
       // The full place, where it says more than the city: "Shanghai, China PR".
@@ -683,6 +716,7 @@ export const __testing = {
   tournamentFrom,
   matchFrom,
   playerFrom,
+  stageInPlayOf,
   rankingFrom,
   photosById,
   tourFrom,

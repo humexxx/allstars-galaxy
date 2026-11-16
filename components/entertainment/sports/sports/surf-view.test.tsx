@@ -93,10 +93,10 @@ describe("SurfView", () => {
     expect(within(onNow).getByRole("heading", { level: 3 })).toHaveTextContent("Tahiti Pro");
   });
 
-  it("puts the winner on the featured card once its stop is over, and locks the draw without one", () => {
+  it("puts the winner on the featured card once its stop is over, and has no Draw tab without one", () => {
     render(<SurfView data={seasonOver()} />);
     expect(openTab()).toBe("Overview");
-    expect(screen.getByRole("tab", { name: "Draw" })).toBeDisabled();
+    expect(screen.queryByRole("tab", { name: "Draw" })).toBeNull();
 
     const featured = screen.getByRole("heading", { level: 2, name: "Next up" }).closest("section")!;
     expect(within(featured).getByRole("heading", { level: 3 })).toHaveTextContent("Trestles Pro");
@@ -104,6 +104,34 @@ describe("SurfView", () => {
     expect(within(earlier).getByRole("heading", { name: "Tahiti Pro" }).closest("[data-tournament]")).toHaveTextContent(
       "Winner: Kauli Vaast"
     );
+  });
+
+  it("keeps the Draw tab away while its heats hold seed places, nobody named yet", () => {
+    const seeded: SurfData = {
+      ...SURF_DATA,
+      draw: {
+        ...SURF_DATA.draw!,
+        rounds: SURF_DATA.draw!.rounds.map((r) => ({
+          ...r,
+          heats: r.heats.map((h) => ({
+            ...h,
+            status: "upcoming" as const,
+            surfers: h.surfers.map((s, i) => ({ name: `Event seed #${i + 1}`, score: null })),
+          })),
+        })),
+      },
+    };
+    render(<SurfView data={seeded} />);
+    expect(openTab()).toBe("Overview");
+    expect(screen.queryByRole("tab", { name: "Draw" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "View draw" })).toBeNull();
+  });
+
+  it("lands a link to the draw on the Overview while there is none", () => {
+    render(<SurfView data={{ ...SURF_DATA, draw: undefined }} initialTab="draw" />);
+    expect(openTab()).toBe("Overview");
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview"]);
+    expect(screen.getByRole("tabpanel")).not.toBeEmptyDOMElement();
   });
 
   it("calls the last stop surfed the last event once the season is over", () => {
@@ -188,7 +216,7 @@ describe("SurfView", () => {
   it("says so when the tour has no events", () => {
     render(<SurfView data={{ season: 2026, events: [], rankings: [] }} />);
     expect(screen.getByText("No events on the calendar for this tour.")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Draw" })).toBeDisabled();
+    expect(screen.queryByRole("tab", { name: "Draw" })).toBeNull();
   });
 
   it("has a News tab with Stab's stories, opened by ?tab=news", () => {

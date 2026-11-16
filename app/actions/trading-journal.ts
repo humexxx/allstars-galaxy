@@ -5,10 +5,13 @@ import { revalidatePath } from "next/cache";
 import { safe, type ActionResult } from "@/lib/actions/safe";
 import { logImpersonatedMutation } from "@/lib/services/impersonation";
 import { requireModuleContext } from "@/lib/services/module-access-service";
+import { searchInstruments } from "@/lib/services/trading-instrument-service";
 import {
   addCashMovement,
+  adjustBalance,
   closeTrade,
   createTrade,
+  deleteBalanceAdjustment,
   deleteCashMovement,
   deleteTrade,
   TradingJournalError,
@@ -16,16 +19,19 @@ import {
 } from "@/lib/services/trading-journal-service";
 import { idSchema } from "@/schemas/common";
 import {
+  balanceAdjustmentSchema,
   cashMovementSchema,
   closeTradeSchema,
-  tradeSchema,
-  updateTradeSchema,
+  instrumentQuerySchema,
+  tradeResultSchema,
+  updateTradeResultSchema,
+  type BalanceAdjustmentInput,
   type CashMovementInput,
   type CloseTradeInput,
-  type TradeInput,
-  type UpdateTradeInput,
+  type TradeResultInput,
+  type UpdateTradeResultInput,
 } from "@/schemas/trading";
-import type { JournalTrade } from "@/types/trading";
+import type { JournalAdjustment, JournalTrade, TradingInstrument } from "@/types/trading";
 
 /** The journal, the plans (their trading card and net worth) and the dashboard. */
 function revalidateJournal(): void {
@@ -37,7 +43,7 @@ function revalidateJournal(): void {
 /** Runs a journal write: a refusal the user should read comes back as the error. */
 async function journalWrite<T>(
   action: string,
-  entityTable: "trading_trades" | "trading_cash_movements",
+  entityTable: "trading_trades" | "trading_cash_movements" | "trading_balance_adjustments",
   write: (userId: string) => Promise<T>
 ): Promise<ActionResult<T>> {
   const ctx = await requireModuleContext("trading");
@@ -52,17 +58,17 @@ async function journalWrite<T>(
   }
 }
 
-export async function createTradeAction(input: TradeInput): Promise<ActionResult<JournalTrade>> {
+export async function createTradeAction(input: TradeResultInput): Promise<ActionResult<JournalTrade>> {
   return safe("trading-journal", async () => {
-    const parsed = tradeSchema.safeParse(input);
+    const parsed = tradeResultSchema.safeParse(input);
     if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
     return journalWrite("trading.trade.create", "trading_trades", (userId) => createTrade(userId, parsed.data));
   });
 }
 
-export async function updateTradeAction(input: UpdateTradeInput): Promise<ActionResult<JournalTrade>> {
+export async function updateTradeAction(input: UpdateTradeResultInput): Promise<ActionResult<JournalTrade>> {
   return safe("trading-journal", async () => {
-    const parsed = updateTradeSchema.safeParse(input);
+    const parsed = updateTradeResultSchema.safeParse(input);
     if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
     return journalWrite("trading.trade.update", "trading_trades", (userId) => updateTrade(userId, parsed.data));
   });
@@ -104,5 +110,42 @@ export async function deleteCashMovementAction(id: string): Promise<ActionResult
       deleteCashMovement(userId, id)
     );
     return result.success ? { success: true } : result;
+  });
+}
+
+/** Sets the account to the balance it really holds; the difference is what gets recorded. */
+export async function adjustBalanceAction(input: BalanceAdjustmentInput): Promise<ActionResult<JournalAdjustment>> {
+  return safe("trading-journal", async () => {
+    const parsed = balanceAdjustmentSchema.safeParse(input);
+    if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+    return journalWrite("trading.adjustment.add", "trading_balance_adjustments", (userId) =>
+      adjustBalance(userId, parsed.data)
+    );
+  });
+}
+
+export async function deleteBalanceAdjustmentAction(id: string): Promise<ActionResult> {
+  return safe("trading-journal", async () => {
+    if (!idSchema.safeParse(id).success) return { success: false, error: "Adjustment not found" };
+    const result = await journalWrite("trading.adjustment.delete", "trading_balance_adjustments", (userId) =>
+      deleteBalanceAdjustment(userId, id)
+    );
+    return result.success ? { success: true } : result;
+  });
+}
+
+/**
+ * Market instruments matching what was typed in the trade form. `available`
+ * is false when the search cannot answer; the form then takes a typed symbol.
+ */
+export async function searchInstrumentsAction(
+  query: string
+): Promise<ActionResult<{ instruments: TradingInstrument[]; available: boolean }>> {
+  return safe("trading-journal", async () => {
+    await requireModuleContext("trading");
+    const parsed = instrumentQuerySchema.safeParse(query);
+    if (!parsed.success) return { success: true, data: { instruments: [], available: true } };
+    const instruments = await searchInstruments(parsed.data);
+    return { success: true, data: { instruments: instruments ?? [], available: instruments !== null } };
   });
 }

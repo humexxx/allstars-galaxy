@@ -74,6 +74,50 @@ export type DashboardSwiss = {
   }[];
 };
 
+/** What a face's tooltip adds to the entry itself. */
+export type DashboardProfile = {
+  /** The tour's ranking: "#4 · 4,635 pts"; a pair's two, "#1 / #1". */
+  ranking?: string;
+  /** How far they got in this event: "Champion", "Lost in the Semi-finals", "In the Final". */
+  result?: string;
+};
+
+/**
+ * An event's knockouts, a column a round, for a card that leads with the
+ * event just played (LoL's off-season).
+ */
+export type DashboardBracket = {
+  /** "Worlds 2026 bracket". */
+  label: string;
+  /** The name of its view where the card switches between it and a table ("Bracket", "Draw"). */
+  short: string;
+  rounds: {
+    label: string;
+    ties: {
+      id: string;
+      home: DashboardBracketSide;
+      away: DashboardBracketSide;
+      decided: boolean;
+      /** When it was played, an instant or a calendar day, for the tie's tooltip. */
+      playedAt?: string;
+    }[];
+  }[];
+};
+
+/**
+ * A side of a bracket tie. A team shows its crest. A player or a pair sets
+ * `photos` instead (one face, or a pair's two; null where none is published):
+ * the tie prints `code`, the surname(s), behind the seed, and its tooltip
+ * shows the faces.
+ */
+export type DashboardBracketSide = DashboardSide & {
+  photos?: Array<string | null>;
+  /** The seed in this event, for an entry that has one. */
+  seed?: string;
+  /** The score as it is written where a bare number is not it: a surf heat total, "16.90". */
+  scoreLabel?: string;
+};
+
 export type DashboardTable = {
   id: string;
   label: string;
@@ -106,9 +150,22 @@ export type DashboardSportCard = {
     status: "live" | "upcoming" | "completed";
     /** Its own page (a padel or tennis tournament's); else the card's sport page. */
     href?: string;
+    /** In place of the status's own label ("Just finished"), once that is no longer true. */
+    label?: string;
     /** Who won it, the day it finished and the next. */
     winner?: string;
     runnerUp?: string;
+    /** The final's score, the winner's side first ("3–2"). */
+    score?: string;
+    /**
+     * A racquet tournament's three best seeds, as its draw has them (`Team` in
+     * `playerEntry`'s shape: a player with a photo, or a padel pair with two).
+     */
+    seeds?: Team[];
+    /** The winner as the draw has them, for the face beside the name. */
+    winnerFace?: Team;
+    /** More on each face, by the entry's id, for its tooltip. */
+    profiles?: Record<string, DashboardProfile>;
   };
   /** Listed under the lead (LoL: a day of an event is several series back to back). */
   matches: DashboardMatch[];
@@ -116,6 +173,8 @@ export type DashboardSportCard = {
   tables: DashboardTable[];
   /** LoL's Swiss stage while it is played, in place of a table. */
   swiss?: DashboardSwiss;
+  /** The knockouts of the event the card leads with, in place of a table. */
+  bracket?: DashboardBracket;
   /**
    * In place of a table the sport has none of yet: the NBA's last champion
    * before the opener. `when` is an instant the card prints in the reader's
@@ -541,6 +600,11 @@ export type F1Data = {
   drivers: F1Driver[];
   constructors: F1Constructor[];
   races: F1Race[];
+  /**
+   * The last round both tables count. A race reads as completed before its
+   * points land, so this, not the calendar, says what is still to score.
+   */
+  standingsRound?: number;
 };
 
 // ---------- NBA ----------
@@ -630,6 +694,11 @@ export type RacquetTournament = {
   prize?: { amount: number; currency: string };
   /** Last edition's champion — the name to beat before this one has a final. */
   defendingChampion?: string;
+  /**
+   * A stage outside the knockout draw that is being played right now: the ATP
+   * Finals' "Group stage". Set only while it has started and has ties left.
+   */
+  stageInPlay?: string;
 };
 
 /** One line of a tour's season calendar: no draw, just enough to list it and open it. */
@@ -885,6 +954,8 @@ export type LolStanding = {
   losses: number;
   /** Recent form, most recent first (max 5). */
   form?: FormResult[];
+  /** Its group ("Legend Group"), when the split is played in more than one. */
+  group?: string;
 };
 
 export type LolMatch = {

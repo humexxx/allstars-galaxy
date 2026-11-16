@@ -253,14 +253,35 @@ describe("changeBaseline: what net worth's change is measured from", () => {
   const label = (p: (typeof closes)[number]): { month: string; label: string } => checkpointLabels(p.date);
 
   it("measures from the user's last confirmation, not the projected close after it", () => {
-    const from = changeBaseline(closes, time, label, "2026-10-05");
+    const from = changeBaseline(closes, time, label, "2026-10-05", U(2026, 11, 20), 5);
     expect(from?.point.netWorth).toBe(14_000);
     expect(from?.since).toEqual({ month: "Oct 5", label: "your confirmation of Oct 5, 2026" });
   });
 
+  it("measures a confirmation of today's own period from the snapshot before it", () => {
+    // Confirmed late, on Nov 10: the Nov 5 checkpoint carries that confirmation,
+    // so against it the change read $0.00.
+    const from = changeBaseline(closes, time, label, "2026-11-10", U(2026, 11, 10), 5);
+    expect(from?.point.netWorth).toBe(14_000);
+    expect(from?.since).toEqual({ month: "Oct", label: "the close of Oct 4, 2026" });
+  });
+
+  it("does the same on the anchor day, when today stands in for the period's checkpoint", () => {
+    const from = changeBaseline(closes.slice(0, 2), time, label, "2026-11-05", U(2026, 11, 5), 5);
+    expect(from?.point.netWorth).toBe(14_000);
+    expect(from?.since.month).toBe("Oct");
+  });
+
+  it("keeps the confirmation itself while it is the only snapshot", () => {
+    const from = changeBaseline(closes.slice(2), time, label, "2026-11-10", U(2026, 11, 10), 5);
+    expect(from?.point.netWorth).toBe(23_600);
+    expect(from?.since.month).toBe("Nov 10");
+  });
+
   it("falls back to the last close with no confirmation, or one before the chart", () => {
-    expect(changeBaseline(closes, time, label, null)?.point.netWorth).toBe(23_600);
-    expect(changeBaseline(closes, time, label, "2026-01-05")?.since.month).toBe("Nov");
-    expect(changeBaseline([], time, label, null)).toBeNull();
+    const today = U(2026, 11, 20);
+    expect(changeBaseline(closes, time, label, null, today, 5)?.point.netWorth).toBe(23_600);
+    expect(changeBaseline(closes, time, label, "2026-01-05", today, 5)?.since.month).toBe("Nov");
+    expect(changeBaseline([], time, label, null, today, 5)).toBeNull();
   });
 });

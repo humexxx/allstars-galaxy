@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { MASCOT_CHARACTERS } from "@/types/preferences";
+
 export const setShowContextAvatarSchema = z.object({
   showContextAvatar: z.boolean(),
 });
@@ -7,6 +9,12 @@ export const setShowContextAvatarSchema = z.object({
 export type SetShowContextAvatarData = z.infer<
   typeof setShowContextAvatarSchema
 >;
+
+export const setMascotCharacterSchema = z.object({
+  mascotCharacter: z.enum(MASCOT_CHARACTERS),
+});
+
+export type SetMascotCharacterData = z.infer<typeof setMascotCharacterSchema>;
 
 /** Upper bound on a single milestone — a trillion is well past any plan. */
 const MAX_MILESTONE = 1_000_000_000_000;

@@ -42,19 +42,57 @@ function baseUrl(): string {
   return process.env.MASSIVE_API_BASE_URL || DEFAULT_BASE_URL;
 }
 
-async function get(path: string, apiKey: string): Promise<AggResponse | null> {
+async function get<T = AggResponse>(
+  path: string,
+  apiKey: string,
+  timeoutMs: number = TIMEOUT_MS
+): Promise<T | null> {
   // The key goes in the header, never the query string: query params leak
   // into logs, proxies and error reports. Massive accepts `?apiKey=` too —
   // don't.
   const res = await fetch(`${baseUrl()}${path}`, {
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
     headers: { accept: "application/json", authorization: `Bearer ${apiKey}` },
     cache: "no-store",
   });
   if (!res.ok) {
     throw new Error(`massive ${res.status} on ${path}`);
   }
-  return (await res.json()) as AggResponse;
+  return (await res.json()) as T;
+}
+
+export type MassiveTicker = { ticker: string; name: string | null; market: string | null };
+type TickersResponse = {
+  results?: { ticker?: string; name?: string; market?: string }[];
+  next_url?: string;
+};
+
+/** The most one page of the ticker reference holds. */
+const TICKERS_PAGE = 1000;
+
+/**
+ * Active tickers matching a search (in the ticker or the name), or the one
+ * carrying exactly `ticker`. Massive lists matches by ticker, not by
+ * relevance — the first eight for "XAU" stop at XAUINR, before XAUUSD — so a
+ * search reads a whole page and leaves the ranking to the caller. `more` says
+ * the matches ran past that page.
+ *
+ * One request against the 5-a-minute tier the daily price run shares. Null
+ * without a key; throws when Massive refuses or does not answer.
+ */
+export async function findMassiveTickers(
+  by: { search: string } | { ticker: string },
+  timeoutMs: number = TIMEOUT_MS
+): Promise<{ tickers: MassiveTicker[]; more: boolean } | null> {
+  const apiKey = process.env.MASSIVE_API_KEY;
+  if (!apiKey) return null;
+  const params = new URLSearchParams({ ...by, active: "true", limit: String(TICKERS_PAGE) });
+  const body = await get<TickersResponse>(`/v3/reference/tickers?${params}`, apiKey, timeoutMs);
+  const tickers: MassiveTicker[] = [];
+  for (const r of body?.results ?? []) {
+    if (r.ticker) tickers.push({ ticker: r.ticker, name: r.name ?? null, market: r.market ?? null });
+  }
+  return { tickers, more: Boolean(body?.next_url) };
 }
 
 /** Yesterday, UTC, as YYYY-MM-DD. */

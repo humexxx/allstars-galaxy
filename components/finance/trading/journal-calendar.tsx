@@ -1,15 +1,16 @@
 "use client";
 
 import { useMemo } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Scale } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
+import { isResultOnly } from "@/lib/finance/trading";
 import { cn } from "@/lib/utils";
 import { formatDay } from "@/lib/utils/date";
 import { formatCurrencyCompact, formatSignedCurrency, moneySign } from "@/lib/utils/format";
-import type { JournalDay, JournalTrade } from "@/types/trading";
+import type { JournalAdjustment, JournalDay, JournalTrade } from "@/types/trading";
 
 const WEEKDAY_HEADS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 /** Lanes of multi-day bars drawn under a week before "+N more". */
@@ -83,6 +84,14 @@ function tint(pnl: number, scale: number): string {
 const toneText = (n: number): string =>
   moneySign(n) > 0 ? "text-success" : moneySign(n) < 0 ? "text-destructive" : "text-muted-foreground";
 
+/** Each day's balance adjustments, summed; a day whose adjustments cancel out is left out. */
+function adjustedByDay(adjustments: readonly JournalAdjustment[]): Map<string, number> {
+  const byDay = new Map<string, number>();
+  for (const a of adjustments) byDay.set(a.day, Math.round(((byDay.get(a.day) ?? 0) + a.amount) * 100) / 100);
+  for (const [day, net] of byDay) if (moneySign(net) === 0) byDay.delete(day);
+  return byDay;
+}
+
 /** Today's month, or one picked with the arrows; and the day whose trades are listed. */
 export type CalendarState = { month: string; picked: string | null };
 
@@ -131,12 +140,14 @@ export function JournalCalendarControls({
 /**
  * The journal's month: each day's realized P&L in green or red, deeper the
  * bigger it was, a week total on the right, and the positions held across
- * days drawn as bars over the days they were open. Pick a day for its trades.
- * On a wide screen the weeks share the card's height between them.
+ * days drawn as bars over the days they were open. A day whose balance was
+ * adjusted says so, with the amount; its P&L stays the trades'. Pick a day for
+ * its trades. On a wide screen the weeks share the card's height between them.
  */
 export function JournalCalendarGrid({
   days,
   trades,
+  adjustments,
   today,
   state,
   onPick,
@@ -144,6 +155,7 @@ export function JournalCalendarGrid({
 }: {
   days: readonly JournalDay[];
   trades: readonly JournalTrade[];
+  adjustments: readonly JournalAdjustment[];
   today: string;
   state: CalendarState;
   onPick: (day: string) => void;
@@ -151,6 +163,7 @@ export function JournalCalendarGrid({
 }): React.ReactElement {
   const { month, picked } = state;
   const byDay = useMemo(() => new Map(days.map((d) => [d.day, d])), [days]);
+  const adjusted = useMemo(() => adjustedByDay(adjustments), [adjustments]);
   const weeks = useMemo(() => weeksOf(month), [month]);
   const scale = Math.max(0, ...days.filter((d) => d.day.startsWith(month)).map((d) => Math.abs(d.pnl)));
 
@@ -178,6 +191,7 @@ export function JournalCalendarGrid({
           >
             {week.map((day, i) => {
               const d = byDay.get(day);
+              const adjustment = adjusted.get(day);
               const outside = !day.startsWith(month);
               return (
                 <button
@@ -185,7 +199,8 @@ export function JournalCalendarGrid({
                   type="button"
                   onClick={() => onPick(day)}
                   aria-pressed={picked === day}
-                  aria-label={`${formatDay(day)}${d ? `, ${formatSignedCurrency(d.pnl)} over ${d.trades} trades` : ""}`}
+                  aria-label={`${formatDay(day)}${d ? `, ${formatSignedCurrency(d.pnl)} over ${d.trades} trades` : ""}${adjustment == null ? "" : `, balance adjustment ${formatSignedCurrency(adjustment)}`}`}
+                  title={adjustment == null ? undefined : `Balance adjustment ${formatSignedCurrency(adjustment)}`}
                   style={{ gridColumn: i + 1, gridRow: 1 }}
                   className={cn(
                     "flex min-h-16 min-w-0 cursor-pointer flex-col items-start gap-0.5 overflow-hidden rounded-md border p-1.5 text-left outline-none transition-colors hover:border-foreground/30 focus-visible:ring-2 focus-visible:ring-ring sm:min-h-20 xl:min-h-12",
@@ -212,8 +227,24 @@ export function JournalCalendarGrid({
                       </span>
                     )}
                   </span>
+                  {adjustment != null && (
+                    // A short cell gives these lines up whole, the label first, never sliced: a line
+                    // this box has no height for wraps to a further column, which the box clips.
+                    <span className="flex min-h-0 w-full shrink flex-col-reverse flex-wrap overflow-hidden">
+                      <span className="h-0 w-full" />
+                      {/* A phone's cell has no room for an exact figure, and a rounded one misstates a
+                          small adjustment: the mark says there is one, the day's panel says how much. */}
+                      <span className={cn("flex w-full items-center gap-1", toneText(adjustment))}>
+                        <Scale aria-hidden className="size-3 shrink-0" />
+                        <Mono className="hidden truncate text-2xs sm:inline">{formatSignedCurrency(adjustment)}</Mono>
+                      </span>
+                      <span className="hidden w-full text-2xs leading-tight text-muted-foreground sm:block">
+                        Balance adjustment
+                      </span>
+                    </span>
+                  )}
                   {d && (
-                    <Mono className={cn("mt-auto truncate text-xs font-semibold sm:text-sm", toneText(d.pnl))}>
+                    <Mono className={cn("mt-auto shrink-0 truncate text-xs font-semibold sm:text-sm", toneText(d.pnl))}>
                       <span className="sm:hidden">{formatCurrencyCompact(d.pnl)}</span>
                       <span className="hidden sm:inline">{formatSignedCurrency(d.pnl)}</span>
                     </Mono>
@@ -240,7 +271,7 @@ export function JournalCalendarGrid({
                 type="button"
                 onClick={() => onOpenTrade(b.trade)}
                 style={{ gridColumn: `${b.start + 1} / ${b.end + 2}`, gridRow: b.lane + 2 }}
-                title={`${b.trade.symbol} ${b.trade.side} · ${formatDay(b.trade.openedDay)} → ${b.trade.closedDay ? formatDay(b.trade.closedDay) : "open"}`}
+                title={`${b.trade.symbol}${isResultOnly(b.trade) ? "" : ` ${b.trade.side}`} · ${formatDay(b.trade.openedDay)} → ${b.trade.closedDay ? formatDay(b.trade.closedDay) : "open"}`}
                 className={cn(
                   "flex h-5 min-w-0 cursor-pointer items-center justify-between gap-2 rounded px-1.5 text-2xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   b.trade.status === "open"
@@ -251,7 +282,8 @@ export function JournalCalendarGrid({
                 )}
               >
                 <span className="truncate">
-                  {b.trade.symbol} {b.trade.side === "long" ? "↑" : "↓"}
+                  {b.trade.symbol}
+                  {!isResultOnly(b.trade) && (b.trade.side === "long" ? " ↑" : " ↓")}
                 </span>
                 <Mono className="hidden shrink-0 sm:inline">
                   {b.trade.status === "open" ? "open" : formatCurrencyCompact(b.trade.pnl ?? 0)}
@@ -270,23 +302,29 @@ export function JournalCalendarGrid({
   );
 }
 
-/** The month's figures, and the trades of the picked day (it fills what the column has left). */
+/** The month's figures, and the trades and adjustments of the picked day (it fills what the column has left). */
 export function JournalCalendarSide({
   days,
   trades,
+  adjustments,
   today,
   state,
   onOpenTrade,
 }: {
   days: readonly JournalDay[];
   trades: readonly JournalTrade[];
+  adjustments: readonly JournalAdjustment[];
   today: string;
   state: CalendarState;
   onOpenTrade: (trade: JournalTrade) => void;
 }): React.ReactElement {
   const { month, picked } = state;
   const inMonth = days.filter((d) => d.day.startsWith(month));
-  const monthPnl = inMonth.reduce((s, d) => s + d.pnl, 0);
+  const tradesPnl = inMonth.reduce((s, d) => s + d.pnl, 0);
+  const monthAdjustments = adjustments.filter((a) => a.day.startsWith(month));
+  const monthAdjusted = monthAdjustments.reduce((s, a) => s + a.amount, 0);
+  const monthPnl = tradesPnl + monthAdjusted;
+  const pickedAdjustments = picked ? adjustments.filter((a) => a.day === picked) : [];
   const winDays = inMonth.filter((d) => d.pnl > 0).length;
   const lossDays = inMonth.filter((d) => d.pnl < 0).length;
   const best = inMonth.reduce<JournalDay | null>((b, d) => (!b || d.pnl > b.pnl ? d : b), null);
@@ -307,6 +345,16 @@ export function JournalCalendarSide({
         </CardHeader>
         <CardContent className="flex flex-col gap-2 text-sm">
           <SummaryRow label="Net P&L" value={formatSignedCurrency(monthPnl)} tone={toneText(monthPnl)} />
+          {monthAdjustments.length > 0 && (
+            <>
+              <SummaryRow label="Trades" value={formatSignedCurrency(tradesPnl)} tone={toneText(tradesPnl)} />
+              <SummaryRow
+                label="Adjustments"
+                value={formatSignedCurrency(monthAdjusted)}
+                tone={toneText(monthAdjusted)}
+              />
+            </>
+          )}
           <SummaryRow label="Trading days" value={String(inMonth.length)} />
           <SummaryRow label="Green · red days" value={`${winDays} · ${lossDays}`} />
           <SummaryRow
@@ -333,8 +381,17 @@ export function JournalCalendarSide({
           </Eyebrow>
         </CardHeader>
         <CardContent className="flex flex-col gap-2 xl:min-h-0 xl:overflow-y-auto">
+          {pickedAdjustments.map((a) => (
+            <div key={a.id} className="flex items-center justify-between gap-3 rounded-md border border-dashed px-2 py-1.5">
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate text-sm font-medium">Balance adjustment</span>
+                {a.note && <span className="truncate text-2xs text-muted-foreground">{a.note}</span>}
+              </span>
+              <Mono className={cn("shrink-0 text-sm", toneText(a.amount))}>{formatSignedCurrency(a.amount)}</Mono>
+            </div>
+          ))}
           {pickedTrades.length === 0 ? (
-            <Text variant="small">No trades that day.</Text>
+            pickedAdjustments.length === 0 && <Text variant="small">No trades that day.</Text>
           ) : (
             pickedTrades.map((t) => (
               <button
@@ -345,7 +402,10 @@ export function JournalCalendarSide({
               >
                 <span className="flex min-w-0 flex-col">
                   <span className="truncate text-sm font-medium">
-                    {t.symbol} <span className="text-muted-foreground">{t.side === "long" ? "Long" : "Short"}</span>
+                    {t.symbol}
+                    {!isResultOnly(t) && (
+                      <span className="text-muted-foreground"> {t.side === "long" ? "Long" : "Short"}</span>
+                    )}
                   </span>
                   <span className="text-2xs text-muted-foreground">
                     {t.closedDay === picked ? "Closed" : t.openedDay === picked ? "Opened" : "Held"}

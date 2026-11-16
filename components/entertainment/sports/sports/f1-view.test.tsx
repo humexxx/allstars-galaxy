@@ -158,4 +158,36 @@ describe("F1View", () => {
     // The circuit is still named in words.
     expect(tile).toHaveTextContent("Circuit de Barcelona");
   });
+
+  it("marks nobody as champion while the title is open", () => {
+    render(<F1View data={F1_DATA} />);
+    expect(screen.queryByText(/Champion/)).toBeNull();
+    fireEvent.click(championship("Constructors"));
+    expect(screen.queryByText(/Champion/)).toBeNull();
+  });
+
+  it("puts a trophy beside the driver and the team that have the title won, and nobody else", () => {
+    const last = Math.max(...F1_DATA.races.map((r) => r.round));
+    const data: F1Data = {
+      ...F1_DATA,
+      standingsRound: last,
+      races: F1_DATA.races.map((r) => ({
+        ...r,
+        status: "completed",
+        winner: { code: "ANT", team: "Mercedes" },
+      })),
+    };
+    render(<F1View data={data} />);
+
+    const mark = screen.getByText(/Champion/);
+    const leader = screen.getByText("A.K. Antonelli").closest("tr")!;
+    expect(within(leader).getByText(/Champion/)).toBe(mark);
+    // The word is for a screen reader; the eye gets the trophy.
+    expect(mark).toHaveClass("sr-only");
+    expect(leader.querySelector("svg.lucide-trophy")).toHaveAttribute("aria-hidden", "true");
+
+    fireEvent.click(championship("Constructors"));
+    const team = screen.getAllByText("Mercedes")[0].closest("tr")!;
+    expect(within(team).getByText(/Champion/)).toBe(screen.getByText(/Champion/));
+  });
 });

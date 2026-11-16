@@ -29,7 +29,7 @@ vi.mock("@/db", () => ({
 import { db } from "@/db";
 import { getFootballLeague } from "@/lib/data/sports/football";
 import { WORLD_CUP_DATA } from "@/lib/data/sports/world-cup";
-import type { BracketMatch, DashboardMatch, DashboardSportCard, LolRegion, LolSplit, RacquetData, RacquetTournament, SurfData, SurfEvent, SwissMatch, SwissStage, Team } from "@/types/sports";
+import type { BracketMatch, BracketRound, DashboardMatch, DashboardSportCard, LolRegion, LolSplit, Match, RacquetData, RacquetTournament, SurfData, SurfEvent, SwissMatch, SwissStage, Team } from "@/types/sports";
 
 import gamesOct18 from "./__fixtures__/balldontlie-nba-games-2026-10-18.json";
 import { fakeLolesports } from "./__fixtures__/lolesports";
@@ -369,7 +369,9 @@ describe("getDashboardSportCard", () => {
       headline,
       published: `2026-10-24T0${id}:00:00Z`,
       images: [{ type: "header", url: `https://a.espncdn.com/photo/${id}.jpg`, width: 600 }],
-      links: { web: { href: `https://www.espn.com/nba/story/_/id/${id}` } },
+      // No sport's desk: one wire serves all three here, and a story filed
+      // under another sport's is dropped.
+      links: { web: { href: `https://www.espn.com/espn/story/_/id/${id}` } },
     });
     vi.stubGlobal(
       "fetch",
@@ -680,32 +682,44 @@ describe("the LoL card across a season", () => {
     ]);
   });
 
-  for (const day of ["2026-11-20", "2026-12-10", "2027-01-05"]) {
-    it(`after the final (${day}): the final, the other knockouts and the season's champions`, async () => {
+  for (const [day, label] of [
+    ["2026-11-20", undefined],
+    ["2026-12-10", "Latest event"],
+    ["2027-01-05", "Latest event"],
+  ] as const) {
+    it(`after the final (${day}): the event with its champion and score, then its bracket`, async () => {
       const card = await lolCardOn(`${day}T12:00:00Z`);
 
       expect(card.context).toBe("Worlds 2026 · Finals");
-      expect(card.featured).toMatchObject({
-        status: "result",
-        label: "Finals · BO5",
-        startsAt: "2026-11-14T19:00:00Z",
+      // The event leads, as a padel tournament does; the knockouts are a week old.
+      expect(card.featured).toBeUndefined();
+      expect(card.following).toBeUndefined();
+      expect(card.event).toEqual({
+        name: "Worlds 2026",
+        detail: "Finals · BO5 · Nov 14, 2026",
+        status: "completed",
+        // "Just finished" for two weeks, then no longer true.
+        label,
+        winner: "T1",
+        // The team itself, for its crest beside the name.
+        winnerFace: expect.objectContaining({ code: "T1" }),
+        runnerUp: "GEN",
+        score: "3–2",
+      });
+      // The knockouts in the table's place, a column a round, down to the final.
+      // No champions' list beside it; only what comes next, once Lolesports lists it.
+      expect(card.tables.filter((t) => t.id !== "coming-up")).toEqual([]);
+      expect(card.bracket?.label).toBe("Worlds 2026 bracket");
+      expect(card.bracket?.rounds.map((r) => `${r.label} ${r.ties.length}`)).toEqual([
+        "Quarterfinals 4",
+        "Semifinals 2",
+        "Finals 1",
+      ]);
+      expect(card.bracket?.rounds.at(-1)?.ties[0]).toMatchObject({
         home: { code: "T1", score: 3, winner: true },
         away: { code: "GEN", score: 2, winner: false },
+        decided: true,
       });
-      expect(card.following!.map(line)).toEqual([
-        "HLE v GEN result",
-        "KT v T1 result",
-        "G2 v GEN result",
-        "HLE v CFO result",
-      ]);
-      // Each region's from its Finals: LPL's last round (IG) is not its final.
-      expect(table(card)).toEqual([
-        {
-          label: "2026 champions",
-          rows: ["T1 Worlds", "Team Liquid LCS", "G2 Esports LEC", "Anyone's Legend LPL", "Gen.G LCK"],
-        },
-      ]);
-      expect(card.tables[0].unranked).toBe(true);
     });
   }
 
@@ -794,19 +808,37 @@ describe("the LoL card after MSI or First Stand", () => {
     };
   }
 
+  it("lists each league's next tournament under the bracket once the feed has them", () => {
+    const card = __testing.lolCard(base, {
+      splits: [finished("msi", "MSI 2027", ["T1", "GEN"], "2027-07-12T19:00:00Z")],
+      upcoming: [
+        { region: "lck", name: "LCK Cup", startDate: "2027-01-14" },
+        { region: "first-stand", name: "First Stand 2027", startDate: "2027-03-10" },
+      ],
+    });
+
+    expect(card.tables.map((t) => t.label)).toEqual(["Coming up"]);
+    expect(card.bracket?.rounds.map((r) => r.label)).toEqual(["Finals"]);
+    expect(card.tables[0].rows.map((r) => `${r.name} ${r.value}`)).toEqual([
+      "LCK Cup Jan 14, 2027",
+      "First Stand 2027 Mar 10, 2027",
+    ]);
+  });
+
   it.each([
     ["first-stand", "First Stand 2027"],
     ["msi", "MSI 2027"],
-  ] as const)("after %s's final the split winners are the latest champions, not the season's", (region, name) => {
+  ] as const)("with no bracket to draw after %s, the split winners are the latest champions, not the season's", (region, name) => {
     const card = __testing.lolCard(base, {
       splits: [
-        finished(region, name, ["GEN", "BLG"], "2027-03-22T12:00:00Z"),
+        { ...finished(region, name, ["GEN", "BLG"], "2027-03-22T12:00:00Z"), playoffs: undefined },
         finished("lck", "LCK Split 1", ["HLE", "T1"], "2027-03-01T08:00:00Z"),
         finished("lec", "LEC Split 1", ["G2", "FNC"], "2027-03-08T16:00:00Z"),
       ],
     });
 
-    expect(card.context).toBe(`${name} · Finals`);
+    expect(card.context).toBe(name);
+    expect(card.bracket).toBeUndefined();
     expect(card.tables.map((t) => ({ label: t.label, rows: t.rows.map((r) => `${r.code} ${r.value}`) }))).toEqual([
       { label: "Latest champions", rows: [`GEN ${region === "msi" ? "MSI" : "First Stand"}`, "HLE LCK", "G2 LEC"] },
     ]);
@@ -873,6 +905,60 @@ describe("swissRecords", () => {
   });
 });
 
+describe("leadOrChampion", () => {
+  const club = (id: string, shortName: string): Team => ({ id, name: shortName, shortName, code: id.toUpperCase() });
+  const teams = new Map([club("mil", "Brewers"), club("tb", "Rays")].map((t) => [t.id, t]));
+  const series: BracketRound[] = [
+    {
+      id: "final",
+      label: "World Series",
+      matches: [
+        { id: "ws", homeTeamId: "tb", awayTeamId: "mil", homeScore: 1, awayScore: 4, winnerTeamId: "mil", bestOf: 7, date: "2026-10-28T23:00:00Z" },
+      ],
+    },
+  ];
+  const game: Match = {
+    id: "g1",
+    kickoff: "2026-10-28T23:00:00Z",
+    homeTeamId: "tb",
+    awayTeamId: "mil",
+    homeScore: 1,
+    awayScore: 4,
+    status: "ft",
+  };
+
+  it("leads with the champion once the feed has no games left", () => {
+    const clock = { timeZone: "UTC", now: Date.parse("2026-11-15T12:00:00Z") };
+    const lead = __testing.leadOrChampion([], series, teams, clock);
+    expect(lead.featured).toBeUndefined();
+    expect(lead.event).toEqual({
+      name: "World Series",
+      detail: "Best of 7 · Oct 28, 2026",
+      status: "completed",
+      label: "Season champions",
+      winner: "Brewers",
+      winnerFace: expect.objectContaining({ id: "mil" }),
+      runnerUp: "TB",
+      score: "4–1",
+    });
+  });
+
+  it("says Just finished for two weeks after the final", () => {
+    const clock = { timeZone: "UTC", now: Date.parse("2026-11-01T12:00:00Z") };
+    expect(__testing.leadOrChampion([], series, teams, clock).event?.label).toBeUndefined();
+  });
+
+  it("keeps the games while there are any, and names nobody before the final is won", () => {
+    const clock = { timeZone: "UTC", now: Date.parse("2026-10-29T12:00:00Z") };
+    const withGames = __testing.leadOrChampion([game], series, teams, clock);
+    expect(withGames.featured).toBeDefined();
+    expect(withGames.event).toBeUndefined();
+    const open = [{ ...series[0], matches: [{ ...series[0].matches[0], winnerTeamId: null }] }];
+    expect(__testing.leadOrChampion([], open, teams, clock).event).toBeUndefined();
+    expect(__testing.leadOrChampion([], undefined, teams, clock).event).toBeUndefined();
+  });
+});
+
 describe("racquetCard", () => {
   const tournament = (id: string, status: RacquetTournament["status"]): RacquetTournament => ({
     id,
@@ -929,6 +1015,127 @@ describe("racquetCard", () => {
     expect(__testing.racquetCard(base, week, "ATP", monday).event).toMatchObject({ name: "Stockholm" });
   });
 
+  describe("the faces on the lead event", () => {
+    const player = (id: string, seed: string): Team => ({ id, name: "🇺🇸", shortName: id, code: seed, logoUrl: `${id}.png` });
+    const players = [player("fritz", "1"), player("tirante", ""), player("rune", "3"), player("ruud", "2"), player("paul", "4")];
+    const rounds = (winnerTeamId?: string): BracketRound[] => [
+      {
+        id: "semi-final",
+        label: "Semi-finals",
+        matches: [
+          { id: "s1", homeTeamId: "fritz", awayTeamId: "paul", winnerTeamId: "fritz" },
+          { id: "s2", homeTeamId: "ruud", awayTeamId: "tirante", winnerTeamId: "tirante" },
+          { id: "q1", homeTeamId: "rune", awayTeamId: "tirante", winnerTeamId: "tirante" },
+        ],
+      },
+      { id: "final", label: "Final", matches: [{ id: "f", homeTeamId: "fritz", awayTeamId: "tirante", winnerTeamId }] },
+    ];
+    const won: RacquetTournament = { ...tournament("Stockholm", "completed"), champion: "fritz", runnerUp: "tirante" };
+    const sunday = { timeZone: "UTC", now: Date.parse("2026-10-25T20:00:00Z") };
+
+    it("carries the draw's three best seeds and the winner of its final", () => {
+      const week = { ...tour([{ ...won, bracket: rounds("fritz") }]), drawPlayers: players };
+      const event = __testing.racquetCard(base, week, "ATP", sunday).event!;
+      expect(event.seeds?.map((p) => p.id)).toEqual(["fritz", "ruud", "rune"]);
+      expect(event.winnerFace?.id).toBe("fritz");
+      // How far each got, for its tooltip; no ranking, as this tour's list is empty.
+      expect(event.profiles).toEqual({
+        fritz: { ranking: undefined, result: "Champion" },
+        ruud: { ranking: undefined, result: "Lost in the Semi-finals" },
+        rune: { ranking: undefined, result: "Lost in the Semi-finals" },
+      });
+    });
+
+    it("finds a player's ranking by the name both lists print, and a pair's by each surname", () => {
+      const ranked = (position: number, shortName: string) =>
+        ({ position, name: shortName, shortName, countryCode: "US", flagEmoji: "🇺🇸", points: 4635, movement: 0 });
+      const week = {
+        ...tour([{ ...won, bracket: rounds("fritz") }]),
+        drawPlayers: players,
+        rankings: [ranked(4, "fritz"), ranked(9, "ruud")],
+      };
+      const profiles = __testing.racquetCard(base, week, "ATP", sunday).event!.profiles!;
+      expect(profiles.fritz.ranking).toBe("#4 · 4,635 pts");
+      expect(profiles.rune.ranking).toBeUndefined();
+
+      const pair = { id: "fritz", name: "T. Fritz / C. Ruud", shortName: "Fritz / Ruud", code: "1" };
+      const padel = { ...base, sportId: "padel", label: "Padel" } as const;
+      const pairs = {
+        ...tour([{ ...won, bracket: rounds("fritz") }]),
+        drawPlayers: [pair, ...players.slice(1)],
+        rankings: [ranked(1, "T. Fritz"), ranked(2, "C. Ruud")],
+      };
+      expect(__testing.racquetCard(padel, pairs, "Premier Padel", sunday).event!.profiles!.fritz.ranking).toBe("#1 / #2");
+    });
+
+    it("names no winner while the final is unplayed", () => {
+      const week = { ...tour([{ ...tournament("Stockholm", "live"), bracket: rounds() }]), drawPlayers: players };
+      const event = __testing.racquetCard(base, week, "ATP", sunday).event!;
+      expect(event.seeds).toHaveLength(3);
+      expect(event.winnerFace).toBeUndefined();
+    });
+
+    it("draws the event's last rounds by surname, with the sets each side won", () => {
+      const final = rounds("fritz");
+      final[1].matches[0] = {
+        ...final[1].matches[0],
+        date: "2026-10-25",
+        legs: [
+          { homeScore: 6, awayScore: 4 },
+          { homeScore: 7, awayScore: 6 },
+        ],
+      };
+      const named = players.map((p) => (p.id === "fritz" ? { ...p, shortName: "T. Fritz" } : p));
+      const week = { ...tour([{ ...won, bracket: final }]), drawPlayers: named };
+      const bracket = __testing.racquetCard(base, week, "ATP", sunday).bracket!;
+      expect(bracket).toMatchObject({ label: "Stockholm draw", short: "Draw" });
+      expect(bracket.rounds.map((r) => r.label)).toEqual(["Semi-finals", "Final"]);
+      expect(bracket.rounds[1].ties[0]).toMatchObject({
+        // The seed and the face, not the flag; an unseeded player has no seed.
+        home: { code: "Fritz", score: 2, winner: true, seed: "1", photos: ["fritz.png"] },
+        away: { code: "tirante", score: 0, winner: false, seed: undefined, photos: ["tirante.png"] },
+        decided: true,
+        playedAt: "2026-10-25",
+      });
+    });
+
+    it("counts a set only once it is won, not the one in play", () => {
+      const live = rounds();
+      live[1].matches[0] = {
+        ...live[1].matches[0],
+        legs: [
+          { homeScore: 6, awayScore: 4 },
+          { homeScore: 2, awayScore: 3 },
+        ],
+      };
+      const week = { ...tour([{ ...tournament("Stockholm", "live"), bracket: live }]), drawPlayers: players };
+      const tie = __testing.racquetCard(base, week, "ATP", sunday).bracket!.rounds.at(-1)!.ties[0];
+      expect([tie.home.score, tie.away.score]).toEqual([1, 0]);
+    });
+
+    it("draws no bracket while the event is in rounds too big for a card", () => {
+      const sixteen = Array.from({ length: 16 }, (_, i) => ({ id: `r${i}`, homeTeamId: "fritz", awayTeamId: "paul" }));
+      const early: BracketRound[] = [{ id: "round-of-32", label: "Round of 32", matches: sixteen }];
+      const week = { ...tour([{ ...tournament("Stockholm", "live"), bracket: early }]), drawPlayers: players };
+      expect(__testing.racquetCard(base, week, "ATP", sunday).bracket).toBeUndefined();
+    });
+
+    it("draws no bracket for an event still to start", () => {
+      const next = { ...tournament("Stockholm", "upcoming"), bracket: rounds() };
+      const week = { ...tour([next]), drawPlayers: players };
+      expect(__testing.racquetCard(base, week, "ATP", sunday).bracket).toBeUndefined();
+    });
+
+    it("reads a draw the feed did not ship, and goes without when there is none", () => {
+      const week = tour([won]);
+      expect(__testing.racquetCard(base, week, "ATP", sunday).event?.seeds).toBeUndefined();
+      const draw = { tournamentId: "Stockholm", rounds: rounds("fritz"), players };
+      const event = __testing.racquetCard(base, week, "ATP", sunday, draw).event!;
+      expect(event.seeds?.map((p) => p.id)).toEqual(["fritz", "ruud", "rune"]);
+      expect(event.winnerFace?.id).toBe("fritz");
+    });
+  });
+
   it("links the tournament to its own page, not the sport's", () => {
     const week = tour([tournament("vienna-2026", "live")]);
     expect(__testing.racquetCard(base, week, "ATP").event?.href).toBe("/portal/entertainment/sports/tennis/vienna-2026");
@@ -964,6 +1171,36 @@ describe("surfCard", () => {
 
     const off = __testing.surfCard(base, data([stop("Pipe", "upcoming", "2026-12-08"), stop("Philippines", "upcoming", "2026-10-31")]));
     expect(off.event).toMatchObject({ name: "Philippines", status: "upcoming" });
+  });
+
+  it("draws the stop's head-to-head heats and puts a face to its winner", () => {
+    const surfer = (athleteId: string, name: string, score: number, place: number) => ({ athleteId, name, score, place, imageUrl: `${athleteId}.png` });
+    const heat = (id: string, surfers: ReturnType<typeof surfer>[]) => ({ id, number: 1, status: "completed" as const, surfers });
+    const won = { ...stop("Philippines", "completed", "2026-11-08"), winner: "Yago Dora", runnerUp: "Ítalo Ferreira" };
+    const draw = {
+      eventId: "Philippines",
+      rounds: [
+        // Three in the water: not a tie of two.
+        { label: "Round 1", heats: [heat("r1", [surfer("1", "Yago Dora", 14, 1), surfer("2", "Ítalo Ferreira", 12, 2), surfer("3", "Jack Robinson", 9, 3)])] },
+        { label: "Semifinals", heats: [heat("s1", [surfer("1", "Yago Dora", 15.5, 1), surfer("3", "Jack Robinson", 11, 2)])] },
+        { label: "Final", heats: [heat("f", [surfer("2", "Ítalo Ferreira", 13.17, 2), surfer("1", "Yago Dora", 16.9, 1)])] },
+      ],
+    };
+    const monday = { timeZone: "UTC", now: Date.parse("2026-11-09T12:00:00Z") };
+    const card = __testing.surfCard(base, { ...data([won]), draw }, monday);
+    expect(card.bracket).toMatchObject({ label: "Philippines heats", short: "Heats" });
+    expect(card.bracket?.rounds.map((r) => r.label)).toEqual(["Semifinals", "Final"]);
+    expect(card.bracket?.rounds[1].ties[0]).toMatchObject({
+      home: { code: "Ferreira", score: 13.17, winner: false },
+      away: { code: "Dora", score: 16.9, winner: true },
+      decided: true,
+    });
+    expect(card.event?.winnerFace).toMatchObject({ shortName: "Yago Dora", logoUrl: "1.png" });
+
+    // Another stop's draw says nothing of this one.
+    const other = __testing.surfCard(base, { ...data([won]), draw: { ...draw, eventId: "Pipe" } }, monday);
+    expect(other.bracket).toBeUndefined();
+    expect(other.event?.winnerFace).toBeUndefined();
   });
 
   it("keeps the stop won yesterday, with its winner", () => {

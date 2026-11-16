@@ -74,7 +74,7 @@ const base: Data = {
 };
 
 describe("PortfolioClientPage — an empty book is the same page at zero", () => {
-  it("an owner whose methods hold no money gets the owner figures at $0.00, no 100%", () => {
+  it("an owner whose methods hold no money gets the owner figures at $0.00", () => {
     render(
       <PortfolioClientPage
         data={{
@@ -95,8 +95,6 @@ describe("PortfolioClientPage — an empty book is the same page at zero", () =>
 
     expect(screen.getByText("Owed to investors")).toBeInTheDocument();
     expect(screen.getAllByText("$0.00").length).toBeGreaterThan(0);
-    // A share of nothing is not 100%.
-    expect(screen.queryByText("100%")).not.toBeInTheDocument();
   });
 
   it("an investor with nothing approved gets the same grid, at zero", () => {

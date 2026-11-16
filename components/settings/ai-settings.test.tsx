@@ -27,7 +27,7 @@ const AI: AiPaneData = {
   today: "2026-10-19",
 };
 
-const PREFS = { showContextAvatar: true, financeMilestones: null } as unknown as UserPreferences;
+const PREFS = { showContextAvatar: true, mascotCharacter: "explorer", financeMilestones: null } as unknown as UserPreferences;
 
 beforeEach(() => vi.clearAllMocks());
 

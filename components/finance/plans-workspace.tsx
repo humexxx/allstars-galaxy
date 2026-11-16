@@ -172,14 +172,16 @@ export function PlansWorkspace({
       timeline.points.slice(0, timeline.todayIndex).filter((p) => !p.skipped),
       (p) => checkpointLabels(p.date).time,
       (p) => checkpointLabels(p.date),
-      lastConfirmedDay
+      lastConfirmedDay,
+      today,
+      main.confirmationDayOfMonth
     );
     return {
       netWorth: now.netWorth,
       sinceClose: baseline ? now.netWorth - baseline.point.netWorth : null,
       since: baseline?.since ?? null,
     };
-  }, [plans, timelines, lastConfirmedDay]);
+  }, [plans, timelines, lastConfirmedDay, today]);
 
   // Each plan's net worth at the end of the chosen horizon — the last month
   // the chart draws — or at the plan's own end when it stops sooner.

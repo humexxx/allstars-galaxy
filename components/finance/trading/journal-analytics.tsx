@@ -42,7 +42,10 @@ export function JournalAnalyticsMain({ journal }: { journal: TradingJournal }): 
     <div className="flex flex-col gap-6 xl:min-h-0 xl:flex-1">
       <EquityChart journal={journal} />
       <div className="grid gap-6 lg:grid-cols-2">
-        <BarsChart title="P&L by month" rows={monthRows(journal)} />
+        <BarsChart
+          title={journal.adjustments.length > 0 ? "P&L by month, after adjustments" : "P&L by month"}
+          rows={monthRows(journal)}
+        />
         <BarsChart title="P&L by weekday" rows={journal.byWeekday} />
       </div>
     </div>
@@ -52,13 +55,21 @@ export function JournalAnalyticsMain({ journal }: { journal: TradingJournal }): 
 /**
  * The figures a journal is read for (net P&L, win rate, profit factor,
  * expectancy, average win and loss, drawdown, hold time, streaks), and where
- * the money is made, by symbol or by setup.
+ * the money is made, by symbol — or by setup, once a trade carries one (the
+ * assistant records them; the form does not ask).
  */
 export function JournalAnalyticsSide({ journal }: { journal: TradingJournal }): React.ReactElement {
   const s = journal.stats;
   const [by, setBy] = useState<"symbol" | "setup">("symbol");
+  const hasSetups = journal.trades.some((t) => t.setup);
   const stats: { label: string; value: string; sub?: string; tone?: string }[] = [
-    { label: "Net P&L", value: formatSignedCurrency(s.netPnl), sub: `${s.trades} closed trades`, tone: toneText(s.netPnl) },
+    {
+      label: "Net P&L",
+      value: formatSignedCurrency(s.netPnl),
+      // The charts count balance adjustments; this figure and the ones under it are the trades alone.
+      sub: journal.adjustments.length > 0 ? `${s.trades} closed trades, before adjustments` : `${s.trades} closed trades`,
+      tone: toneText(s.netPnl),
+    },
     { label: "Win rate", value: pct(s.winRate), sub: `${s.wins} won · ${s.losses} lost` },
     {
       label: "Profit factor",
@@ -116,21 +127,23 @@ export function JournalAnalyticsSide({ journal }: { journal: TradingJournal }): 
       <Card className="gap-3 xl:min-h-0 xl:flex-1">
         <CardHeader className="flex items-center justify-between gap-2">
           <Eyebrow size="sm" asChild>
-            <h3>P&amp;L by</h3>
+            <h3>{hasSetups ? "P&L by" : "P&L by symbol"}</h3>
           </Eyebrow>
-          <ToggleGroup
-            type="single"
-            size="sm"
-            value={by}
-            onValueChange={(v) => v && setBy(v as "symbol" | "setup")}
-            aria-label="Break the P&L down by"
-          >
-            <ToggleGroupItem value="symbol">Symbol</ToggleGroupItem>
-            <ToggleGroupItem value="setup">Setup</ToggleGroupItem>
-          </ToggleGroup>
+          {hasSetups && (
+            <ToggleGroup
+              type="single"
+              size="sm"
+              value={by}
+              onValueChange={(v) => v && setBy(v as "symbol" | "setup")}
+              aria-label="Break the P&L down by"
+            >
+              <ToggleGroupItem value="symbol">Symbol</ToggleGroupItem>
+              <ToggleGroupItem value="setup">Setup</ToggleGroupItem>
+            </ToggleGroup>
+          )}
         </CardHeader>
         <CardContent className="xl:min-h-0 xl:overflow-y-auto">
-          <Breakdown rows={by === "symbol" ? journal.bySymbol : journal.bySetup} />
+          <Breakdown rows={hasSetups && by === "setup" ? journal.bySetup : journal.bySymbol} />
         </CardContent>
       </Card>
     </>
@@ -149,6 +162,7 @@ function EquityChart({ journal }: { journal: TradingJournal }): React.ReactEleme
       ? journal.equity
       : [`${journal.today.slice(0, 7)}-01`, journal.today].map((day) => ({ day, balance: 0, cumulativePnl: 0 }));
   const ticks = niceTicks(data.flatMap((p) => [p.balance, p.cumulativePnl]));
+  const pnlLabel = journal.adjustments.length > 0 ? "P&L after adjustments" : "Realized P&L";
   return (
     <section className="flex flex-col gap-3 xl:min-h-0 xl:flex-1">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -162,7 +176,7 @@ function EquityChart({ journal }: { journal: TradingJournal }): React.ReactEleme
           </span>
           <span className="flex items-center gap-1.5">
             <span aria-hidden className="inline-block h-0.5 w-3" style={{ background: GAIN }} />
-            Realized P&amp;L
+            {pnlLabel}
           </span>
         </div>
       </div>
@@ -205,7 +219,7 @@ function EquityChart({ journal }: { journal: TradingJournal }): React.ReactEleme
                     <Mono>{formatCurrency(row.balance)}</Mono>
                   </div>
                   <div className="flex justify-between gap-4">
-                    <span className="text-muted-foreground">Realized P&amp;L</span>
+                    <span className="text-muted-foreground">{pnlLabel}</span>
                     <Mono className={toneText(row.cumulativePnl)}>{formatSignedCurrency(row.cumulativePnl)}</Mono>
                   </div>
                 </div>

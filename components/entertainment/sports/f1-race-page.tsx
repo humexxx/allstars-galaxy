@@ -1,6 +1,6 @@
 "use client";
 
-import { Lock, RotateCw, Timer } from "lucide-react";
+import { RotateCw, Timer } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition, type ReactNode, type Ref } from "react";
 
@@ -58,12 +58,14 @@ type F1RacePageProps = {
 
 /**
  * One race on a page of its own, laid out as F1's page is: the same name
- * row with the favourites and the sport picker, its title a breadcrumb
- * ("Formula 1 › Mexico City Grand Prix"). Overview: the circuit, big, with
- * its place and what is on or next, beside the weekend's timetable, the
- * podium, pole, fastest lap and sprint. Results (locked until a session has
- * run): every session's order as it comes in and, for a finished race, the
- * whole field with its points.
+ * row, its title a breadcrumb ("Formula 1 › Mexico City Grand Prix"), the
+ * favourites and the sport picker beside it where they fit on its line.
+ * Overview: the circuit, big, with its place and what is on or next, beside
+ * the weekend's timetable, the podium, pole, fastest lap and sprint. Results
+ * (a tab only once a session has run, and no tab strip before; the
+ * timetable says when that is):
+ * every session's order as it comes in and, for a finished race, the whole
+ * field with its points.
  *
  * Everything comes with the page (read on the server); what was not in yet is
  * asked for again by refreshing it.
@@ -108,6 +110,15 @@ export function F1RacePage({
     if (document.activeElement === document.body) classificationHeading.current?.focus();
   }, [classification]);
 
+  // Once the race is run its times are history: the podium goes ahead of them.
+  const weekend = hasSessions && (
+    <Section title="Weekend">
+      <div className="rounded-lg border bg-card px-3">
+        <SessionList race={race} format={format} now={now} results={sessions} drivers={drivers} />
+      </div>
+    </Section>
+  );
+
   return (
     <SportPageControls sport="f1" favoriteSportIds={favoriteSportIds}>
       <Tabs defaultValue={initialTab === "results" && hasTables ? "results" : "overview"} className="gap-6">
@@ -116,15 +127,14 @@ export function F1RacePage({
           title={race.name}
           subtitle={`Round ${race.round} · ${season} Season`}
           parent={{ label: F1?.label ?? "Formula 1", href: sportPath("f1") }}
+          // No strip for the Overview alone: one tab is nothing to choose.
           tabs={
-            <TabsList variant="line">
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              {/* Locked until a session has run: where its orders will be is worth knowing. */}
-              <TabsTrigger value="results" disabled={!hasTables}>
-                {!hasTables && <Lock aria-hidden />}
-                Results
-              </TabsTrigger>
-            </TabsList>
+            hasTables && (
+              <TabsList variant="line">
+                <TabsTrigger value="overview">Overview</TabsTrigger>
+                <TabsTrigger value="results">Results</TabsTrigger>
+              </TabsList>
+            )
           }
         >
           <TabsContent value="overview">
@@ -158,13 +168,7 @@ export function F1RacePage({
               </Card>
 
               <div className="flex min-w-0 flex-col gap-6">
-                {hasSessions && (
-                  <Section title="Weekend">
-                    <div className="rounded-lg border bg-card px-3">
-                      <SessionList race={race} format={format} now={now} results={sessions} drivers={drivers} />
-                    </div>
-                  </Section>
-                )}
+                {!race.podium && weekend}
 
                 {race.podium && (
                   <Section title="Podium">
@@ -191,6 +195,8 @@ export function F1RacePage({
                     )}
                   </dl>
                 )}
+
+                {race.podium && weekend}
               </div>
             </div>
           </TabsContent>
@@ -313,8 +319,9 @@ function SessionResults({
           aria-label="Session"
           className="self-start"
         >
+          {/* Both widths: the segment's own phone floor is `max-sm:min-w-fit`, which a bare min-w-11 loses to. */}
           {sessions.map((s) => (
-            <ToggleGroupItem key={s.kind} value={s.kind}>
+            <ToggleGroupItem key={s.kind} value={s.kind} className="min-w-11 max-sm:min-w-11">
               {SHORT_SESSION[s.kind]}
               {/* "P1 (Practice 1)": the name starts with what is on the button. The
                   space sits outside the span, as some readers trim an element's own text. */}

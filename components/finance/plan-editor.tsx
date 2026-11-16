@@ -1643,13 +1643,16 @@ function ProjectionPanel({
 
 
   // The last closed period, for the "since" chip beside today's figure.
-  // Net worth's change: from the user's last confirmation, else the last close.
+  // Net worth's change: from the snapshot before this period's confirmation,
+  // else the user's last confirmation, else the last close.
   const changeFrom = changeBaseline(
     // A skipped period is a straight-line guess, never a baseline.
     chartSeries.points.slice(0, chartSeries.pastCount).filter((p) => !p.skipped),
     (p) => checkpointLabels(p.date).time,
     (p) => checkpointLabels(p.date),
-    lastConfirmedDay
+    lastConfirmedDay,
+    now,
+    effAnchor
   );
   const sinceClose = changeFrom && todayIsOnChart ? today - changeFrom.point.netWorth : null;
 

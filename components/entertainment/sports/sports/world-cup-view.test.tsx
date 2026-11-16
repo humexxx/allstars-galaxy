@@ -93,9 +93,8 @@ describe("WorldCupView", () => {
 
   it("opens on the groups before the knockout is drawn, with no News tab without news", () => {
     renderView({ data: { ...DATA, knockout: [] } });
-    expect(tabs()).toEqual(["Groups", "Knockout"]);
+    expect(tabs()).toEqual(["Groups"]);
     expect(openTab()).toBe("Groups");
-    expect(screen.getByRole("tab", { name: "Knockout" })).toBeDisabled();
   });
 
   it("heads each group at level 2 and names its table after it", () => {

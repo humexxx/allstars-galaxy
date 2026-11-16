@@ -5,6 +5,8 @@
  */
 import type { ReactElement, ReactNode } from "react";
 
+import type { MascotCharacter } from "@/types/preferences";
+
 import { Cast, Flower, Hero, keyframes, loop, rot, Shadow, Stage, tr, Tuft, type Frame, type Point } from "./kit";
 
 const INK = { stroke: "var(--ctxa-ink)", strokeLinejoin: "round", strokeLinecap: "round" } as const;
@@ -220,7 +222,7 @@ function scrolling(prefix: string, details: Detail[]): ReactElement[] {
   ));
 }
 
-export function RoadPathsScene({ className }: { className?: string }): ReactElement {
+export function RoadPathsScene({ character, className }: { character?: MascotCharacter; className?: string }): ReactElement {
   return (
     <Stage
       styles={STYLES}
@@ -252,7 +254,7 @@ export function RoadPathsScene({ className }: { className?: string }): ReactElem
         <g transform={`translate(${HERO_X} 0)`}>
           <Shadow />
           <g className="rp-bob">
-            <Hero
+            <Hero character={character}
               face="happy"
               arm="ctxa-loop rp-arm"
               farArm="rp-far"

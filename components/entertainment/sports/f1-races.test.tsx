@@ -28,7 +28,7 @@ const tiles = (title: string): HTMLElement[] =>
     .filter((b) => b.hasAttribute("data-race"));
 const rounds = (title: string): string[] =>
   tiles(title).map((t) => t.textContent?.match(/Round (\d+)/)?.[1] ?? "");
-// The races run come in from the pill on their heading, three a tap.
+// The latest race run is there from the start; the rest come in from the pill, three a tap.
 const showEarlier = (): void => {
   fireEvent.click(within(section("Earlier races")).getByRole("button", { name: /^Earlier:/ }));
 };
@@ -86,7 +86,7 @@ describe("F1Races", () => {
     expect(within(featuredCard()).getByText("Next")).toHaveClass("text-foreground");
   });
 
-  it("lists every race after it under Coming up, and none run until asked for", () => {
+  it("lists every race after it under Coming up, and only the latest one run until asked for", () => {
     renderRaces();
     expect(tiles("Coming up").map((t) => within(t).getByText(/Grand Prix$/).textContent)).toEqual([
       "Mexico City Grand Prix",
@@ -95,20 +95,22 @@ describe("F1Races", () => {
       "Qatar Grand Prix",
     ]);
     expect(screen.queryByRole("heading", { name: "Just finished" })).toBeNull();
-    expect(tiles("Earlier races")).toEqual([]);
+    // The race just run shows its winner without a tap.
+    expect(rounds("Earlier races")).toEqual(["17"]);
+    expect(tiles("Earlier races")[0]).toHaveTextContent(/WinnerVER/);
     expect(
-      within(section("Earlier races")).getByRole("button", { name: "Earlier: Show rounds 15 – 17" })
+      within(section("Earlier races")).getByRole("button", { name: "Earlier: Show rounds 14 – 16" })
     ).toBeInTheDocument();
   });
 
-  it("brings in the three just run, latest first, with winner, pole and fastest lap", () => {
+  it("brings in the three before it, latest first, with winner, pole and fastest lap", () => {
     renderRaces();
     showEarlier();
     const [singapore, baku, monza] = tiles("Earlier races");
     expect(within(singapore).getByText("Singapore Grand Prix")).toBeInTheDocument();
     expect(within(baku).getByText("Azerbaijan Grand Prix")).toBeInTheDocument();
     expect(within(monza).getByText("Italian Grand Prix")).toBeInTheDocument();
-    expect(tiles("Earlier races")).toHaveLength(3);
+    expect(tiles("Earlier races")).toHaveLength(4);
 
     // Winner VER, pole RUS, fastest lap LEC — each named for a screen reader.
     expect(singapore).toHaveTextContent(/WinnerVER/);
@@ -119,15 +121,14 @@ describe("F1Races", () => {
   it("brings in earlier races below the ones shown, until the season has none left", () => {
     const scrollBy = vi.spyOn(window, "scrollBy").mockImplementation(() => {});
     renderRaces();
-    showEarlier();
-    expect(rounds("Earlier races")).toEqual(["17", "16", "15"]);
+    expect(rounds("Earlier races")).toEqual(["17"]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Earlier: Show round 14" }));
+    fireEvent.click(screen.getByRole("button", { name: "Earlier: Show rounds 14 – 16" }));
 
     expect(rounds("Earlier races")).toEqual(["17", "16", "15", "14"]);
-    // Nothing older: the pill goes, and the keyboard lands on the race it brought in.
+    // Nothing older: the pill goes, and the keyboard lands on the first race it brought in.
     expect(screen.queryByRole("button", { name: /^Earlier:/ })).toBeNull();
-    expect(document.activeElement).toBe(tiles("Earlier races")[3]);
+    expect(document.activeElement).toBe(tiles("Earlier races")[1]);
     expect(scrollBy).not.toHaveBeenCalled();
   });
 
@@ -147,16 +148,15 @@ describe("F1Races", () => {
     renderRaces(long);
     showEarlier();
 
-    fireEvent.click(screen.getByRole("button", { name: "Earlier: Show rounds 12 – 14" }));
+    fireEvent.click(screen.getByRole("button", { name: "Earlier: Show rounds 11 – 13" }));
 
-    expect(rounds("Earlier races")).toEqual(["17", "16", "15", "14", "13", "12"]);
-    const pill = screen.getByRole("button", { name: "Earlier: Show rounds 9 – 11" });
+    expect(rounds("Earlier races")).toEqual(["17", "16", "15", "14", "13", "12", "11"]);
+    const pill = screen.getByRole("button", { name: "Earlier: Show rounds 8 – 10" });
     expect(document.activeElement).toBe(pill);
   });
 
   it("opens every race on its own page, by its round", () => {
     renderRaces();
-    showEarlier();
     expect(tiles("Earlier races")[0]).toHaveAttribute("href", "/portal/entertainment/sports/f1/17");
     expect(within(section("Coming up")).getByRole("link", { name: /Qatar Grand Prix/ })).toHaveAttribute(
       "href",

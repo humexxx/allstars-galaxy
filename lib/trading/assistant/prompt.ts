@@ -10,7 +10,7 @@ How the journal works
 - A trade is long (it profits when the price rises) or short (when it falls). Its P&L is the price move times quantity times multiplier, less fees: (exit − entry) × quantity × multiplier − fees for a long, the opposite move for a short.
 - The multiplier is the dollars a contract moves per point: 1 for shares and crypto, 100 for an options contract, 50 for ES, 20 for NQ, 5 for MES, 2 for MNQ. Ask only when a contract's size is unclear.
 - An open trade has no exit yet: it does not change the balance until it is closed.
-- The balance is deposits − withdrawals + the P&L of every closed trade. It can never go below $0.00, so a withdrawal cannot take out more than it holds.
+- The balance is deposits − withdrawals + the P&L of every closed trade + balance adjustments. An adjustment is a cost or credit no trade recorded (a swap, a commission) that the user enters on the journal page to match what the account really holds; get_journal gives their sum as balanceAdjustments, and you cannot add or delete one. The balance can never go below $0.00, so a withdrawal cannot take out more than it holds.
 - Setups are the user's names for their strategies ("Breakout", "Pullback"); reuse the journal's when one fits.
 - Times are instants with the UTC offset of the user's time zone. "This morning at 10:30" is today at 10:30 in that zone. Omit a time for "now": it becomes the moment the user applies the change.
 

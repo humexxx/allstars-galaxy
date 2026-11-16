@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, CalendarDays, Info, LineChart, List, Plus } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, CalendarDays, Info, LineChart, List, Plus, Scale } from "lucide-react";
 
 import { CountUpCurrency } from "@/components/finance/count-up";
 import { PageHeader } from "@/components/portal/page-header";
@@ -14,7 +14,7 @@ import { Eyebrow, Mono, Text } from "@/components/ui/typography";
 import { hrefWithJournalView, JOURNAL_VIEWS, type JournalView } from "@/lib/finance/journal-view";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatSignedCurrency, moneySign } from "@/lib/utils/format";
-import type { JournalTrade, TradingCashKind, TradingJournal } from "@/types/trading";
+import type { JournalTrade, TradingCashKind, TradingInstrument, TradingJournal } from "@/types/trading";
 
 import { JournalAnalyticsMain, JournalAnalyticsSide } from "./journal-analytics";
 import {
@@ -24,7 +24,7 @@ import {
   JournalCalendarSide,
   type CalendarState,
 } from "./journal-calendar";
-import { CashDialog, CloseTradeDialog, TradeDialog } from "./journal-dialogs";
+import { AdjustBalanceDialog, CashDialog, CloseTradeDialog, TradeDialog } from "./journal-dialogs";
 import { JournalCashCard, JournalTradesTable, TradeFilterControl, type TradeFilter } from "./journal-trades";
 
 const VIEW_ICON = { calendar: CalendarDays, analytics: LineChart, trades: List } as const;
@@ -44,9 +44,12 @@ const toneText = (n: number): string =>
 export function TradingJournalView({
   journal,
   initialView,
+  linkedInstruments,
 }: {
   journal: TradingJournal;
   initialView: JournalView;
+  /** The assets linked for pricing: what the trade form offers as instruments. */
+  linkedInstruments: TradingInstrument[];
 }): React.ReactElement {
   const [view, setView] = useState<JournalView>(initialView);
   const [calendar, setCalendar] = useState<CalendarState>(() => initialCalendarState(journal.today));
@@ -55,11 +58,11 @@ export function TradingJournalView({
   const [tradeOpen, setTradeOpen] = useState(false);
   const [closing, setClosing] = useState<JournalTrade | null>(null);
   const [cashKind, setCashKind] = useState<TradingCashKind | null>(null);
+  const [adjusting, setAdjusting] = useState(false);
 
   const month = journal.months.at(-1);
   const monthPnl = month && month.month === journal.today.slice(0, 7) ? month.pnl : 0;
   const open = journal.trades.filter((t) => t.status === "open");
-  const setups = [...new Set(journal.trades.map((t) => t.setup).filter((s): s is string => Boolean(s)))];
   const { stats } = journal;
 
   const goView = (next: JournalView): void => {
@@ -120,6 +123,10 @@ export function TradingJournalView({
               <ArrowUpRight />
               Withdraw
             </Button>
+            <Button variant="outline" onClick={() => setAdjusting(true)}>
+              <Scale />
+              Adjust balance
+            </Button>
             <Button onClick={newTrade}>
               <Plus />
               New trade
@@ -154,11 +161,18 @@ export function TradingJournalView({
                   {formatCurrency(journal.deposited)} deposited · {formatCurrency(journal.withdrawn)} withdrawn ·{" "}
                   <span className={toneText(journal.realizedPnl)}>{formatSignedCurrency(journal.realizedPnl)}</span>{" "}
                   from trades
+                  {journal.adjustments.length > 0 && (
+                    <>
+                      {" · "}
+                      <span className={toneText(journal.adjusted)}>{formatSignedCurrency(journal.adjusted)}</span>{" "}
+                      adjustments
+                    </>
+                  )}
                 </Text>
                 <Text variant="small" as="p" className="text-2xs">
                   {stats.winRate == null ? "—" : `${Math.round(stats.winRate * 100)}%`} win rate · profit factor{" "}
                   {stats.profitFactor == null ? "—" : stats.profitFactor.toFixed(2)} · {open.length} open
-                  {open.length > 0 && ` (${formatCurrency(journal.openExposure)})`}
+                  {journal.openExposure > 0 && ` (${formatCurrency(journal.openExposure)})`}
                 </Text>
               </div>
               <div className="flex flex-col items-end gap-2">
@@ -196,6 +210,7 @@ export function TradingJournalView({
               <JournalCalendarGrid
                 days={journal.days}
                 trades={journal.trades}
+                adjustments={journal.adjustments}
                 today={journal.today}
                 state={calendar}
                 onPick={(day) => setCalendar((s) => ({ ...s, picked: day }))}
@@ -219,19 +234,35 @@ export function TradingJournalView({
             <JournalCalendarSide
               days={journal.days}
               trades={journal.trades}
+              adjustments={journal.adjustments}
               today={journal.today}
               state={calendar}
               onOpenTrade={openTrade}
             />
           )}
           {view === "analytics" && <JournalAnalyticsSide journal={journal} />}
-          {view === "trades" && <JournalCashCard cash={journal.cash} />}
+          {view === "trades" && <JournalCashCard cash={journal.cash} adjustments={journal.adjustments} />}
         </div>
       </div>
 
-      <TradeDialog open={tradeOpen} onOpenChange={setTradeOpen} trade={editing} setups={setups} />
-      <CloseTradeDialog trade={closing} onOpenChange={(o) => !o && setClosing(null)} />
+      <TradeDialog
+        open={tradeOpen}
+        onOpenChange={setTradeOpen}
+        trade={editing}
+        trades={journal.trades}
+        cash={journal.cash}
+        adjustments={journal.adjustments}
+        linked={linkedInstruments}
+      />
+      <CloseTradeDialog
+        trade={closing}
+        onOpenChange={(o) => !o && setClosing(null)}
+        trades={journal.trades}
+        cash={journal.cash}
+        adjustments={journal.adjustments}
+      />
       <CashDialog kind={cashKind} onOpenChange={(o) => !o && setCashKind(null)} balance={journal.balance} />
+      <AdjustBalanceDialog open={adjusting} onOpenChange={setAdjusting} balance={journal.balance} />
     </div>
   );
 }

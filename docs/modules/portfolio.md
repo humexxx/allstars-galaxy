@@ -103,8 +103,11 @@ Removed as dead in the 2026-09-29 pass: `types/api.ts`, `types/snapshot.ts`, `li
   An investor's portfolio value IS their position, so they keep
   `PortfolioKpiGrid` and `PerformanceChart`. An owner's "portfolio value" is
   the sum of what they OWE, so showing it as a headline made a badly underwater
-  book read as growth — they get `OwnerKpiGrid` (Contributed / Allocations
-  today / Owed / Margin) and `MarginChart`.
+  book read as growth — they get `OwnerKpiGrid` (Contributed / Owed, the two
+  fixed sides of the book) and `MarginChart`, whose header carries the two
+  live figures: today's allocations, large, with the margin under them, each
+  measured against last month's point of the series (`DeltaChip`, as on Plans).
+  Contributed carries no share — it is the base, so its share is always 100%.
 - **`MarginChart` plots allocations and liability on one axis.** The gap
   between the two lines IS the margin; splitting them across two charts would
   make the reader compute it. Filtering by investor or method re-derives the

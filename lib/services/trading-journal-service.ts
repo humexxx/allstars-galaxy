@@ -4,21 +4,26 @@ import { cache } from "react";
 import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "@/db";
-import { tradingCashMovements, tradingTrades } from "@/db/schema";
-import { buildJournal, toJournalTrade } from "@/lib/finance/trading";
+import { tradingBalanceAdjustments, tradingCashMovements, tradingTrades } from "@/db/schema";
+import { balanceAt, buildJournal, legsForResult, toJournalAdjustment, toJournalTrade, tradeLegs } from "@/lib/finance/trading";
 import { isoDay } from "@/lib/finance/schedule";
 import { calendarDayInTimeZone } from "@/lib/utils/date";
-import { formatCurrency } from "@/lib/utils/format";
+import { formatCurrency, formatSignedCurrency } from "@/lib/utils/format";
 import type {
+  BalanceAdjustmentData,
   CashMovementData,
   CloseTradeData,
   TradeData,
-  UpdateTradeData,
+  TradeResultData,
+  UpdateTradeResultData,
 } from "@/schemas/trading";
 import type {
+  JournalAdjustment,
   JournalTrade,
+  TradeLegs,
   TradingCashMovementRow,
   TradingJournal,
+  TradingJournalRows,
   TradingSummary,
   TradingTradeRow,
 } from "@/types/trading";
@@ -42,16 +47,14 @@ export async function withJournalLock<T>(userId: string, write: (tx: JournalTx) 
   });
 }
 
-/** Every trade and cash movement of the user's journal. */
-export async function getJournalRows(
-  userId: string,
-  reader: Pick<JournalTx, "select"> = db
-): Promise<{ trades: TradingTradeRow[]; cash: TradingCashMovementRow[] }> {
-  const [trades, cash] = await Promise.all([
+/** Every trade, cash movement and balance adjustment of the user's journal. */
+export async function getJournalRows(userId: string, reader: Pick<JournalTx, "select"> = db): Promise<TradingJournalRows> {
+  const [trades, cash, adjustments] = await Promise.all([
     reader.select().from(tradingTrades).where(eq(tradingTrades.userId, userId)),
     reader.select().from(tradingCashMovements).where(eq(tradingCashMovements.userId, userId)),
+    reader.select().from(tradingBalanceAdjustments).where(eq(tradingBalanceAdjustments.userId, userId)),
   ]);
-  return { trades, cash };
+  return { trades, cash, adjustments };
 }
 
 /**
@@ -74,7 +77,7 @@ export async function getTradingSummary(
   timeZone: string | null
 ): Promise<TradingSummary | null> {
   const journal = await getTradingJournal(userId, timeZone);
-  if (journal.trades.length === 0 && journal.cash.length === 0) return null;
+  if (journal.trades.length === 0 && journal.cash.length === 0 && journal.adjustments.length === 0) return null;
   return {
     balance: journal.balance,
     asOf: journal.today,
@@ -101,10 +104,29 @@ export function tradeValues(data: TradeData) {
 
 const utcDay = (d: Date): string => d.toISOString().slice(0, 10);
 
-export async function createTrade(userId: string, data: TradeData): Promise<JournalTrade> {
+function legValues(legs: TradeLegs) {
+  return {
+    side: legs.side,
+    quantity: decimal(legs.quantity),
+    multiplier: decimal(legs.multiplier),
+    entryPrice: decimal(legs.entryPrice),
+    exitPrice: legs.exitPrice == null ? null : decimal(legs.exitPrice),
+    fees: decimal(legs.fees),
+  };
+}
+
+/** A trade from the journal's form: its result alone, no position behind it. */
+export async function createTrade(userId: string, data: TradeResultData): Promise<JournalTrade> {
   const [row] = await db
     .insert(tradingTrades)
-    .values({ userId, ...tradeValues(data) })
+    .values({
+      userId,
+      symbol: data.symbol,
+      ...legValues(legsForResult(data.pnl)),
+      openedAt: new Date(data.openedAt),
+      closedAt: data.closedAt == null ? null : new Date(data.closedAt),
+      notes: data.notes || null,
+    })
     .returning();
   return toJournalTrade(row, utcDay);
 }
@@ -118,17 +140,28 @@ async function ownTrade(userId: string, id: string): Promise<TradingTradeRow> {
   return row;
 }
 
-export async function updateTrade(userId: string, data: UpdateTradeData): Promise<JournalTrade> {
-  await ownTrade(userId, data.id);
+/**
+ * Rewrites a trade from the journal's form. A trade recorded with its position
+ * (the assistant's) keeps it: only its exit price moves to meet the new result.
+ */
+export async function updateTrade(userId: string, data: UpdateTradeResultData): Promise<JournalTrade> {
+  const trade = await ownTrade(userId, data.id);
   const [row] = await db
     .update(tradingTrades)
-    .set({ ...tradeValues(data), updatedAt: new Date() })
+    .set({
+      symbol: data.symbol,
+      ...legValues(legsForResult(data.pnl, tradeLegs(trade))),
+      openedAt: new Date(data.openedAt),
+      closedAt: data.closedAt == null ? null : new Date(data.closedAt),
+      notes: data.notes || null,
+      updatedAt: new Date(),
+    })
     .where(and(eq(tradingTrades.id, data.id), eq(tradingTrades.userId, userId)))
     .returning();
   return toJournalTrade(row, utcDay);
 }
 
-/** Closes an open trade at a price and time, adding the closing order's fees. */
+/** Closes an open trade at a time, for what it made. */
 export async function closeTrade(userId: string, data: CloseTradeData): Promise<JournalTrade> {
   const trade = await ownTrade(userId, data.id);
   if (trade.closedAt) throw new TradingJournalError(`${trade.symbol} is already closed`);
@@ -136,12 +169,7 @@ export async function closeTrade(userId: string, data: CloseTradeData): Promise<
   if (closedAt < trade.openedAt) throw new TradingJournalError("A trade cannot close before it opened");
   const [row] = await db
     .update(tradingTrades)
-    .set({
-      exitPrice: decimal(data.exitPrice),
-      closedAt,
-      fees: (parseFloat(trade.fees) + data.fees).toFixed(2),
-      updatedAt: new Date(),
-    })
+    .set({ ...legValues(legsForResult(data.pnl, tradeLegs(trade))), closedAt, updatedAt: new Date() })
     .where(and(eq(tradingTrades.id, data.id), eq(tradingTrades.userId, userId)))
     .returning();
   return toJournalTrade(row, utcDay);
@@ -185,7 +213,7 @@ export async function deleteCashMovement(userId: string, id: string): Promise<vo
     const movement = rows.cash.find((c) => c.id === id);
     if (!movement) throw new TradingJournalError("Movement not found");
     if (movement.kind === "deposit") {
-      const rest = { trades: rows.trades, cash: rows.cash.filter((c) => c.id !== id) };
+      const rest = { ...rows, cash: rows.cash.filter((c) => c.id !== id) };
       const { balance } = buildJournal(rest, utcDay, utcDay(new Date()));
       if (balance < -0.005) {
         throw new TradingJournalError(
@@ -196,5 +224,67 @@ export async function deleteCashMovement(userId: string, id: string): Promise<vo
     await tx
       .delete(tradingCashMovements)
       .where(and(eq(tradingCashMovements.id, id), eq(tradingCashMovements.userId, userId)));
+  });
+}
+
+/**
+ * Brings the journal to the balance the account really holds: what separates
+ * the two — a swap, a commission no trade recorded — is stored as one signed
+ * adjustment, worked out under the journal's lock. A cost cannot be dated to
+ * a moment the account held less than it.
+ */
+export async function adjustBalance(userId: string, data: BalanceAdjustmentData): Promise<JournalAdjustment> {
+  return withJournalLock(userId, async (tx) => {
+    const journal = buildJournal(await getJournalRows(userId, tx), utcDay, utcDay(new Date()));
+    const { balance } = journal;
+    const amount = Math.round((data.balance - balance) * 100) / 100;
+    if (amount === 0) {
+      throw new TradingJournalError(`The journal already matches: ${formatCurrency(balance)} is in the account`);
+    }
+    if (amount < 0) {
+      // Dated before the money that covers it, a cost would draw the account below zero for the days between.
+      // The dialog sends the minute; an entry written seconds ago in that same minute counts as before it.
+      const at = new Date(data.occurredAt);
+      const held =
+        Date.now() - at.getTime() < 60_000
+          ? balance
+          : balanceAt(journal.trades, journal.cash, journal.adjustments, at.toISOString());
+      if (held + amount < -0.005) {
+        throw new TradingJournalError(
+          `The account held only ${formatCurrency(held)} then: it cannot take ${formatSignedCurrency(amount)}`
+        );
+      }
+    }
+    const [row] = await tx
+      .insert(tradingBalanceAdjustments)
+      .values({
+        userId,
+        amount: amount.toFixed(2),
+        occurredAt: new Date(data.occurredAt),
+        note: data.note || null,
+      })
+      .returning();
+    return toJournalAdjustment(row, utcDay);
+  });
+}
+
+/** Deletes an adjustment. A credit the account has already spent or paid out stays. */
+export async function deleteBalanceAdjustment(userId: string, id: string): Promise<void> {
+  await withJournalLock(userId, async (tx) => {
+    const rows = await getJournalRows(userId, tx);
+    const adjustment = rows.adjustments.find((a) => a.id === id);
+    if (!adjustment) throw new TradingJournalError("Adjustment not found");
+    if (parseFloat(adjustment.amount) > 0) {
+      const rest = { ...rows, adjustments: rows.adjustments.filter((a) => a.id !== id) };
+      const { balance } = buildJournal(rest, utcDay, utcDay(new Date()));
+      if (balance < -0.005) {
+        throw new TradingJournalError(
+          `Deleting it would leave the account at ${formatCurrency(balance)}; it cannot go below $0.00`
+        );
+      }
+    }
+    await tx
+      .delete(tradingBalanceAdjustments)
+      .where(and(eq(tradingBalanceAdjustments.id, id), eq(tradingBalanceAdjustments.userId, userId)));
   });
 }

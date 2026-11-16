@@ -5,6 +5,8 @@
  */
 import type { ReactElement } from "react";
 
+import type { MascotCharacter } from "@/types/preferences";
+
 import { Cast, Hero, loop, rot, Shadow, SPARK, Stage, tr, type Frame, type Point } from "./kit";
 
 const INK = { stroke: "var(--ctxa-ink)", strokeLinejoin: "round", strokeLinecap: "round" } as const;
@@ -234,7 +236,7 @@ function JournalCrate(): ReactElement {
   );
 }
 
-export function TradingScene({ className }: { className?: string }): ReactElement {
+export function TradingScene({ character, className }: { character?: MascotCharacter; className?: string }): ReactElement {
   return (
     <Stage
       styles={STYLES}
@@ -268,7 +270,7 @@ export function TradingScene({ className }: { className?: string }): ReactElemen
         <g transform={`translate(${HERO_X} 0)`}>
           <Shadow />
           <g className="ctxa-loop trd-hop">
-            <Hero face="happy" arm="ctxa-loop trd-arm" farArm="ctxa-loop trd-far" head="ctxa-loop trd-head" tool={<Pointer />} />
+            <Hero character={character} face="happy" arm="ctxa-loop trd-arm" farArm="ctxa-loop trd-far" head="ctxa-loop trd-head" tool={<Pointer />} />
           </g>
         </g>
       </Cast>

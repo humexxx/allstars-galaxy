@@ -22,7 +22,10 @@ import type {
   SportId,
 } from "@/types/sports";
 
+import { DashboardBracket } from "./dashboard-bracket";
+import { DashboardCardSwitch } from "./dashboard-card-switch";
 import { DashboardCompetitionPicker } from "./dashboard-competition-picker";
+import { EventFace, type FaceKind } from "./dashboard-event-face";
 import { DashboardSportTables } from "./dashboard-sport-tables";
 import { DashboardSwiss } from "./dashboard-swiss";
 import { CardPendingProvider, PendingArea } from "./shared/card-pending";
@@ -79,9 +82,31 @@ export async function DashboardSportCard({
         </ul>
       </div>
     ));
-  const tables = (card.tables.length > 0 || card.swiss || card.note) && (
+  const tables = (card.tables.length > 0 || card.swiss || card.bracket || card.note) && (
     <>
-      {card.tables.length > 0 && <DashboardSportTables tables={card.tables} />}
+      {card.bracket && card.tables.length > 0 ? (
+        // One slot, switched: a draw over a table made the card half as tall again.
+        <DashboardCardSwitch
+          label={`${card.label} views`}
+          views={[
+            {
+              id: "bracket",
+              label: card.bracket.short,
+              content: <DashboardBracket bracket={card.bracket} format={format} hideLabel />,
+            },
+            ...card.tables.map((t) => ({
+              id: t.id,
+              label: t.label,
+              content: <DashboardSportTables tables={[t]} hideLabel />,
+            })),
+          ]}
+        />
+      ) : (
+        <>
+          {card.bracket && <DashboardBracket bracket={card.bracket} format={format} />}
+          {card.tables.length > 0 && <DashboardSportTables tables={card.tables} />}
+        </>
+      )}
       {card.swiss && <DashboardSwiss swiss={card.swiss} />}
       {card.note && (
         <div className="flex flex-col gap-1">
@@ -163,7 +188,19 @@ export async function DashboardSportCard({
             ) : (
               <FeaturedMatch match={card.featured} format={format} href={href} />
             ))}
-          {card.event && <FeaturedEvent event={card.event} href={card.event.href ?? href} />}
+          {card.event && (
+            <FeaturedEvent
+              event={card.event}
+              href={card.event.href ?? href}
+              faces={
+                card.sportId === "padel"
+                  ? "pair"
+                  : card.sportId === "tennis" || card.sportId === "surf"
+                    ? "player"
+                    : "team"
+              }
+            />
+          )}
         </PendingArea>
 
         <div className={SPORT_CARD_SECTION}>{middle}</div>
@@ -283,21 +320,60 @@ const EVENT_LABEL: Record<NonNullable<DashboardSportCardData["event"]>["status"]
   completed: "Just finished",
 };
 
-/** A tournament (tennis, padel) in the same box as a match or a race. */
+/**
+ * A tournament (tennis, padel) in the same box as a match or a race: what it
+ * is on the left and, at the bottom right, the faces of its three best seeds
+ * — the hub's own measure of who an event has.
+ */
 function FeaturedEvent({
   event,
   href,
+  faces: variant,
 }: {
   event: NonNullable<DashboardSportCardData["event"]>;
   href: string;
+  /** What a face on this card is: a player, a padel pair, or a team's crest. */
+  faces: FaceKind;
 }): React.ReactElement {
   return (
-    <FeatureBox href={href} label={EVENT_LABEL[event.status]} status={<StatusPill status={event.status} />}>
-      <span className="truncate text-sm font-semibold">{event.name}</span>
-      <Text variant="small" as="span" className="truncate">
-        {event.detail}
-      </Text>
-      {event.winner && <WinnerLine winner={event.winner} beside={event.runnerUp && `def. ${event.runnerUp}`} />}
+    <FeatureBox href={href} label={event.label ?? EVENT_LABEL[event.status]} status={<StatusPill status={event.status} />}>
+      {/* The seeds beside the name, the winner on a line of its own under
+          them: sharing a line, a padel pair's names ran under the faces. */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-2">
+          <span className="truncate text-sm font-semibold">{event.name}</span>
+          <Text variant="small" as="span" className="truncate">
+            {event.detail}
+          </Text>
+        </div>
+        {event.seeds && event.seeds.length > 0 && (
+          <ol aria-label="Top seeds" className="flex shrink-0 items-center gap-1.5">
+            {event.seeds.map((seed) => (
+              <li key={seed.id} className="flex">
+                <EventFace entry={seed} variant={variant} profile={event.profiles?.[seed.id]} />
+                <span className="sr-only">
+                  Seed {seed.code}: {variant === "pair" ? seed.name : seed.shortName}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+      {event.winner && (
+        <span className="flex min-w-0 items-center gap-2">
+          {event.winnerFace && (
+            <EventFace
+              entry={event.winnerFace}
+              variant={variant}
+              profile={event.profiles?.[event.winnerFace.id]}
+            />
+          )}
+          <WinnerLine
+            winner={event.winner}
+            beside={event.runnerUp && [`def. ${event.runnerUp}`, event.score].filter(Boolean).join(" ")}
+          />
+        </span>
+      )}
     </FeatureBox>
   );
 }

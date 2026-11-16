@@ -6,6 +6,7 @@ const {
   tournamentFrom,
   matchFrom,
   playerFrom,
+  stageInPlayOf,
   rankingFrom,
   photosById,
   tourFrom,
@@ -62,6 +63,13 @@ describe("playerFrom", () => {
   it("leaves the seed blank for an unseeded player", () => {
     expect(playerFrom(competitor("A. Qualifier", "Spain") as never)!.code).toBe("");
   });
+
+  // The ATP Finals' semi-finals, as ESPN sends them all through the group stage.
+  it("returns nobody for a side ESPN has not drawn", () => {
+    expect(playerFrom({ id: "-4", athlete: { displayName: "TBD", shortName: "TBD" } })).toBeNull();
+    expect(playerFrom({ id: "-3", athlete: { displayName: "To be decided" } })).toBeNull();
+    expect(playerFrom(competitor("TBD", "") as never)).toBeNull();
+  });
 });
 
 describe("matchFrom", () => {
@@ -94,6 +102,95 @@ describe("matchFrom", () => {
     } as never)!;
     expect(match.legs).toBeUndefined();
     expect(match.winnerTeamId).toBeNull();
+  });
+
+  it("leaves both sides of an undrawn tie empty", () => {
+    const { match, players } = matchFrom({
+      id: "187527",
+      competitors: [
+        { id: "-4", athlete: { displayName: "TBD", shortName: "TBD" } },
+        { id: "-3", athlete: { displayName: "TBD", shortName: "TBD" } },
+      ],
+    } as never)!;
+    expect(match.homeTeamId).toBeNull();
+    expect(match.awayTeamId).toBeNull();
+    expect(players).toEqual([]);
+  });
+});
+
+describe("the ATP Finals: a group stage, then a draw nobody is in yet", () => {
+  const tbd = () => [
+    { id: "-4", athlete: { displayName: "TBD", shortName: "TBD" } },
+    { id: "-3", athlete: { displayName: "TBD", shortName: "TBD" } },
+  ];
+  const group = (id: string, state: "pre" | "in" | "post") =>
+    competition(id, "Group Stage", state, [
+      competitor(`${id}-home`, "Italy", 1, state === "pre" ? [] : [6, 6], state === "post"),
+      competitor(`${id}-away`, "Spain", 2, state === "pre" ? [] : [3, 4]),
+    ]);
+  const knockout = [
+    competition("s1", "Semifinal", "pre", tbd() as never),
+    competition("s2", "Semifinal", "pre", tbd() as never),
+    competition("f", "Final", "pre", tbd() as never),
+  ];
+  const finals = (competitions: unknown[]) => ({
+    id: "339-2026",
+    name: "Nitto ATP Finals",
+    date: "2026-11-15T05:00Z",
+    endDate: "2026-11-23T04:59Z",
+    groupings: [{ grouping: { slug: "mens-singles" }, competitions }],
+  });
+
+  it("draws the semi-finals and the final as empty slots, with no players", () => {
+    const draw = tournamentFrom(
+      finals([group("g1", "post"), group("g2", "pre"), ...knockout]) as never,
+      "mens-singles",
+      NOW
+    )!;
+    expect(draw.tournament.status).toBe("live");
+    expect(draw.tournament.bracket!.map((r) => [r.label, r.matches.length])).toEqual([
+      ["Semi-finals", 2],
+      ["Final", 1],
+    ]);
+    const sides = draw.tournament.bracket!.flatMap((r) =>
+      r.matches.flatMap((m) => [m.homeTeamId, m.awayTeamId])
+    );
+    expect(sides.every((id) => id === null)).toBe(true);
+    expect(draw.players).toEqual([]);
+    expect(draw.tournament.champion).toBeUndefined();
+  });
+
+  it("says the group stage is in play once it has started and has ties left", () => {
+    const at = (...groups: unknown[]) =>
+      tournamentFrom(finals([...groups, ...knockout]) as never, "mens-singles", NOW)!.tournament
+        .stageInPlay;
+    expect(at(group("g1", "post"), group("g2", "pre"))).toBe("Group stage");
+    expect(at(group("g1", "in"), group("g2", "pre"))).toBe("Group stage");
+    expect(at(group("g1", "pre"), group("g2", "pre"))).toBeUndefined();
+    expect(at(group("g1", "post"), group("g2", "post"))).toBeUndefined();
+  });
+
+  it("does not read qualifying, or a tournament with no group stage, as one", () => {
+    expect(
+      stageInPlayOf([
+        competition("q", "Qualifying 1st Round", "post"),
+        competition("r", "Round 1", "pre"),
+      ] as never)
+    ).toBeUndefined();
+  });
+
+  it("names no champion from a final ESPN closed without players", () => {
+    const closed = competition("f", "Final", "post", [
+      { id: "-4", winner: true, athlete: { displayName: "TBD", shortName: "TBD" } },
+      { id: "-3", athlete: { displayName: "TBD", shortName: "TBD" } },
+    ] as never);
+    const { tournament } = tournamentFrom(
+      finals([group("g1", "post"), closed]) as never,
+      "mens-singles",
+      NOW
+    )!;
+    expect(tournament.champion).toBeUndefined();
+    expect(tournament.runnerUp).toBeUndefined();
   });
 });
 
@@ -320,7 +417,7 @@ describe("tourFrom", () => {
     expect(byName.get("Shanghai Masters")!.bracket).toHaveLength(2);
     expect(byName.get("Almaty Open")!.bracket).toBeUndefined();
     // Only the shipped draw's players travel for the view's lookup.
-    expect(tour.drawPlayers!.map((p) => p.id).sort()).toEqual(["a-A", "a-B", "a-TBD"]);
+    expect(tour.drawPlayers!.map((p) => p.id).sort()).toEqual(["a-A", "a-B"]);
   });
 
   it("ships the featured draw and the one just finished when nothing is on", () => {

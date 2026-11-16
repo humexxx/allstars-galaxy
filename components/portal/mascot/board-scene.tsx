@@ -5,6 +5,8 @@
  */
 import type { ReactElement } from "react";
 
+import type { MascotCharacter } from "@/types/preferences";
+
 import { arc, Cast, Hero, loop, rot, Shadow, Stage, stepFrames, tr, type Frame, type Point } from "./kit";
 
 const INK = { stroke: "var(--ctxa-ink)", strokeLinejoin: "round", strokeLinecap: "round" } as const;
@@ -307,7 +309,7 @@ function Kanban(): ReactElement {
   );
 }
 
-export function BoardScene({ className }: { className?: string }): ReactElement {
+export function BoardScene({ character, className }: { character?: MascotCharacter; className?: string }): ReactElement {
   return (
     <Stage styles={STYLES} tone="wood" cycle={11} className={className}>
       <Cast>
@@ -322,7 +324,7 @@ export function BoardScene({ className }: { className?: string }): ReactElement 
             <g className="ctxa-loop brd-face">
               <Shadow />
               <g className="ctxa-loop brd-hop">
-                <Hero
+                <Hero character={character}
                   face="happy"
                   arm="ctxa-loop brd-arm"
                   farArm="ctxa-loop brd-far"

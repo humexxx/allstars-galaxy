@@ -19,14 +19,16 @@ import { FOOTBALL_COMPETITIONS, getFootballCompetition } from "@/lib/services/fo
 import { getF1Data, getF1SeasonWinners } from "@/lib/services/jolpica-f1-service";
 import { getLolNews } from "@/lib/services/lolesports-news-service";
 import { getLolData } from "@/lib/services/lolesports-service";
-import { getPadelData } from "@/lib/services/padel-api-service";
-import { getTennisData } from "@/lib/services/espn-tennis-service";
+import { getPadelData, getPadelDraw } from "@/lib/services/padel-api-service";
+import { getTennisData, getTennisDraw } from "@/lib/services/espn-tennis-service";
 import { leadRace, startsIn, weekendNow } from "@/lib/sports/f1-weekend";
 import { tournamentPath } from "@/lib/sports/paths";
 import { splitSeasonLabel } from "@/lib/sports/season";
-import { calendarDayInTimeZone, formatDayRange } from "@/lib/utils/date";
+import { calendarDayInTimeZone, formatDay, formatDayRange } from "@/lib/utils/date";
+import { topSeeds } from "@/lib/sports/racquet";
 import type {
-  BracketMatch,
+  BracketRound,
+  DashboardBracket,
   DashboardCompetitions,
   DashboardMatch,
   DashboardSide,
@@ -51,9 +53,12 @@ import type {
   NbaData,
   NflData,
   NhlData,
+  PlayerRanking,
   RacquetData,
+  RacquetDraw,
   RacquetSport,
   SurfData,
+  SurfDraw,
   SportId,
   Standing,
   SwissStage,
@@ -288,11 +293,16 @@ export async function getDashboardSportCard(
     }
     case "tennis": {
       const [data, news] = await Promise.all([getTennisData(), getEspnNews("atp")]);
-      return { ...racquetCard({ ...base, sportId: "tennis" }, data.atp, "ATP", clock), news: cardNews(news) };
+      const draw = await leadDraw(data.atp, clock, getTennisDraw);
+      return { ...racquetCard({ ...base, sportId: "tennis" }, data.atp, "ATP", clock, draw), news: cardNews(news) };
     }
     case "padel": {
       const [data, news] = await Promise.all([getPadelData(), getPadelNews()]);
-      return { ...racquetCard({ ...base, sportId: "padel" }, data.men, "Premier Padel", clock), news: cardNews(news) };
+      const draw = await leadDraw(data.men, clock, getPadelDraw);
+      return {
+        ...racquetCard({ ...base, sportId: "padel" }, data.men, "Premier Padel", clock, draw),
+        news: cardNews(news),
+      };
     }
     case "surf": {
       const [data, news] = await Promise.all([getSurfData(), getSurfNews()]);
@@ -413,7 +423,7 @@ function nbaCard(base: CardBase, data: NbaData, clock: CardClock = utcClock()): 
   return {
     ...base,
     context: `Season ${data.season}`,
-    ...featuredAndFollowing(data.games, teams, clock),
+    ...leadOrChampion(data.games, data.playoffs, teams, clock),
     tables,
     note: tables.length === 0 ? nbaNote(data) : undefined,
   };
@@ -433,7 +443,7 @@ function nflCard(base: CardBase, data: NflData, clock: CardClock = utcClock()): 
   return {
     ...base,
     context: `Season ${data.season}`,
-    ...featuredAndFollowing(data.games, teams, clock),
+    ...leadOrChampion(data.games, data.playoffs, teams, clock),
     tables: groupTables(
       data.standings,
       teams,
@@ -452,7 +462,7 @@ function mlbCard(base: CardBase, data: MlbData, clock: CardClock = utcClock()): 
   return {
     ...base,
     context: `Season ${data.season}`,
-    ...featuredAndFollowing(data.games, teams, clock),
+    ...leadOrChampion(data.games, data.playoffs, teams, clock),
     tables: groupTables(
       data.standings,
       teams,
@@ -472,7 +482,7 @@ function nhlCard(base: CardBase, data: NhlData, clock: CardClock = utcClock()): 
   return {
     ...base,
     context: `Season ${splitSeasonLabel(data.season)}`,
-    ...featuredAndFollowing(data.games, teams, clock),
+    ...leadOrChampion(data.games, data.playoffs, teams, clock),
     tables: groupTables(
       data.standings,
       teams,
@@ -511,7 +521,7 @@ function lolSplitCard(base: CardBase, data: LolData, split: LolSplit | undefined
   if (!split) return { ...base, context: "No event on", matches: [], tables: [] };
   const teams = teamsById(split.teams);
   if (split.international && split.champion) {
-    return lolOffSeasonCard(base, data, { ...split, champion: split.champion }, teams);
+    return lolOffSeasonCard(base, data, { ...split, champion: split.champion }, teams, clock);
   }
   const lead = leadGames(
     split.matches.filter((m) => m.status !== "postponed" && m.status !== "cancelled").map((m) => lolCardMatch(m, teams)),
@@ -586,29 +596,156 @@ function swissFinished(stage: SwissStage): boolean {
   return stage.exits.length > 0 && stage.exits.every((exit) => exit.teamIds.length >= exit.slots);
 }
 
+/** How long a decided event still reads as "Just finished" on its card. */
+const JUST_FINISHED_MS = 14 * 86_400_000;
+
 /**
- * After an international final, until the next split starts: the final, the
- * rest of the knockouts, and the season's champions.
+ * After an international final, until the next split starts: the event with
+ * its champion and the final's score, the way a padel or tennis card leads
+ * with the tournament just won — the knockouts are a week old by then and
+ * live on the event's own page. Under it, what comes next, then the season's
+ * champions.
  */
 function lolOffSeasonCard(
   base: CardBase,
   data: LolData,
   event: LolSplit & { champion: LolChampion },
-  teams: Map<string, Team>
+  teams: Map<string, Team>,
+  clock: CardClock
 ): DashboardSportCard {
-  const knockouts = (event.playoffs ?? [])
-    .flatMap((round) => round.matches.map((match) => lolBracketCardMatch(match, round.label, teams)))
-    .filter((m) => m !== null)
-    .sort((a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime());
-  const featured = knockouts.find((m) => m.id === event.champion.final.id) ?? knockouts[0];
-  const champions = lolChampionsTable(data, event);
+  const { final, teamId } = event.champion;
+  const beatenId = final.homeTeamId === teamId ? final.awayTeamId : final.homeTeamId;
+  const games = [final.homeScore, final.awayScore].filter((n) => n != null).sort((x, y) => y - x);
+  const round = (event.playoffs ?? []).find((r) => r.matches.some((m) => m.id === final.id))?.label;
+  const recent = final.date !== undefined && clock.now - new Date(final.date).getTime() < JUST_FINISHED_MS;
+  const comingUp = lolComingUp(data);
+  const bracket = lolBracket(event, teams);
+  // The bracket says who won and how; the champions' list stands in only for an event with none.
+  const champions = bracket ? null : lolChampionsTable(data, event);
   return {
     ...base,
-    context: lolContext(event, featured),
-    featured,
-    following: knockouts.filter((m) => m !== featured).slice(0, CARD_SLIDES - 1),
+    context: round ? `${event.name} · ${round}` : event.name,
+    event: {
+      name: event.name,
+      detail: [round, final.bestOf && `BO${final.bestOf}`, final.date && formatDay(final.date, clock.timeZone)]
+        .filter(Boolean)
+        .join(" · "),
+      status: "completed",
+      label: recent ? undefined : "Latest event",
+      winner: teams.get(teamId)?.shortName ?? teamId,
+      winnerFace: teams.get(teamId),
+      // The code, not the name: "def. Gen.G Esports 3–1" lost its score on a phone.
+      runnerUp: beatenId ? (teams.get(beatenId)?.code ?? beatenId) : undefined,
+      score: games.length === 2 ? `${games[0]}–${games[1]}` : undefined,
+    },
     matches: [],
-    tables: champions ? [champions] : [],
+    tables: [comingUp, champions].filter((t) => t !== null),
+    bracket,
+  };
+}
+
+/** How many rounds a card's bracket has room for: the last ones, down to the final. */
+const BRACKET_ROUNDS = 3;
+/**
+ * And how many ties a round may have: the quarter-finals' four. An event in
+ * its round of 32 has no bracket on the card — a column of sixteen ties made
+ * the card, and the one beside it, several screens tall.
+ */
+const BRACKET_TIES = 4;
+const fitsCard = (round: { ties: unknown[] }): boolean => round.ties.length > 0 && round.ties.length <= BRACKET_TIES;
+
+/**
+ * An event's knockouts for its card: the last rounds, each tie with both
+ * sides drawn. A double elimination's lower half is left to the event's own
+ * page — a column a round has no room for two trees.
+ */
+function lolBracket(event: LolSplit, teams: Map<string, Team>): DashboardBracket | undefined {
+  const rounds = (event.playoffs ?? [])
+    .map((round) => ({
+      label: round.label,
+      ties: round.matches.flatMap((m) =>
+        m.homeTeamId && m.awayTeamId && m.side !== "lower"
+          ? [
+              {
+                id: m.id,
+                home: side(teams.get(m.homeTeamId), m.homeTeamId, m.homeScore ?? null, m.winnerTeamId === m.homeTeamId),
+                away: side(teams.get(m.awayTeamId), m.awayTeamId, m.awayScore ?? null, m.winnerTeamId === m.awayTeamId),
+                decided: Boolean(m.winnerTeamId),
+                playedAt: m.date,
+              },
+            ]
+          : []
+      ),
+    }))
+    .filter(fitsCard)
+    .slice(-BRACKET_ROUNDS);
+  return rounds.length > 0 ? { label: `${event.name} bracket`, short: "Bracket", rounds } : undefined;
+}
+
+/**
+ * A racquet event's draw for its card: the last rounds, each side by surname
+ * (a pair's two) with the sets it won. A tie nobody is drawn into yet is left
+ * out, so an event under way shows the rounds it has reached.
+ */
+function racquetBracket(
+  name: string,
+  rounds: BracketRound[] | undefined,
+  players: Team[],
+  pairs: boolean
+): DashboardBracket | undefined {
+  const byId = teamsById(players);
+  const entrant = (id: string, sets: number | null, winner: boolean): DashboardBracket["rounds"][number]["ties"][number]["home"] => {
+    const p = byId.get(id);
+    const shortName = p?.shortName ?? id;
+    return {
+      name: shortName,
+      // "Coello/Tapia"; a player goes by the surname ("T. Fritz" → "Fritz").
+      code: pairs ? shortName.replace(" / ", "/") : (shortName.split(" ").at(-1) ?? shortName),
+      score: sets,
+      winner,
+      photos: pairs ? (p?.photos ?? []) : [p?.logoUrl ?? null],
+      seed: p && /^\d+$/.test(p.code.trim()) ? p.code.trim() : undefined,
+    };
+  };
+  const drawn = (rounds ?? [])
+    .map((round) => ({
+      label: round.label,
+      ties: round.matches.flatMap((m) => {
+        if (!m.homeTeamId || !m.awayTeamId) return [];
+        const played = (m.legs ?? []).filter((leg) => leg.homeScore !== null && leg.awayScore !== null);
+        // A set is won at six with two clear, or at seven: the one in play is nobody's yet.
+        const took = (a: number, b: number): boolean => a > b && a >= 6 && (a - b >= 2 || a === 7);
+        const sets = (home: boolean): number | null =>
+          played.length === 0
+            ? null
+            : played.filter((leg) =>
+                home ? took(leg.homeScore!, leg.awayScore!) : took(leg.awayScore!, leg.homeScore!)
+              ).length;
+        return [
+          {
+            id: m.id,
+            home: entrant(m.homeTeamId, sets(true), m.winnerTeamId === m.homeTeamId),
+            away: entrant(m.awayTeamId, sets(false), m.winnerTeamId === m.awayTeamId),
+            decided: Boolean(m.winnerTeamId),
+            playedAt: m.date ?? played.at(-1)?.date,
+          },
+        ];
+      }),
+    }))
+    .filter(fitsCard)
+    .slice(-BRACKET_ROUNDS);
+  return drawn.length > 0 ? { label: `${name} draw`, short: "Draw", rounds: drawn } : undefined;
+}
+
+/** Each league's next tournament and the day it starts, soonest first. */
+function lolComingUp(data: LolData): DashboardTable | null {
+  const next = (data.upcoming ?? []).slice(0, CARD_ROWS);
+  if (next.length === 0) return null;
+  return {
+    id: "coming-up",
+    label: "Coming up",
+    unranked: true,
+    rows: next.map((u, i) => ({ position: i + 1, name: u.name, flagEmoji: "🗓️", value: formatDay(u.startDate) })),
   };
 }
 
@@ -691,14 +828,88 @@ function leadEvent<E extends { status: "completed" | "live" | "upcoming"; startD
   );
 }
 
+/**
+ * The draw of the event a tour's card leads with, when the feed did not ship
+ * it (it ships only the featured and the current one's): the card's faces come
+ * from it. A provider that fails costs the faces, not the card.
+ */
+async function leadDraw(
+  data: RacquetData,
+  clock: CardClock,
+  load: (tournamentId: string) => Promise<RacquetDraw | null>
+): Promise<RacquetDraw | null> {
+  const event = leadEvent(data.tournaments, (t) => t.champion, clock);
+  if (!event || event.status === "upcoming" || event.bracket?.length) return null;
+  return load(event.id).catch(() => null);
+}
+
+/** The lead event's three best seeds and, once it is won, the winner: the faces on its card. */
+function eventFaces(
+  rounds: BracketRound[] | undefined,
+  players: Team[],
+  rankings: PlayerRanking[],
+  pairs: boolean
+): Pick<NonNullable<DashboardSportCard["event"]>, "seeds" | "winnerFace" | "profiles"> {
+  if (!rounds?.length) return {};
+  const seeds = topSeeds({ rounds, players });
+  // Only a played final has a winner, so an event still on shows none.
+  const winnerId = rounds.find((r) => r.id === "final")?.matches.at(-1)?.winnerTeamId;
+  const winnerFace = winnerId ? players.find((p) => p.id === winnerId) : undefined;
+  const shown = [...seeds, ...(winnerFace ? [winnerFace] : [])];
+  const profiles = Object.fromEntries(
+    shown.map((p) => [p.id, { ranking: rankingOf(p, rankings, pairs), result: resultIn(rounds, p.id) }])
+  );
+  return {
+    ...(seeds.length > 0 && { seeds }),
+    ...(winnerFace && { winnerFace }),
+    ...(shown.length > 0 && { profiles }),
+  };
+}
+
+/**
+ * Where an entry stands on the tour. A player is matched on the name the draw
+ * and the rankings both print; a padel pair, whose draw carries surnames only,
+ * on each surname — and only when exactly one ranked player has it.
+ */
+function rankingOf(entry: Team, rankings: PlayerRanking[], pairs: boolean): string | undefined {
+  if (!pairs) {
+    const r = rankings.find((p) => p.shortName === entry.shortName);
+    return r ? `#${r.position} · ${r.points.toLocaleString("en-US")} pts` : undefined;
+  }
+  const places = entry.shortName.split(" / ").map((surname) => {
+    const named = rankings.filter((p) => p.shortName.split(" ").at(-1) === surname.trim().split(" ").at(-1));
+    return named.length === 1 ? `#${named[0].position}` : null;
+  });
+  return places.every((p) => p !== null) ? places.join(" / ") : undefined;
+}
+
+/** How far an entry got: the last round it is drawn into, and whether it won there. */
+function resultIn(rounds: BracketRound[], id: string): string | undefined {
+  const reached = rounds.findLast((r) => r.matches.some((m) => m.homeTeamId === id || m.awayTeamId === id));
+  const tie = reached?.matches.find((m) => m.homeTeamId === id || m.awayTeamId === id);
+  if (!reached || !tie) return undefined;
+  if (!tie.winnerTeamId) return `In the ${reached.label}`;
+  if (tie.winnerTeamId !== id) return `Lost in the ${reached.label}`;
+  return reached.id === "final" ? "Champion" : `Won the ${reached.label}`;
+}
+
 /** The men's tour only, so no championship to pick: the hub follows no women's tour. */
 function racquetCard(
   base: CardBase & { sportId: RacquetSport },
   data: RacquetData,
   context: string,
-  clock: CardClock = utcClock()
+  clock: CardClock = utcClock(),
+  draw: RacquetDraw | null = null
 ): DashboardSportCard {
   const event = leadEvent(data.tournaments, (t) => t.champion, clock);
+  const rounds = draw?.rounds ?? event?.bracket;
+  const players = draw?.players ?? data.drawPlayers ?? [];
+  const faces = event ? eventFaces(rounds, players, data.rankings, base.sportId === "padel") : {};
+  // An event still to start has no draw worth a column: the rankings stand alone.
+  const bracket =
+    event && event.status !== "upcoming"
+      ? racquetBracket(event.name, rounds, players, base.sportId === "padel")
+      : undefined;
   return {
     ...base,
     context,
@@ -711,9 +922,11 @@ function racquetCard(
           status: event.status,
           href: tournamentPath(base.sportId, event.id),
           ...(event.status === "completed" && { winner: event.champion, runnerUp: event.runnerUp }),
+          ...faces,
         }
       : undefined,
     matches: [],
+    bracket,
     tables: [
       {
         id: data.tour,
@@ -735,6 +948,10 @@ function racquetCard(
 /** The stop just won, on now, else next, and the tour's rankings: the racquet card's shape. */
 function surfCard(base: CardBase, data: SurfData, clock: CardClock = utcClock()): DashboardSportCard {
   const stop = leadEvent(data.events, (e) => e.winner, clock);
+  // The feed carries one draw; it is the lead stop's only while that stop is the one on or last surfed.
+  const draw = stop && stop.status !== "upcoming" && data.draw?.eventId === stop.id ? data.draw : undefined;
+  const bracket = stop && draw ? surfBracket(stop.name, draw) : undefined;
+  const champion = draw?.rounds.at(-1)?.heats.at(-1)?.surfers.find((s) => s.place === 1 && s.athleteId);
   return {
     ...base,
     context: "Championship Tour",
@@ -744,9 +961,20 @@ function surfCard(base: CardBase, data: SurfData, clock: CardClock = utcClock())
           detail: [stop.location, formatDayRange(stop.startDate, stop.endDate)].join(" · "),
           status: stop.status,
           ...(stop.status === "completed" && { winner: stop.winner, runnerUp: stop.runnerUp }),
+          ...(stop.status === "completed" &&
+            champion && {
+              winnerFace: {
+                id: champion.athleteId!,
+                name: "",
+                shortName: champion.name,
+                code: "",
+                logoUrl: champion.imageUrl,
+              },
+            }),
         }
       : undefined,
     matches: [],
+    bracket,
     tables: [
       {
         id: "wsl",
@@ -762,6 +990,35 @@ function surfCard(base: CardBase, data: SurfData, clock: CardClock = utcClock())
       },
     ].filter((t) => t.rows.length > 0),
   };
+}
+
+/**
+ * A stop's closing rounds for its card: the last heats that are one surfer
+ * against another, each by surname with the heat total (the two best waves).
+ * Earlier rounds put three or four in the water, which a tie's two rows
+ * cannot say, and a heat whose surfers are still seeds' places is left out.
+ */
+function surfBracket(name: string, draw: SurfDraw): DashboardBracket | undefined {
+  const rounds = draw.rounds
+    .map((round) => ({
+      label: round.label,
+      ties: round.heats.flatMap((heat) => {
+        const [a, b] = heat.surfers;
+        if (heat.surfers.length !== 2 || !a.athleteId || !b.athleteId) return [];
+        const entrant = (s: typeof a): DashboardBracket["rounds"][number]["ties"][number]["home"] => ({
+          name: s.name,
+          code: s.name.split(" ").at(-1) ?? s.name,
+          score: s.score,
+          scoreLabel: s.score?.toFixed(2),
+          winner: s.place === 1,
+          photos: [s.imageUrl ?? null],
+        });
+        return [{ id: heat.id, home: entrant(a), away: entrant(b), decided: heat.status === "completed" }];
+      }),
+    }))
+    .filter(fitsCard)
+    .slice(-BRACKET_ROUNDS);
+  return rounds.length > 0 ? { label: `${name} heats`, short: "Heats", rounds } : undefined;
 }
 
 /**
@@ -817,6 +1074,42 @@ function featuredAndFollowing(
 ): Pick<DashboardSportCard, "featured" | "following" | "matches"> {
   const games = all.filter((m) => m.status !== "postponed" && m.status !== "cancelled").map((m) => cardMatch(m, teams));
   return { ...leadGames(games, clock), matches: [] };
+}
+
+/**
+ * A league card's lead: its games, or with none in the feed (the season is
+ * over) the champion its bracket's final names, as a racquet card leads with
+ * the tournament just won.
+ */
+function leadOrChampion(
+  games: Match[],
+  playoffs: BracketRound[] | undefined,
+  teams: Map<string, Team>,
+  clock: CardClock
+): Pick<DashboardSportCard, "featured" | "following" | "matches" | "event"> {
+  const lead = featuredAndFollowing(games, teams, clock);
+  if (lead.featured) return lead;
+  const round = playoffs?.find((r) => r.id === "final");
+  const final = round?.matches.at(-1);
+  if (!round || !final?.winnerTeamId) return lead;
+  const beatenId = final.winnerTeamId === final.homeTeamId ? final.awayTeamId : final.homeTeamId;
+  const wins = [final.homeScore, final.awayScore].filter((n) => n != null).sort((x, y) => y - x);
+  const recent = final.date !== undefined && clock.now - new Date(final.date).getTime() < JUST_FINISHED_MS;
+  return {
+    matches: [],
+    event: {
+      name: round.label,
+      detail: [final.bestOf && `Best of ${final.bestOf}`, final.date && formatDay(final.date, clock.timeZone)]
+        .filter(Boolean)
+        .join(" · "),
+      status: "completed",
+      label: recent ? undefined : "Season champions",
+      winner: teams.get(final.winnerTeamId)?.shortName ?? final.winnerTeamId,
+      winnerFace: teams.get(final.winnerTeamId),
+      runnerUp: beatenId ? (teams.get(beatenId)?.code ?? beatenId) : undefined,
+      score: wins.length === 2 ? `${wins[0]}–${wins[1]}` : undefined,
+    },
+  };
 }
 
 /**
@@ -906,33 +1199,6 @@ function lolCardMatch(match: LolMatch, teams: Map<string, Team>): DashboardMatch
   };
 }
 
-/** A knockout read off the bracket. Null until it is drawn, or when the schedule never dated it. */
-function lolBracketCardMatch(
-  match: BracketMatch,
-  round: string,
-  teams: Map<string, Team>
-): DashboardMatch | null {
-  if (!match.date || !match.homeTeamId || !match.awayTeamId) return null;
-  return {
-    id: match.id,
-    home: side(
-      teams.get(match.homeTeamId),
-      match.homeTeamId,
-      match.homeScore ?? null,
-      match.winnerTeamId === match.homeTeamId
-    ),
-    away: side(
-      teams.get(match.awayTeamId),
-      match.awayTeamId,
-      match.awayScore ?? null,
-      match.winnerTeamId === match.awayTeamId
-    ),
-    status: match.winnerTeamId ? "result" : "upcoming",
-    startsAt: match.date,
-    label: match.bestOf ? `${round} · BO${match.bestOf}` : round,
-  };
-}
-
 function matchTone(match: Match): DashboardMatch["status"] {
   if (match.status === "live") return "live";
   if (match.status === "scheduled") return "upcoming";
@@ -940,4 +1206,4 @@ function matchTone(match: Match): DashboardMatch["status"] {
 }
 
 /** Pure helpers, exported for their tests. */
-export const __testing = { leadGames, lolCard, lolSwiss, racquetCard, surfCard, swissRecords, f1Highlight };
+export const __testing = { leadGames, leadOrChampion, lolCard, lolSwiss, racquetCard, surfCard, swissRecords, f1Highlight };

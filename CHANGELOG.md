@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.21.0](https://github.com/humexxx/allstars-galaxy/compare/v0.20.0...v0.21.0) (2026-11-16)
+
+
+### Features
+
+* **entertainment:** a bracket on a sport's card from the last eight on ([33adf04](https://github.com/humexxx/allstars-galaxy/commit/33adf0473f52bdc35812723b7428b76a72e34b2c))
+* **entertainment:** a bracket on a sport's card from the last eight on ([a260f0e](https://github.com/humexxx/allstars-galaxy/commit/a260f0e9fa657cdc33c11772a989f984ba5e507e))
+* **entertainment:** draw a finished league's postseason bracket on its dashboard card ([044de7a](https://github.com/humexxx/allstars-galaxy/commit/044de7aefe41d1d7565815334fb37680ab2f350e))
+* **entertainment:** draw the bracket on any sport's card once its knockouts reach the last eight ([59ad7a2](https://github.com/humexxx/allstars-galaxy/commit/59ad7a2d4f94aace5c063f3bd825cbcc522e9c3d))
+* **entertainment:** list the games to come on a card until its knockout reaches the last eight ([e5bc972](https://github.com/humexxx/allstars-galaxy/commit/e5bc972a14c13aa06c94d56ad50e724f46eb8a9b))
+
+
+### Bug Fixes
+
+* **entertainment:** lead a card's bracket with the round being played ([cdc36fe](https://github.com/humexxx/allstars-galaxy/commit/cdc36fe0aac0aaee0abc5f468b6f262eaade4a6f))
+* **entertainment:** show each team's crest in a bracket tie's tooltip ([b2d7794](https://github.com/humexxx/allstars-galaxy/commit/b2d77948714375339c71f2305bded0dec00116be))
+* **entertainment:** show nothing in the bracket's place before the last eight ([d0d8679](https://github.com/humexxx/allstars-galaxy/commit/d0d867960be6e724d47c0e74f9729b5605651c33))
+* **entertainment:** show the round being played and what follows on a card's bracket ([341d868](https://github.com/humexxx/allstars-galaxy/commit/341d8682c1756f31a58076c7fe7dab3dec322c81))
+
 ## [0.20.0](https://github.com/humexxx/allstars-galaxy/compare/v0.19.1...v0.20.0) (2026-11-16)
 
 

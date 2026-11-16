@@ -175,8 +175,9 @@ export function TradingJournalView({
                   {journal.openExposure > 0 && ` (${formatCurrency(journal.openExposure)})`}
                 </Text>
               </div>
-              <div className="flex flex-col items-end gap-2">
+              <div className="flex flex-col items-end gap-2 max-sm:w-full max-sm:items-stretch">
                 <ToggleGroup
+                  className="max-sm:w-full"
                   type="single"
                   size="sm"
                   value={view}
@@ -186,9 +187,9 @@ export function TradingJournalView({
                   {JOURNAL_VIEWS.map((v) => {
                     const Icon = VIEW_ICON[v];
                     return (
-                      <ToggleGroupItem key={v} value={v} aria-label={VIEW_LABEL[v]} className="max-sm:px-2.5">
+                      <ToggleGroupItem key={v} value={v} aria-label={VIEW_LABEL[v]} className="max-sm:flex-1">
                         <Icon />
-                        <span className="hidden sm:inline">{VIEW_LABEL[v]}</span>
+                        {VIEW_LABEL[v]}
                       </ToggleGroupItem>
                     );
                   })}
@@ -201,8 +202,7 @@ export function TradingJournalView({
             key={view}
             className={cn(
               "flex flex-col motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200 xl:min-h-0 xl:flex-1",
-              // Eight columns in a phone's card are 32px each; the narrower
-              // gutter is what gets a day cell to 36.
+              // The narrower gutter is what gets a phone's seven day cells past 44px.
               view === "calendar" && "max-sm:px-3"
             )}
           >

@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Text } from "@/components/ui/typography";
 import { SPORTS_BY_ID } from "@/lib/data/sports/registry";
+import { isBracketDrawn } from "@/lib/sports/bracket";
 import { sportPath } from "@/lib/sports/paths";
 import { drawVariant, playLine, topSeeds, tourLine } from "@/lib/sports/racquet";
 import type { DrawState, RacquetSport, RacquetTournament, SportId } from "@/types/sports";
@@ -61,9 +62,15 @@ export function RacquetTournamentPage({
   // Only over a drawn bracket: a draw with no rounds left already leads with its champions.
   const drawn = Boolean(ready && !ready.resultsHidden && ready.rounds.length > 0);
 
+  const noBracket =
+    draw.status === "pending" ||
+    draw.status === "unavailable" ||
+    Boolean(ready && !ready.resultsHidden && !(ready.rounds.length > 0 && isBracketDrawn(ready.rounds)));
+
   return (
     <SportPageControls sport={sport} favoriteSportIds={favoriteSportIds}>
-      <Tabs defaultValue={initialTab === "overview" ? "overview" : "bracket"} className="gap-6">
+      {/* With no bracket to show (a round-robin stage, a draw still to be made) the page opens on what there is to read. */}
+      <Tabs defaultValue={initialTab === "overview" || noBracket ? "overview" : "bracket"} className="gap-6">
         <SportShell
           sportId={sport}
           title={t.name}

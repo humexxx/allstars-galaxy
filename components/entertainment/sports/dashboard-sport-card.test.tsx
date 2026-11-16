@@ -221,6 +221,21 @@ describe("DashboardSportCard", () => {
     expect(shown("Fritz")).toBe(false);
   });
 
+  it("lists the games to come in the bracket's place before the last eight, beside the tables", async () => {
+    const side = (name: string) => ({ name, code: name.slice(0, 3).toUpperCase(), score: null, winner: false });
+    await renderCard({
+      ...card([]),
+      featured: undefined,
+      upNext: [{ id: "g1", home: side("Nashville"), away: side("Charlotte"), status: "upcoming", startsAt: "2026-11-21T18:00:00Z" }],
+      tables: [{ id: "east", label: "East", rows: [{ position: 1, name: "Philadelphia", value: "66 pts" }] }],
+    });
+    const views = within(screen.getByRole("group", { name: /views$/ })).getAllByRole("radio");
+    expect(views.map((r) => r.textContent)).toEqual(["Up next", "East"]);
+    const list = screen.getByRole("list", { name: "Up next" });
+    expect(within(list).getByText("Nashville")).toBeInTheDocument();
+    expect(within(list).getByText("Charlotte")).toBeInTheDocument();
+  });
+
   it("asks for the card on the championship it is set to", async () => {
     await renderCard(card([]), "lck");
 

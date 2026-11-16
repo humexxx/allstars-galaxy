@@ -382,8 +382,9 @@ function footballCard(base: CardBase, data: FootballLeagueData, clock: CardClock
     context: data.league.name,
     ...featuredAndFollowing(data.matches, teams, clock),
     tables,
-    // From the quarter-finals on, beside the table (or the groups) it came out of.
-    bracket: teamBracket(`${data.league.name} knockout`, data.knockout, teams),
+    // From the quarter-finals on, beside the table (or the groups) it came
+    // out of; in the rounds before them, the games to come.
+    ...knockoutSlot(`${data.league.name} knockout`, data.knockout, data.matches, teams),
   };
 }
 
@@ -658,12 +659,30 @@ const BRACKET_ROUNDS = 3;
  */
 const BRACKET_TIES = 4;
 const fitsCard = (round: { ties: unknown[] }): boolean => round.ties.length > 0 && round.ties.length <= BRACKET_TIES;
+
+/** A knockout with a tie still to decide that somebody is drawn into: it is being played. */
+function knockoutOn(rounds: BracketRound[] | undefined): boolean {
+  return (rounds ?? []).some((r) => r.matches.some((m) => !m.winnerTeamId && (m.homeTeamId || m.awayTeamId)));
+}
+
 /**
- * A round of teams may have eight: past four, the card draws each tie on one
- * line ("ORL 1–0 CIN"), which eight of take the height four two-line ties do.
- * Players and pairs keep to four — their names do not fit a line.
+ * The round a knockout is in — the first with a tie still open that somebody
+ * is drawn into — when it is bigger than a card's bracket: the draw waits for
+ * the last eight, and the card lists what is to be played.
  */
-const BRACKET_TIES_ONE_LINE = 8;
+function bigRoundOn(rounds: BracketRound[] | undefined): BracketRound | undefined {
+  const round = (rounds ?? []).find((r) => r.matches.some((m) => !m.winnerTeamId && (m.homeTeamId || m.awayTeamId)));
+  return round && round.matches.length > BRACKET_TIES ? round : undefined;
+}
+
+/** The next games to be played, soonest first: a card's "Up next" before its bracket has room. */
+function upNextGames(all: Match[], teams: Map<string, Team>): DashboardMatch[] {
+  return all
+    .filter((m) => m.status === "scheduled")
+    .sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff))
+    .slice(0, CARD_ROWS)
+    .map((m) => cardMatch(m, teams));
+}
 
 /**
  * An event's knockouts for its card: the last rounds, each tie with both
@@ -672,6 +691,18 @@ const BRACKET_TIES_ONE_LINE = 8;
  */
 function lolBracket(event: LolSplit, teams: Map<string, Team>): DashboardBracket | undefined {
   return teamBracket(`${event.name} bracket`, event.playoffs, teams);
+}
+
+/** A card's bracket, or before the last eight the games to come in its place. */
+function knockoutSlot(
+  label: string,
+  knockout: BracketRound[] | undefined,
+  games: Match[],
+  teams: Map<string, Team>
+): Pick<DashboardSportCard, "bracket" | "upNext"> {
+  const bracket = teamBracket(label, knockout, teams);
+  if (bracket) return { bracket };
+  return knockoutOn(knockout) ? { upNext: upNextGames(games, teams) } : {};
 }
 
 /** A knockout between teams, for a card: LoL's events, a league's postseason. */
@@ -706,11 +737,13 @@ function teamBracket(
     // A preliminary round — fewer ties than the round it feeds (MLS's wild
     // card) — is no column of the bracket: alone, it read as the whole of it.
     .filter((round, i, list) => i === list.length - 1 || round.ties.length >= list[i + 1].ties.length);
-  // From the round being played: it and the two after it, their sides "TBD"
-  // until they are known. Once all is decided, the last three.
+  // Only from the last eight: while a bigger round is being played the card
+  // lists the games to come instead (`upNext`) — a round of sixteen has no
+  // room on it. Then the last three rounds, their sides "TBD" until known.
   const playing = all.findIndex((round) => round.ties.some((t) => !t.decided));
-  let start = Math.max(0, Math.min(playing === -1 ? all.length : playing, all.length - BRACKET_ROUNDS));
-  while (start < all.length && all[start].ties.length > BRACKET_TIES_ONE_LINE) start++;
+  if (playing !== -1 && all[playing].ties.length > BRACKET_TIES) return undefined;
+  let start = Math.max(0, all.length - BRACKET_ROUNDS);
+  while (start < all.length && all[start].ties.length > BRACKET_TIES) start++;
   const rounds = all.slice(start, start + BRACKET_ROUNDS);
   const drawn = rounds.some((round) => round.ties.some((t) => !t.home.tbd || !t.away.tbd));
   return drawn ? { label, short: "Bracket", rounds } : undefined;
@@ -741,6 +774,7 @@ function racquetBracket(
       seed: p && /^\d+$/.test(p.code.trim()) ? p.code.trim() : undefined,
     };
   };
+  if (bigRoundOn(rounds)) return undefined;
   const drawn = (rounds ?? [])
     .map((round) => ({
       label: round.label,
@@ -940,10 +974,38 @@ function racquetCard(
   const players = draw?.players ?? data.drawPlayers ?? [];
   const faces = event ? eventFaces(rounds, players, data.rankings, base.sportId === "padel") : {};
   // An event still to start has no draw worth a column: the rankings stand alone.
+  const pairs = base.sportId === "padel";
   const bracket =
-    event && event.status !== "upcoming"
-      ? racquetBracket(event.name, rounds, players, base.sportId === "padel")
-      : undefined;
+    event && event.status !== "upcoming" ? racquetBracket(event.name, rounds, players, pairs) : undefined;
+  // Before the last eight: the ties of the round on that are still to be played.
+  const big = event?.status === "live" ? bigRoundOn(rounds) : undefined;
+  const byId = teamsById(players);
+  const entrant = (id: string): DashboardSide => {
+    const shortName = byId.get(id)?.shortName ?? id;
+    return {
+      name: shortName,
+      code: pairs ? shortName.replace(" / ", "/") : (shortName.split(" ").at(-1) ?? shortName),
+      score: null,
+      winner: false,
+      plain: true,
+    };
+  };
+  const upNext = big?.matches
+    .flatMap((m): DashboardMatch[] =>
+      m.homeTeamId && m.awayTeamId && !m.winnerTeamId
+        ? [
+            {
+              id: m.id,
+              home: entrant(m.homeTeamId),
+              away: entrant(m.awayTeamId),
+              status: "upcoming",
+              startsAt: m.date ?? "",
+              label: big.label,
+            },
+          ]
+        : []
+    )
+    .slice(0, CARD_ROWS);
   return {
     ...base,
     context,
@@ -961,6 +1023,7 @@ function racquetCard(
       : undefined,
     matches: [],
     bracket,
+    ...(upNext && upNext.length > 0 && { upNext }),
     tables: [
       {
         id: data.tour,
@@ -1033,6 +1096,9 @@ function surfCard(base: CardBase, data: SurfData, clock: CardClock = utcClock())
  * cannot say, and a heat whose surfers are still seeds' places is left out.
  */
 function surfBracket(name: string, draw: SurfDraw): DashboardBracket | undefined {
+  // Until the heats are one against one and down to the last eight, the rankings stand alone.
+  const on = draw.rounds.find((r) => r.heats.some((h) => h.status !== "completed"));
+  if (on && (on.heats.length > BRACKET_TIES || on.heats.some((h) => h.surfers.length !== 2))) return undefined;
   const rounds = draw.rounds
     .map((round) => ({
       label: round.label,
@@ -1120,11 +1186,15 @@ function leadOrChampion(
   playoffs: BracketRound[] | undefined,
   teams: Map<string, Team>,
   clock: CardClock
-): Pick<DashboardSportCard, "featured" | "following" | "matches" | "event" | "bracket"> {
+): Pick<DashboardSportCard, "featured" | "following" | "matches" | "event" | "bracket" | "upNext"> {
   // The bracket from the round it fits a card (the last eight) on, games or
   // no games: it is how the postseason is read while it is played, too.
   const bracket = teamBracket("Postseason bracket", playoffs, teams);
-  const lead = { ...featuredAndFollowing(games, teams, clock), bracket };
+  const lead = {
+    ...featuredAndFollowing(games, teams, clock),
+    bracket,
+    ...(!bracket && knockoutOn(playoffs) && { upNext: upNextGames(games, teams) }),
+  };
   if (lead.featured) return lead;
   const round = playoffs?.find((r) => r.id === "final");
   const final = round?.matches.at(-1);

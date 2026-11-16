@@ -42,8 +42,7 @@ export function DashboardBracket({
             <ul role="list" aria-label={round.label} className="flex h-full flex-col justify-around gap-1">
               {round.ties.map((tie) => {
                 const when = tie.playedAt ? `${round.label} · ${format.shortDay(tie.playedAt)}` : round.label;
-                // Past four ties a column draws each on one line, or it would be twice the height.
-                return <BracketTie key={tie.id} tie={tie} when={when} oneLine={round.ties.length > 4} />;
+                return <BracketTie key={tie.id} tie={tie} when={when} />;
               })}
             </ul>
           </li>

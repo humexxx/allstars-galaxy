@@ -3,11 +3,17 @@
 import { useState, type ReactNode } from "react";
 
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { cn } from "@/lib/utils";
 
 /**
  * One slot of a dashboard sport card showing one of several things — an
  * event's draw or the tour's rankings — so a card with both is no taller
  * than a card with one. A client island: which view shows is its only state.
+ *
+ * Every view is laid out in the same grid cell and only the chosen one shown,
+ * so the slot is as tall as its tallest view and the card does not change
+ * height when the reader switches. The others are `inert`: not seen, not
+ * read out, not reachable.
  */
 export function DashboardCardSwitch({
   label,
@@ -29,7 +35,18 @@ export function DashboardCardSwitch({
           </ToggleGroupItem>
         ))}
       </ToggleGroup>
-      {view.content}
+      <div className="grid">
+        {views.map((v) => (
+          <div
+            key={v.id}
+            data-view={v.id}
+            inert={v.id !== view.id}
+            className={cn("col-start-1 row-start-1 min-w-0", v.id !== view.id && "invisible")}
+          >
+            {v.content}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

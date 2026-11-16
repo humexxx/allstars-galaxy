@@ -19,24 +19,21 @@ import type {
   DashboardMatch,
   DashboardSide,
   DashboardSportCard as DashboardSportCardData,
-  DrawVariant,
   SportId,
-  Team,
 } from "@/types/sports";
 
 import { DashboardBracket } from "./dashboard-bracket";
 import { DashboardCardSwitch } from "./dashboard-card-switch";
 import { DashboardCompetitionPicker } from "./dashboard-competition-picker";
+import { EventFace, type FaceKind } from "./dashboard-event-face";
 import { DashboardSportTables } from "./dashboard-sport-tables";
 import { DashboardSwiss } from "./dashboard-swiss";
 import { CardPendingProvider, PendingArea } from "./shared/card-pending";
 import { SPORT_CARD_HEADER, SPORT_CARD_ROWS, SPORT_CARD_SECTION } from "./shared/dashboard-card-rows";
-import { PairFaces } from "./shared/draw-match-card";
 import { FeatureBox } from "./shared/feature-box";
 import { LeadCarousel } from "./shared/lead-carousel";
 import { matchTimeFormat, type MatchTimeFormat } from "./shared/match-time";
 import { NewsRail } from "./shared/news-rail";
-import { Portrait } from "./shared/portrait";
 import { StatusPill } from "./shared/status-pill";
 import { TeamBadge } from "./shared/team-badge";
 import { WinnerLine } from "./shared/winner-line";
@@ -352,12 +349,8 @@ function FeaturedEvent({
         {event.seeds && event.seeds.length > 0 && (
           <ol aria-label="Top seeds" className="flex shrink-0 items-center gap-1.5">
             {event.seeds.map((seed) => (
-              <li
-                key={seed.id}
-                title={`Seed ${seed.code}: ${variant === "pair" ? seed.name : seed.shortName}`}
-                className="flex"
-              >
-                <EventFace entry={seed} variant={variant} />
+              <li key={seed.id} className="flex">
+                <EventFace entry={seed} variant={variant} profile={event.profiles?.[seed.id]} />
                 <span className="sr-only">
                   Seed {seed.code}: {variant === "pair" ? seed.name : seed.shortName}
                 </span>
@@ -368,7 +361,13 @@ function FeaturedEvent({
       </div>
       {event.winner && (
         <span className="flex min-w-0 items-center gap-2">
-          {event.winnerFace && <EventFace entry={event.winnerFace} variant={variant} />}
+          {event.winnerFace && (
+            <EventFace
+              entry={event.winnerFace}
+              variant={variant}
+              profile={event.profiles?.[event.winnerFace.id]}
+            />
+          )}
           <WinnerLine
             winner={event.winner}
             beside={event.runnerUp && [`def. ${event.runnerUp}`, event.score].filter(Boolean).join(" ")}
@@ -376,21 +375,6 @@ function FeaturedEvent({
         </span>
       )}
     </FeatureBox>
-  );
-}
-
-type FaceKind = DrawVariant | "team";
-
-/** A player's face (the flag where there is no photo), a pair's two, or a team's crest. */
-function EventFace({ entry, variant }: { entry: Team; variant: FaceKind }): React.ReactElement {
-  if (variant === "pair") return <PairFaces pair={entry} />;
-  if (variant === "team") return <TeamBadge team={entry} size="sm" />;
-  return (
-    <Portrait
-      size="md"
-      subject={{ name: entry.shortName, imageUrl: entry.logoUrl }}
-      fallback={<span className="text-base leading-none">{entry.name}</span>}
-    />
   );
 }
 

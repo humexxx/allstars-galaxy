@@ -1038,6 +1038,34 @@ describe("racquetCard", () => {
       const event = __testing.racquetCard(base, week, "ATP", sunday).event!;
       expect(event.seeds?.map((p) => p.id)).toEqual(["fritz", "ruud", "rune"]);
       expect(event.winnerFace?.id).toBe("fritz");
+      // How far each got, for its tooltip; no ranking, as this tour's list is empty.
+      expect(event.profiles).toEqual({
+        fritz: { ranking: undefined, result: "Champion" },
+        ruud: { ranking: undefined, result: "Lost in the Semi-finals" },
+        rune: { ranking: undefined, result: "Lost in the Semi-finals" },
+      });
+    });
+
+    it("finds a player's ranking by the name both lists print, and a pair's by each surname", () => {
+      const ranked = (position: number, shortName: string) =>
+        ({ position, name: shortName, shortName, countryCode: "US", flagEmoji: "🇺🇸", points: 4635, movement: 0 });
+      const week = {
+        ...tour([{ ...won, bracket: rounds("fritz") }]),
+        drawPlayers: players,
+        rankings: [ranked(4, "fritz"), ranked(9, "ruud")],
+      };
+      const profiles = __testing.racquetCard(base, week, "ATP", sunday).event!.profiles!;
+      expect(profiles.fritz.ranking).toBe("#4 · 4,635 pts");
+      expect(profiles.rune.ranking).toBeUndefined();
+
+      const pair = { id: "fritz", name: "T. Fritz / C. Ruud", shortName: "Fritz / Ruud", code: "1" };
+      const padel = { ...base, sportId: "padel", label: "Padel" } as const;
+      const pairs = {
+        ...tour([{ ...won, bracket: rounds("fritz") }]),
+        drawPlayers: [pair, ...players.slice(1)],
+        rankings: [ranked(1, "T. Fritz"), ranked(2, "C. Ruud")],
+      };
+      expect(__testing.racquetCard(padel, pairs, "Premier Padel", sunday).event!.profiles!.fritz.ranking).toBe("#1 / #2");
     });
 
     it("names no winner while the final is unplayed", () => {

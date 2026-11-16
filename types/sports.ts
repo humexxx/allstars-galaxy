@@ -74,6 +74,14 @@ export type DashboardSwiss = {
   }[];
 };
 
+/** What a face's tooltip adds to the entry itself. */
+export type DashboardProfile = {
+  /** The tour's ranking: "#4 · 4,635 pts"; a pair's two, "#1 / #1". */
+  ranking?: string;
+  /** How far they got in this event: "Champion", "Lost in the Semi-finals", "In the Final". */
+  result?: string;
+};
+
 /**
  * An event's knockouts, a column a round, for a card that leads with the
  * event just played (LoL's off-season).
@@ -153,6 +161,8 @@ export type DashboardSportCard = {
     seeds?: Team[];
     /** The winner as the draw has them, for the face beside the name. */
     winnerFace?: Team;
+    /** More on each face, by the entry's id, for its tooltip. */
+    profiles?: Record<string, DashboardProfile>;
   };
   /** Listed under the lead (LoL: a day of an event is several series back to back). */
   matches: DashboardMatch[];

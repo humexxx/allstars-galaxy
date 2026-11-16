@@ -183,11 +183,10 @@ describe("DashboardSportCard", () => {
         ],
       },
     });
-    // No column headings: the round and the day are each tie's tooltip.
+    // No column headings: the round and the day are each tie's accessible name and tooltip.
     expect(screen.queryByText("Semifinals")).toBeNull();
-    expect(within(screen.getByRole("list", { name: "Finals" })).getByRole("listitem")).toHaveAttribute(
-      "title",
-      "Finals · Nov 14"
+    expect(within(screen.getByRole("list", { name: "Finals" })).getByRole("listitem")).toHaveTextContent(
+      /^Finals · Nov 14: /
     );
     expect(screen.getByRole("heading", { level: 3, name: "Worlds 2026 bracket" })).toBeInTheDocument();
     const final = within(screen.getByRole("list", { name: "Finals" })).getByRole("listitem");
@@ -211,11 +210,13 @@ describe("DashboardSportCard", () => {
     });
     const views = screen.getByRole("group", { name: "Tennis views" });
     expect(within(views).getAllByRole("radio").map((r) => r.textContent)).toEqual(["Draw", "Rankings"]);
-    expect(screen.getByText("Fritz")).toBeInTheDocument();
-    expect(screen.queryByText("A. Zverev")).toBeNull();
+    // Both are laid out, so the slot keeps the taller one's height; only the chosen one is live.
+    const shown = (text: string): boolean => screen.getByText(text).closest("[data-view]")!.hasAttribute("inert") === false;
+    expect(shown("Fritz")).toBe(true);
+    expect(shown("A. Zverev")).toBe(false);
     fireEvent.click(within(views).getByRole("radio", { name: "Rankings" }));
-    expect(screen.getByText("A. Zverev")).toBeInTheDocument();
-    expect(screen.queryByText("Fritz")).toBeNull();
+    expect(shown("A. Zverev")).toBe(true);
+    expect(shown("Fritz")).toBe(false);
   });
 
   it("asks for the card on the championship it is set to", async () => {

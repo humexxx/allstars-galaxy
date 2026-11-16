@@ -53,6 +53,7 @@ import type {
   NbaData,
   NflData,
   NhlData,
+  PlayerRanking,
   RacquetData,
   RacquetDraw,
   RacquetSport,
@@ -833,14 +834,51 @@ async function leadDraw(
 /** The lead event's three best seeds and, once it is won, the winner: the faces on its card. */
 function eventFaces(
   rounds: BracketRound[] | undefined,
-  players: Team[]
-): Pick<NonNullable<DashboardSportCard["event"]>, "seeds" | "winnerFace"> {
+  players: Team[],
+  rankings: PlayerRanking[],
+  pairs: boolean
+): Pick<NonNullable<DashboardSportCard["event"]>, "seeds" | "winnerFace" | "profiles"> {
   if (!rounds?.length) return {};
   const seeds = topSeeds({ rounds, players });
   // Only a played final has a winner, so an event still on shows none.
   const winnerId = rounds.find((r) => r.id === "final")?.matches.at(-1)?.winnerTeamId;
   const winnerFace = winnerId ? players.find((p) => p.id === winnerId) : undefined;
-  return { ...(seeds.length > 0 && { seeds }), ...(winnerFace && { winnerFace }) };
+  const shown = [...seeds, ...(winnerFace ? [winnerFace] : [])];
+  const profiles = Object.fromEntries(
+    shown.map((p) => [p.id, { ranking: rankingOf(p, rankings, pairs), result: resultIn(rounds, p.id) }])
+  );
+  return {
+    ...(seeds.length > 0 && { seeds }),
+    ...(winnerFace && { winnerFace }),
+    ...(shown.length > 0 && { profiles }),
+  };
+}
+
+/**
+ * Where an entry stands on the tour. A player is matched on the name the draw
+ * and the rankings both print; a padel pair, whose draw carries surnames only,
+ * on each surname — and only when exactly one ranked player has it.
+ */
+function rankingOf(entry: Team, rankings: PlayerRanking[], pairs: boolean): string | undefined {
+  if (!pairs) {
+    const r = rankings.find((p) => p.shortName === entry.shortName);
+    return r ? `#${r.position} · ${r.points.toLocaleString("en-US")} pts` : undefined;
+  }
+  const places = entry.shortName.split(" / ").map((surname) => {
+    const named = rankings.filter((p) => p.shortName.split(" ").at(-1) === surname.trim().split(" ").at(-1));
+    return named.length === 1 ? `#${named[0].position}` : null;
+  });
+  return places.every((p) => p !== null) ? places.join(" / ") : undefined;
+}
+
+/** How far an entry got: the last round it is drawn into, and whether it won there. */
+function resultIn(rounds: BracketRound[], id: string): string | undefined {
+  const reached = rounds.findLast((r) => r.matches.some((m) => m.homeTeamId === id || m.awayTeamId === id));
+  const tie = reached?.matches.find((m) => m.homeTeamId === id || m.awayTeamId === id);
+  if (!reached || !tie) return undefined;
+  if (!tie.winnerTeamId) return `In the ${reached.label}`;
+  if (tie.winnerTeamId !== id) return `Lost in the ${reached.label}`;
+  return reached.id === "final" ? "Champion" : `Won the ${reached.label}`;
 }
 
 /** The men's tour only, so no championship to pick: the hub follows no women's tour. */
@@ -854,7 +892,7 @@ function racquetCard(
   const event = leadEvent(data.tournaments, (t) => t.champion, clock);
   const rounds = draw?.rounds ?? event?.bracket;
   const players = draw?.players ?? data.drawPlayers ?? [];
-  const faces = event ? eventFaces(rounds, players) : {};
+  const faces = event ? eventFaces(rounds, players, data.rankings, base.sportId === "padel") : {};
   // An event still to start has no draw worth a column: the rankings stand alone.
   const bracket =
     event && event.status !== "upcoming"

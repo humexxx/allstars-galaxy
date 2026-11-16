@@ -29,7 +29,7 @@ vi.mock("@/db", () => ({
 import { db } from "@/db";
 import { getFootballLeague } from "@/lib/data/sports/football";
 import { WORLD_CUP_DATA } from "@/lib/data/sports/world-cup";
-import type { BracketMatch, DashboardMatch, DashboardSportCard, LolRegion, LolSplit, RacquetData, RacquetTournament, SurfData, SurfEvent, SwissMatch, SwissStage, Team } from "@/types/sports";
+import type { BracketMatch, BracketRound, DashboardMatch, DashboardSportCard, LolRegion, LolSplit, RacquetData, RacquetTournament, SurfData, SurfEvent, SwissMatch, SwissStage, Team } from "@/types/sports";
 
 import gamesOct18 from "./__fixtures__/balldontlie-nba-games-2026-10-18.json";
 import { fakeLolesports } from "./__fixtures__/lolesports";
@@ -948,6 +948,48 @@ describe("racquetCard", () => {
     const week = tour([paris, tournament("Stockholm", "upcoming")]);
     const monday = { timeZone: "UTC", now: Date.parse("2026-11-09T12:00:00Z") };
     expect(__testing.racquetCard(base, week, "ATP", monday).event).toMatchObject({ name: "Stockholm" });
+  });
+
+  describe("the faces on the lead event", () => {
+    const player = (id: string, seed: string): Team => ({ id, name: "🇺🇸", shortName: id, code: seed, logoUrl: `${id}.png` });
+    const players = [player("fritz", "1"), player("tirante", ""), player("rune", "3"), player("ruud", "2"), player("paul", "4")];
+    const rounds = (winnerTeamId?: string): BracketRound[] => [
+      {
+        id: "semi-final",
+        label: "Semi-finals",
+        matches: [
+          { id: "s1", homeTeamId: "fritz", awayTeamId: "paul", winnerTeamId: "fritz" },
+          { id: "s2", homeTeamId: "ruud", awayTeamId: "tirante", winnerTeamId: "tirante" },
+          { id: "q1", homeTeamId: "rune", awayTeamId: "tirante", winnerTeamId: "tirante" },
+        ],
+      },
+      { id: "final", label: "Final", matches: [{ id: "f", homeTeamId: "fritz", awayTeamId: "tirante", winnerTeamId }] },
+    ];
+    const won: RacquetTournament = { ...tournament("Stockholm", "completed"), champion: "fritz", runnerUp: "tirante" };
+    const sunday = { timeZone: "UTC", now: Date.parse("2026-10-25T20:00:00Z") };
+
+    it("carries the draw's three best seeds and the winner of its final", () => {
+      const week = { ...tour([{ ...won, bracket: rounds("fritz") }]), drawPlayers: players };
+      const event = __testing.racquetCard(base, week, "ATP", sunday).event!;
+      expect(event.seeds?.map((p) => p.id)).toEqual(["fritz", "ruud", "rune"]);
+      expect(event.winnerFace?.id).toBe("fritz");
+    });
+
+    it("names no winner while the final is unplayed", () => {
+      const week = { ...tour([{ ...tournament("Stockholm", "live"), bracket: rounds() }]), drawPlayers: players };
+      const event = __testing.racquetCard(base, week, "ATP", sunday).event!;
+      expect(event.seeds).toHaveLength(3);
+      expect(event.winnerFace).toBeUndefined();
+    });
+
+    it("reads a draw the feed did not ship, and goes without when there is none", () => {
+      const week = tour([won]);
+      expect(__testing.racquetCard(base, week, "ATP", sunday).event?.seeds).toBeUndefined();
+      const draw = { tournamentId: "Stockholm", rounds: rounds("fritz"), players };
+      const event = __testing.racquetCard(base, week, "ATP", sunday, draw).event!;
+      expect(event.seeds?.map((p) => p.id)).toEqual(["fritz", "ruud", "rune"]);
+      expect(event.winnerFace?.id).toBe("fritz");
+    });
   });
 
   it("links the tournament to its own page, not the sport's", () => {

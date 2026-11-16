@@ -140,6 +140,28 @@ describe("DashboardSportCard", () => {
     expect(screen.getByText("def. J. Sinner")).toBeInTheDocument();
   });
 
+  it("shows a tournament's top seeds beside its name, and the winner's face by the winner", async () => {
+    const player = (id: string, seed: string) => ({ id, name: "🇺🇸", shortName: id, code: seed });
+    await renderCard({
+      ...card([]),
+      sportId: "tennis",
+      label: "Tennis",
+      event: {
+        name: "Stockholm Open",
+        detail: "Stockholm",
+        status: "completed",
+        winner: "T. Fritz",
+        seeds: [player("T. Fritz", "1"), player("C. Ruud", "2"), player("H. Rune", "3")],
+        winnerFace: player("T. Fritz", "1"),
+      },
+    });
+    const seeds = within(screen.getByRole("list", { name: "Top seeds" })).getAllByRole("listitem");
+    expect(seeds.map((li) => li.textContent)).toEqual(["🇺🇸Seed 1: T. Fritz", "🇺🇸Seed 2: C. Ruud", "🇺🇸Seed 3: H. Rune"]);
+    // The winner's line sits outside the seeds' row, so a long name cannot run under the faces.
+    const winner = screen.getByText("Winner T. Fritz");
+    expect(screen.getByRole("list", { name: "Top seeds" }).parentElement).not.toContainElement(winner);
+  });
+
   it("asks for the card on the championship it is set to", async () => {
     await renderCard(card([]), "lck");
 

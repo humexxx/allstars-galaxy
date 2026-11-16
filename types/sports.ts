@@ -113,6 +113,13 @@ export type DashboardSportCard = {
     runnerUp?: string;
     /** The final's score, the winner's side first ("3–2"). */
     score?: string;
+    /**
+     * A racquet tournament's three best seeds, as its draw has them (`Team` in
+     * `playerEntry`'s shape: a player with a photo, or a padel pair with two).
+     */
+    seeds?: Team[];
+    /** The winner as the draw has them, for the face beside the name. */
+    winnerFace?: Team;
   };
   /** Listed under the lead (LoL: a day of an event is several series back to back). */
   matches: DashboardMatch[];

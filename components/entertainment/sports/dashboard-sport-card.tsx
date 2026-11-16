@@ -19,7 +19,9 @@ import type {
   DashboardMatch,
   DashboardSide,
   DashboardSportCard as DashboardSportCardData,
+  DrawVariant,
   SportId,
+  Team,
 } from "@/types/sports";
 
 import { DashboardCompetitionPicker } from "./dashboard-competition-picker";
@@ -27,10 +29,12 @@ import { DashboardSportTables } from "./dashboard-sport-tables";
 import { DashboardSwiss } from "./dashboard-swiss";
 import { CardPendingProvider, PendingArea } from "./shared/card-pending";
 import { SPORT_CARD_HEADER, SPORT_CARD_ROWS, SPORT_CARD_SECTION } from "./shared/dashboard-card-rows";
+import { PairFaces } from "./shared/draw-match-card";
 import { FeatureBox } from "./shared/feature-box";
 import { LeadCarousel } from "./shared/lead-carousel";
 import { matchTimeFormat, type MatchTimeFormat } from "./shared/match-time";
 import { NewsRail } from "./shared/news-rail";
+import { Portrait } from "./shared/portrait";
 import { StatusPill } from "./shared/status-pill";
 import { TeamBadge } from "./shared/team-badge";
 import { WinnerLine } from "./shared/winner-line";
@@ -163,7 +167,13 @@ export async function DashboardSportCard({
             ) : (
               <FeaturedMatch match={card.featured} format={format} href={href} />
             ))}
-          {card.event && <FeaturedEvent event={card.event} href={card.event.href ?? href} />}
+          {card.event && (
+            <FeaturedEvent
+              event={card.event}
+              href={card.event.href ?? href}
+              variant={card.sportId === "padel" ? "pair" : "player"}
+            />
+          )}
         </PendingArea>
 
         <div className={SPORT_CARD_SECTION}>{middle}</div>
@@ -283,22 +293,70 @@ const EVENT_LABEL: Record<NonNullable<DashboardSportCardData["event"]>["status"]
   completed: "Just finished",
 };
 
-/** A tournament (tennis, padel) in the same box as a match or a race. */
+/**
+ * A tournament (tennis, padel) in the same box as a match or a race: what it
+ * is on the left and, at the bottom right, the faces of its three best seeds
+ * — the hub's own measure of who an event has.
+ */
 function FeaturedEvent({
   event,
   href,
+  variant,
 }: {
   event: NonNullable<DashboardSportCardData["event"]>;
   href: string;
+  variant: DrawVariant;
 }): React.ReactElement {
   return (
     <FeatureBox href={href} label={event.label ?? EVENT_LABEL[event.status]} status={<StatusPill status={event.status} />}>
-      <span className="truncate text-sm font-semibold">{event.name}</span>
-      <Text variant="small" as="span" className="truncate">
-        {event.detail}
-      </Text>
-      {event.winner && <WinnerLine winner={event.winner} beside={event.runnerUp && [`def. ${event.runnerUp}`, event.score].filter(Boolean).join(" ")} />}
+      {/* The seeds beside the name, the winner on a line of its own under
+          them: sharing a line, a padel pair's names ran under the faces. */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-2">
+          <span className="truncate text-sm font-semibold">{event.name}</span>
+          <Text variant="small" as="span" className="truncate">
+            {event.detail}
+          </Text>
+        </div>
+        {event.seeds && event.seeds.length > 0 && (
+          <ol aria-label="Top seeds" className="flex shrink-0 items-center gap-1.5">
+            {event.seeds.map((seed) => (
+              <li
+                key={seed.id}
+                title={`Seed ${seed.code}: ${variant === "pair" ? seed.name : seed.shortName}`}
+                className="flex"
+              >
+                <EventFace entry={seed} variant={variant} />
+                <span className="sr-only">
+                  Seed {seed.code}: {variant === "pair" ? seed.name : seed.shortName}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+      {event.winner && (
+        <span className="flex min-w-0 items-center gap-2">
+          {event.winnerFace && <EventFace entry={event.winnerFace} variant={variant} />}
+          <WinnerLine
+            winner={event.winner}
+            beside={event.runnerUp && [`def. ${event.runnerUp}`, event.score].filter(Boolean).join(" ")}
+          />
+        </span>
+      )}
     </FeatureBox>
+  );
+}
+
+/** A player's face (the flag where there is no photo), or a pair's two. */
+function EventFace({ entry, variant }: { entry: Team; variant: DrawVariant }): React.ReactElement {
+  if (variant === "pair") return <PairFaces pair={entry} />;
+  return (
+    <Portrait
+      size="md"
+      subject={{ name: entry.shortName, imageUrl: entry.logoUrl }}
+      fallback={<span className="text-base leading-none">{entry.name}</span>}
+    />
   );
 }
 

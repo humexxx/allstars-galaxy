@@ -19,13 +19,15 @@ import { FOOTBALL_COMPETITIONS, getFootballCompetition } from "@/lib/services/fo
 import { getF1Data, getF1SeasonWinners } from "@/lib/services/jolpica-f1-service";
 import { getLolNews } from "@/lib/services/lolesports-news-service";
 import { getLolData } from "@/lib/services/lolesports-service";
-import { getPadelData } from "@/lib/services/padel-api-service";
-import { getTennisData } from "@/lib/services/espn-tennis-service";
+import { getPadelData, getPadelDraw } from "@/lib/services/padel-api-service";
+import { getTennisData, getTennisDraw } from "@/lib/services/espn-tennis-service";
 import { leadRace, startsIn, weekendNow } from "@/lib/sports/f1-weekend";
 import { tournamentPath } from "@/lib/sports/paths";
 import { splitSeasonLabel } from "@/lib/sports/season";
 import { calendarDayInTimeZone, formatDay, formatDayRange } from "@/lib/utils/date";
+import { topSeeds } from "@/lib/sports/racquet";
 import type {
+  BracketRound,
   DashboardCompetitions,
   DashboardMatch,
   DashboardSide,
@@ -51,6 +53,7 @@ import type {
   NflData,
   NhlData,
   RacquetData,
+  RacquetDraw,
   RacquetSport,
   SurfData,
   SportId,
@@ -287,11 +290,16 @@ export async function getDashboardSportCard(
     }
     case "tennis": {
       const [data, news] = await Promise.all([getTennisData(), getEspnNews("atp")]);
-      return { ...racquetCard({ ...base, sportId: "tennis" }, data.atp, "ATP", clock), news: cardNews(news) };
+      const draw = await leadDraw(data.atp, clock, getTennisDraw);
+      return { ...racquetCard({ ...base, sportId: "tennis" }, data.atp, "ATP", clock, draw), news: cardNews(news) };
     }
     case "padel": {
       const [data, news] = await Promise.all([getPadelData(), getPadelNews()]);
-      return { ...racquetCard({ ...base, sportId: "padel" }, data.men, "Premier Padel", clock), news: cardNews(news) };
+      const draw = await leadDraw(data.men, clock, getPadelDraw);
+      return {
+        ...racquetCard({ ...base, sportId: "padel" }, data.men, "Premier Padel", clock, draw),
+        news: cardNews(news),
+      };
     }
     case "surf": {
       const [data, news] = await Promise.all([getSurfData(), getSurfNews()]);
@@ -720,14 +728,46 @@ function leadEvent<E extends { status: "completed" | "live" | "upcoming"; startD
   );
 }
 
+/**
+ * The draw of the event a tour's card leads with, when the feed did not ship
+ * it (it ships only the featured and the current one's): the card's faces come
+ * from it. A provider that fails costs the faces, not the card.
+ */
+async function leadDraw(
+  data: RacquetData,
+  clock: CardClock,
+  load: (tournamentId: string) => Promise<RacquetDraw | null>
+): Promise<RacquetDraw | null> {
+  const event = leadEvent(data.tournaments, (t) => t.champion, clock);
+  if (!event || event.status === "upcoming" || event.bracket?.length) return null;
+  return load(event.id).catch(() => null);
+}
+
+/** The lead event's three best seeds and, once it is won, the winner: the faces on its card. */
+function eventFaces(
+  rounds: BracketRound[] | undefined,
+  players: Team[]
+): Pick<NonNullable<DashboardSportCard["event"]>, "seeds" | "winnerFace"> {
+  if (!rounds?.length) return {};
+  const seeds = topSeeds({ rounds, players });
+  // Only a played final has a winner, so an event still on shows none.
+  const winnerId = rounds.find((r) => r.id === "final")?.matches.at(-1)?.winnerTeamId;
+  const winnerFace = winnerId ? players.find((p) => p.id === winnerId) : undefined;
+  return { ...(seeds.length > 0 && { seeds }), ...(winnerFace && { winnerFace }) };
+}
+
 /** The men's tour only, so no championship to pick: the hub follows no women's tour. */
 function racquetCard(
   base: CardBase & { sportId: RacquetSport },
   data: RacquetData,
   context: string,
-  clock: CardClock = utcClock()
+  clock: CardClock = utcClock(),
+  draw: RacquetDraw | null = null
 ): DashboardSportCard {
   const event = leadEvent(data.tournaments, (t) => t.champion, clock);
+  const faces = event
+    ? eventFaces(draw?.rounds ?? event.bracket, draw?.players ?? data.drawPlayers ?? [])
+    : {};
   return {
     ...base,
     context,
@@ -740,6 +780,7 @@ function racquetCard(
           status: event.status,
           href: tournamentPath(base.sportId, event.id),
           ...(event.status === "completed" && { winner: event.champion, runnerUp: event.runnerUp }),
+          ...faces,
         }
       : undefined,
     matches: [],

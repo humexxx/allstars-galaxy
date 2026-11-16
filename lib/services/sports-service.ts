@@ -420,7 +420,7 @@ function nbaCard(base: CardBase, data: NbaData, clock: CardClock = utcClock()): 
   return {
     ...base,
     context: `Season ${data.season}`,
-    ...featuredAndFollowing(data.games, teams, clock),
+    ...leadOrChampion(data.games, data.playoffs, teams, clock),
     tables,
     note: tables.length === 0 ? nbaNote(data) : undefined,
   };
@@ -440,7 +440,7 @@ function nflCard(base: CardBase, data: NflData, clock: CardClock = utcClock()): 
   return {
     ...base,
     context: `Season ${data.season}`,
-    ...featuredAndFollowing(data.games, teams, clock),
+    ...leadOrChampion(data.games, data.playoffs, teams, clock),
     tables: groupTables(
       data.standings,
       teams,
@@ -459,7 +459,7 @@ function mlbCard(base: CardBase, data: MlbData, clock: CardClock = utcClock()): 
   return {
     ...base,
     context: `Season ${data.season}`,
-    ...featuredAndFollowing(data.games, teams, clock),
+    ...leadOrChampion(data.games, data.playoffs, teams, clock),
     tables: groupTables(
       data.standings,
       teams,
@@ -479,7 +479,7 @@ function nhlCard(base: CardBase, data: NhlData, clock: CardClock = utcClock()): 
   return {
     ...base,
     context: `Season ${splitSeasonLabel(data.season)}`,
-    ...featuredAndFollowing(data.games, teams, clock),
+    ...leadOrChampion(data.games, data.playoffs, teams, clock),
     tables: groupTables(
       data.standings,
       teams,
@@ -628,6 +628,7 @@ function lolOffSeasonCard(
       status: "completed",
       label: recent ? undefined : "Latest event",
       winner: teams.get(teamId)?.shortName ?? teamId,
+      winnerFace: teams.get(teamId),
       // The code, not the name: "def. Gen.G Esports 3–1" lost its score on a phone.
       runnerUp: beatenId ? (teams.get(beatenId)?.code ?? beatenId) : undefined,
       score: games.length === 2 ? `${games[0]}–${games[1]}` : undefined,
@@ -890,6 +891,42 @@ function featuredAndFollowing(
 }
 
 /**
+ * A league card's lead: its games, or with none in the feed (the season is
+ * over) the champion its bracket's final names, as a racquet card leads with
+ * the tournament just won.
+ */
+function leadOrChampion(
+  games: Match[],
+  playoffs: BracketRound[] | undefined,
+  teams: Map<string, Team>,
+  clock: CardClock
+): Pick<DashboardSportCard, "featured" | "following" | "matches" | "event"> {
+  const lead = featuredAndFollowing(games, teams, clock);
+  if (lead.featured) return lead;
+  const round = playoffs?.find((r) => r.id === "final");
+  const final = round?.matches.at(-1);
+  if (!round || !final?.winnerTeamId) return lead;
+  const beatenId = final.winnerTeamId === final.homeTeamId ? final.awayTeamId : final.homeTeamId;
+  const wins = [final.homeScore, final.awayScore].filter((n) => n != null).sort((x, y) => y - x);
+  const recent = final.date !== undefined && clock.now - new Date(final.date).getTime() < JUST_FINISHED_MS;
+  return {
+    matches: [],
+    event: {
+      name: round.label,
+      detail: [final.bestOf && `Best of ${final.bestOf}`, final.date && formatDay(final.date, clock.timeZone)]
+        .filter(Boolean)
+        .join(" · "),
+      status: "completed",
+      label: recent ? undefined : "Season champions",
+      winner: teams.get(final.winnerTeamId)?.shortName ?? final.winnerTeamId,
+      winnerFace: teams.get(final.winnerTeamId),
+      runnerUp: beatenId ? (teams.get(beatenId)?.code ?? beatenId) : undefined,
+      score: wins.length === 2 ? `${wins[0]}–${wins[1]}` : undefined,
+    },
+  };
+}
+
+/**
  * The games a card's lead box steps through, in the order they are played:
  * yesterday's and today's results on the reader's calendar (the latest
  * `CARD_RECENT`), whatever is live, then the next ones — `CARD_SLIDES` in all,
@@ -983,4 +1020,4 @@ function matchTone(match: Match): DashboardMatch["status"] {
 }
 
 /** Pure helpers, exported for their tests. */
-export const __testing = { leadGames, lolCard, lolSwiss, racquetCard, surfCard, swissRecords, f1Highlight };
+export const __testing = { leadGames, leadOrChampion, lolCard, lolSwiss, racquetCard, surfCard, swissRecords, f1Highlight };

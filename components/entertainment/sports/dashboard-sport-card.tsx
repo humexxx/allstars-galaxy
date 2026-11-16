@@ -171,7 +171,7 @@ export async function DashboardSportCard({
             <FeaturedEvent
               event={card.event}
               href={card.event.href ?? href}
-              variant={card.sportId === "padel" ? "pair" : "player"}
+              faces={card.sportId === "padel" ? "pair" : card.sportId === "tennis" ? "player" : "team"}
             />
           )}
         </PendingArea>
@@ -301,11 +301,12 @@ const EVENT_LABEL: Record<NonNullable<DashboardSportCardData["event"]>["status"]
 function FeaturedEvent({
   event,
   href,
-  variant,
+  faces: variant,
 }: {
   event: NonNullable<DashboardSportCardData["event"]>;
   href: string;
-  variant: DrawVariant;
+  /** What a face on this card is: a player, a padel pair, or a team's crest. */
+  faces: FaceKind;
 }): React.ReactElement {
   return (
     <FeatureBox href={href} label={event.label ?? EVENT_LABEL[event.status]} status={<StatusPill status={event.status} />}>
@@ -348,9 +349,12 @@ function FeaturedEvent({
   );
 }
 
-/** A player's face (the flag where there is no photo), or a pair's two. */
-function EventFace({ entry, variant }: { entry: Team; variant: DrawVariant }): React.ReactElement {
+type FaceKind = DrawVariant | "team";
+
+/** A player's face (the flag where there is no photo), a pair's two, or a team's crest. */
+function EventFace({ entry, variant }: { entry: Team; variant: FaceKind }): React.ReactElement {
   if (variant === "pair") return <PairFaces pair={entry} />;
+  if (variant === "team") return <TeamBadge team={entry} size="sm" />;
   return (
     <Portrait
       size="md"

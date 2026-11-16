@@ -29,7 +29,7 @@ vi.mock("@/db", () => ({
 import { db } from "@/db";
 import { getFootballLeague } from "@/lib/data/sports/football";
 import { WORLD_CUP_DATA } from "@/lib/data/sports/world-cup";
-import type { BracketMatch, BracketRound, DashboardMatch, DashboardSportCard, LolRegion, LolSplit, RacquetData, RacquetTournament, SurfData, SurfEvent, SwissMatch, SwissStage, Team } from "@/types/sports";
+import type { BracketMatch, BracketRound, DashboardMatch, DashboardSportCard, LolRegion, LolSplit, Match, RacquetData, RacquetTournament, SurfData, SurfEvent, SwissMatch, SwissStage, Team } from "@/types/sports";
 
 import gamesOct18 from "./__fixtures__/balldontlie-nba-games-2026-10-18.json";
 import { fakeLolesports } from "./__fixtures__/lolesports";
@@ -701,6 +701,8 @@ describe("the LoL card across a season", () => {
         // "Just finished" for two weeks, then no longer true.
         label,
         winner: "T1",
+        // The team itself, for its crest beside the name.
+        winnerFace: expect.objectContaining({ code: "T1" }),
         runnerUp: "GEN",
         score: "3–2",
       });
@@ -891,6 +893,60 @@ describe("swissRecords", () => {
       ["ig", "0-1"],
       ["los", "0-1"],
     ]);
+  });
+});
+
+describe("leadOrChampion", () => {
+  const club = (id: string, shortName: string): Team => ({ id, name: shortName, shortName, code: id.toUpperCase() });
+  const teams = new Map([club("mil", "Brewers"), club("tb", "Rays")].map((t) => [t.id, t]));
+  const series: BracketRound[] = [
+    {
+      id: "final",
+      label: "World Series",
+      matches: [
+        { id: "ws", homeTeamId: "tb", awayTeamId: "mil", homeScore: 1, awayScore: 4, winnerTeamId: "mil", bestOf: 7, date: "2026-10-28T23:00:00Z" },
+      ],
+    },
+  ];
+  const game: Match = {
+    id: "g1",
+    kickoff: "2026-10-28T23:00:00Z",
+    homeTeamId: "tb",
+    awayTeamId: "mil",
+    homeScore: 1,
+    awayScore: 4,
+    status: "ft",
+  };
+
+  it("leads with the champion once the feed has no games left", () => {
+    const clock = { timeZone: "UTC", now: Date.parse("2026-11-15T12:00:00Z") };
+    const lead = __testing.leadOrChampion([], series, teams, clock);
+    expect(lead.featured).toBeUndefined();
+    expect(lead.event).toEqual({
+      name: "World Series",
+      detail: "Best of 7 · Oct 28, 2026",
+      status: "completed",
+      label: "Season champions",
+      winner: "Brewers",
+      winnerFace: expect.objectContaining({ id: "mil" }),
+      runnerUp: "TB",
+      score: "4–1",
+    });
+  });
+
+  it("says Just finished for two weeks after the final", () => {
+    const clock = { timeZone: "UTC", now: Date.parse("2026-11-01T12:00:00Z") };
+    expect(__testing.leadOrChampion([], series, teams, clock).event?.label).toBeUndefined();
+  });
+
+  it("keeps the games while there are any, and names nobody before the final is won", () => {
+    const clock = { timeZone: "UTC", now: Date.parse("2026-10-29T12:00:00Z") };
+    const withGames = __testing.leadOrChampion([game], series, teams, clock);
+    expect(withGames.featured).toBeDefined();
+    expect(withGames.event).toBeUndefined();
+    const open = [{ ...series[0], matches: [{ ...series[0].matches[0], winnerTeamId: null }] }];
+    expect(__testing.leadOrChampion([], open, teams, clock).event).toBeUndefined();
+    expect(__testing.leadOrChampion([], undefined, teams, clock).event).toBeUndefined();
   });
 });
 

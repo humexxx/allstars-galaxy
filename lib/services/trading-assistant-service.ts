@@ -10,14 +10,17 @@ import { formatCurrency, formatSignedCurrency } from "@/lib/utils/format";
 import type { TradingChange, TradingChangeSet } from "@/schemas/trading-assistant";
 import { tradeSchema, type TradeInput } from "@/schemas/trading";
 import type { TradingChangeLine, TradingOutlook } from "@/types/trading-assistant";
-import type { JournalTrade, TradingCashMovementRow, TradingTradeRow } from "@/types/trading";
+import type { JournalTrade, TradingCashMovementRow, TradingJournalRows, TradingTradeRow } from "@/types/trading";
 
-import { getJournalRows, getTradingJournal, tradeValues, withJournalLock } from "./trading-journal-service";
+import {
+  getJournalRows,
+  getTradingJournal,
+  tradeValues,
+  withJournalLock,
+} from "./trading-journal-service";
 
 /** A change the model must correct: an unknown id, a closed trade closed again, an overdraft. */
 export class TradingChangeError extends Error {}
-
-type Rows = { trades: TradingTradeRow[]; cash: TradingCashMovementRow[] };
 
 type TradeValues = ReturnType<typeof tradeValues>;
 
@@ -72,7 +75,7 @@ function checkedTrade(input: TradeInput, label: string): TradeValues {
   return tradeValues(parsed.data);
 }
 
-function outlook(rows: Rows, dayOf: (d: Date) => string, today: string): TradingOutlook {
+function outlook(rows: TradingJournalRows, dayOf: (d: Date) => string, today: string): TradingOutlook {
   const journal = buildJournal(rows, dayOf, today);
   const month = journal.months.find((m) => m.month === today.slice(0, 7));
   return {
@@ -91,14 +94,15 @@ function outlook(rows: Rows, dayOf: (d: Date) => string, today: string): Trading
  */
 export function planTradingChanges(
   set: TradingChangeSet,
-  stored: Rows,
+  stored: TradingJournalRows,
   { now, timeZone }: { now: Date; timeZone: string | null }
 ): PlannedChanges {
   const dayOf = (d: Date): string => isoDay(calendarDayInTimeZone(d, timeZone));
   const today = dayOf(now);
   const when = (iso: string | undefined): string => iso ?? now.toISOString();
   const at = (d: Date | string): string => formatDateTime(d, timeZone ?? undefined);
-  const rows: Rows = { trades: [...stored.trades], cash: [...stored.cash] };
+  // The assistant never writes a balance adjustment; they are carried so the balance stays the journal's.
+  const rows: TradingJournalRows = { ...stored, trades: [...stored.trades], cash: [...stored.cash] };
   const lines: TradingChangeLine[] = [];
   const writes: Write[] = [];
   let fresh = 0;
@@ -253,7 +257,7 @@ export function planTradingChanges(
 }
 
 /** Money cannot leave an account that does not hold it. */
-function assertFunded(change: TradingChange, rows: Rows, dayOf: (d: Date) => string, today: string): void {
+function assertFunded(change: TradingChange, rows: TradingJournalRows, dayOf: (d: Date) => string, today: string): void {
   if (change.op !== "withdraw" && change.op !== "delete_cash_movement") return;
   const { balance } = buildJournal(rows, dayOf, today);
   if (balance < -0.005) {
@@ -359,6 +363,7 @@ export async function getAssistantJournal(userId: string, timeZone: string | nul
     deposited: journal.deposited,
     withdrawn: journal.withdrawn,
     realizedPnl: journal.realizedPnl,
+    balanceAdjustments: journal.adjusted,
     monthlyGrowthRate: journal.monthlyGrowthRate,
     stats: {
       trades: stats.trades,

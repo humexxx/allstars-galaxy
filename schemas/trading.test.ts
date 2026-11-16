@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { cashMovementSchema, closeTradeSchema, tradeResultSchema, tradeSchema } from "./trading";
+import {
+  balanceAdjustmentSchema,
+  cashMovementSchema,
+  closeTradeSchema,
+  tradeResultSchema,
+  tradeSchema,
+} from "./trading";
 
 const trade = { symbol: "nvda", side: "long", quantity: 1, entryPrice: 100, openedAt: "2026-11-03T14:00:00Z" };
 const firstIssue = (input: unknown): string | undefined => tradeSchema.safeParse(input).error?.issues[0].message;
@@ -65,5 +71,27 @@ describe("cashMovementSchema", () => {
   it("refuses an amount past the column's digits", () => {
     const parsed = cashMovementSchema.safeParse({ kind: "deposit", amount: 1e12, occurredAt: "2026-11-03T14:00:00Z" });
     expect(parsed.error?.issues[0].message).toBe("Amount is too large");
+  });
+});
+
+describe("balanceAdjustmentSchema", () => {
+  const at = { occurredAt: "2026-11-03T14:00:00Z" };
+  const issue = (balance: unknown): string | undefined =>
+    balanceAdjustmentSchema.safeParse({ ...at, balance }).error?.issues[0].message;
+
+  it("takes the balance the account holds, down to nothing", () => {
+    expect(balanceAdjustmentSchema.parse({ ...at, balance: 987.6, note: " Swap " })).toEqual({
+      ...at,
+      balance: 987.6,
+      note: "Swap",
+    });
+    expect(balanceAdjustmentSchema.safeParse({ ...at, balance: 0 }).success).toBe(true);
+  });
+
+  it("refuses a balance below $0.00, finer than a cent, or left empty", () => {
+    expect(issue(-0.01)).toBe("The balance cannot go below $0.00");
+    expect(issue(10.001)).toBe("Balance has at most 2 decimals");
+    expect(issue("")).toBe("Balance must be a number");
+    expect(issue(null)).toBe("Balance must be a number");
   });
 });

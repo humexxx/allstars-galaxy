@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import {
   addCashMovementAction,
+  adjustBalanceAction,
   closeTradeAction,
   createTradeAction,
   updateTradeAction,
@@ -35,7 +36,13 @@ import { balanceBefore, positionLabel } from "@/lib/finance/trading";
 import { cn } from "@/lib/utils";
 import { formatDay } from "@/lib/utils/date";
 import { formatCurrency, formatSignedCurrency, moneySign } from "@/lib/utils/format";
-import type { JournalCashMovement, JournalTrade, TradingCashKind, TradingInstrument } from "@/types/trading";
+import type {
+  JournalAdjustment,
+  JournalCashMovement,
+  JournalTrade,
+  TradingCashKind,
+  TradingInstrument,
+} from "@/types/trading";
 
 import { InstrumentCombobox } from "./instrument-combobox";
 
@@ -181,6 +188,7 @@ export function TradeDialog({
   trade,
   trades,
   cash,
+  adjustments,
   linked,
 }: {
   open: boolean;
@@ -190,6 +198,7 @@ export function TradeDialog({
   /** The journal, for the balance a return is measured against and the symbols it already holds. */
   trades: readonly JournalTrade[];
   cash: readonly JournalCashMovement[];
+  adjustments: readonly JournalAdjustment[];
   /** The assets linked for pricing, offered as instruments. */
   linked: readonly TradingInstrument[];
 }): React.ReactElement {
@@ -211,7 +220,13 @@ export function TradeDialog({
   const recent = [
     ...new Set([...trades].sort((a, b) => b.openedAt.localeCompare(a.openedAt)).map((t) => t.symbol)),
   ];
-  const base = balanceBefore(trades, cash, form.closedAt ? toInstant(form.closedAt) : SO_FAR, trade?.id);
+  const base = balanceBefore(
+    trades,
+    cash,
+    adjustments,
+    form.closedAt ? toInstant(form.closedAt) : SO_FAR,
+    trade?.id
+  );
   const position = trade ? positionLabel(trade) : null;
 
   const setPnl = (pnl: string): void => {
@@ -336,12 +351,14 @@ export function CloseTradeDialog({
   onOpenChange,
   trades,
   cash,
+  adjustments,
 }: {
   trade: JournalTrade | null;
   onOpenChange: (open: boolean) => void;
   /** The journal, for the balance the return is measured against. */
   trades: readonly JournalTrade[];
   cash: readonly JournalCashMovement[];
+  adjustments: readonly JournalAdjustment[];
 }): React.ReactElement {
   const [pnl, setPnl] = useState("");
   const [closedAt, setClosedAt] = useState(() => toLocalDateTime());
@@ -355,7 +372,7 @@ export function CloseTradeDialog({
     setError(null);
   }
 
-  const base = balanceBefore(trades, cash, closedAt ? toInstant(closedAt) : SO_FAR, trade?.id);
+  const base = balanceBefore(trades, cash, adjustments, closedAt ? toInstant(closedAt) : SO_FAR, trade?.id);
 
   function submit(e: React.FormEvent): void {
     e.preventDefault();
@@ -499,6 +516,156 @@ export function CashDialog({
             </Button>
             <Button type="submit" disabled={pending}>
               {kind === "withdrawal" ? "Withdraw" : "Deposit"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** An amount of money as it is typed: digits, one dot, two decimals. */
+function moneyAmount(raw: string): string {
+  const [head, ...rest] = raw.replace(/[^\d.]/g, "").split(".");
+  return rest.length > 0 ? `${head}.${rest.join("").slice(0, 2)}` : head;
+}
+
+/** A credit past this, and past a tenth of the balance, is more likely money put in than a swap. */
+const DEPOSIT_SIZED = 100;
+
+/**
+ * Brings the journal to what the account really holds. The user types the
+ * balance; the difference — a swap, a commission no trade recorded — is what
+ * the journal keeps.
+ */
+export function AdjustBalanceDialog({
+  open,
+  onOpenChange,
+  balance,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** What the journal says the account holds. */
+  balance: number;
+}): React.ReactElement {
+  const [actual, setActual] = useState("");
+  const [occurredAt, setOccurredAt] = useState(() => toLocalDateTime());
+  const [note, setNote] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  const [seed, setSeed] = useState(open);
+  if (seed !== open) {
+    setSeed(open);
+    if (open) {
+      setActual("");
+      setOccurredAt(toLocalDateTime());
+      setNote("");
+      setError(null);
+    }
+  }
+
+  const target = num(actual);
+  const difference = Number.isFinite(target) ? Math.round((target - balance) * 100) / 100 : null;
+  const sign = difference == null ? 0 : moneySign(difference);
+  const looksLikeDeposit = difference != null && difference > Math.max(DEPOSIT_SIZED, balance * 0.1);
+
+  function submit(e: React.FormEvent): void {
+    e.preventDefault();
+    setError(null);
+    if (!Number.isFinite(target)) {
+      setError("Enter what the account holds");
+      return;
+    }
+    startTransition(async () => {
+      const result = await adjustBalanceAction({
+        balance: target,
+        occurredAt: toInstant(occurredAt),
+        note: note || null,
+      });
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      toast.success(`Balance adjusted · ${formatSignedCurrency(result.data.amount)}`);
+      onOpenChange(false);
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <form onSubmit={submit} className="flex flex-col gap-4">
+          <DialogHeader>
+            <DialogTitle>Adjust balance</DialogTitle>
+            <DialogDescription>
+              The journal has {formatCurrency(balance)} in the account. Enter what it really holds: the difference
+              is recorded as a balance adjustment.
+            </DialogDescription>
+          </DialogHeader>
+          <FieldGroup className="gap-3">
+            <Field className="gap-2">
+              <FieldLabel htmlFor="adjust-balance">Actual balance</FieldLabel>
+              <InputGroup>
+                <InputGroupAddon>
+                  <InputGroupText>$</InputGroupText>
+                </InputGroupAddon>
+                <InputGroupInput
+                  id="adjust-balance"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  value={actual}
+                  onChange={(e) => setActual(moneyAmount(e.target.value))}
+                  placeholder={balance.toFixed(2)}
+                  aria-describedby="adjust-difference"
+                  autoFocus
+                  className="font-mono tabular-nums"
+                />
+              </InputGroup>
+              <Text
+                id="adjust-difference"
+                variant="small"
+                as="p"
+                aria-live="polite"
+                className={cn(
+                  "text-2xs",
+                  sign > 0 && "font-mono text-success",
+                  sign < 0 && "font-mono text-destructive"
+                )}
+              >
+                {difference == null
+                  ? "Swaps and commissions the trades did not record."
+                  : sign === 0
+                    ? "That is what the journal has: nothing to adjust."
+                    : `${formatSignedCurrency(difference)} adjustment`}
+              </Text>
+              {looksLikeDeposit && (
+                <Text variant="small" as="p" className="text-2xs text-warning">
+                  Money you put into the account goes under Deposit: an adjustment counts as trading profit.
+                </Text>
+              )}
+            </Field>
+            <Field className="gap-2">
+              <FieldLabel htmlFor="adjust-at">When</FieldLabel>
+              <DateTimeField id="adjust-at" value={occurredAt} onChange={setOccurredAt} />
+            </Field>
+            <Field className="gap-2">
+              <FieldLabel htmlFor="adjust-note">Note</FieldLabel>
+              <Input
+                id="adjust-note"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Swap, commission"
+                maxLength={200}
+              />
+            </Field>
+          </FieldGroup>
+          {error && <FieldError>{error}</FieldError>}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={pending || sign === 0}>
+              Adjust balance
             </Button>
           </DialogFooter>
         </form>

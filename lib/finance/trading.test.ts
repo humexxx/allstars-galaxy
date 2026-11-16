@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import type { TradingCashMovementRow, TradingTradeRow } from "@/types/trading";
+import type { TradingBalanceAdjustmentRow, TradingCashMovementRow, TradingTradeRow } from "@/types/trading";
 
 import {
+  balanceAt,
   balanceBefore,
   buildJournal,
   isResultOnly,
@@ -47,6 +48,18 @@ function cash(o: Partial<TradingCashMovementRow> & { id: string }): TradingCashM
     updatedAt: new Date(),
     ...o,
   } as TradingCashMovementRow;
+}
+
+function adjustment(o: Partial<TradingBalanceAdjustmentRow> & { id: string }): TradingBalanceAdjustmentRow {
+  return {
+    userId: "u",
+    amount: "-12.40",
+    occurredAt: at("2026-09-12"),
+    note: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...o,
+  };
 }
 
 describe("tradePnl", () => {
@@ -118,6 +131,7 @@ describe("a trade's return", () => {
         trade({ id: "early", exitPrice: "110", openedAt: at("2026-08-01"), closedAt: at("2026-08-02") }), // before any money
       ],
       cash: [cash({ id: "x" }), cash({ id: "y", kind: "withdrawal", amount: "600", occurredAt: at("2026-09-15") })],
+      adjustments: [],
     },
     dayOf,
     "2026-09-30"
@@ -135,11 +149,11 @@ describe("a trade's return", () => {
   });
 
   it("is measured against the balance the form shows", () => {
-    const base = (id: string) => balanceBefore(journal.trades, journal.cash, by(id)?.closedAt ?? "", id);
+    const base = (id: string) => balanceBefore(journal.trades, journal.cash, journal.adjustments, by(id)?.closedAt ?? "", id);
     expect(base("a")).toBe(1100);
     expect(base("b")).toBe(600);
     // An open trade's base is everything so far.
-    expect(balanceBefore(journal.trades, journal.cash, "9999-12-31T23:59:59.999Z")).toBe(journal.balance);
+    expect(balanceBefore(journal.trades, journal.cash, journal.adjustments, "9999-12-31T23:59:59.999Z")).toBe(journal.balance);
   });
 });
 
@@ -153,6 +167,7 @@ describe("buildJournal", () => {
         trade({ id: "d", symbol: "NVDA", openedAt: at("2026-09-20") }), // open
       ],
       cash: [cash({ id: "x" }), cash({ id: "y", kind: "withdrawal", amount: "200", occurredAt: at("2026-09-15") })],
+      adjustments: [],
     },
     dayOf,
     "2026-09-30"
@@ -200,6 +215,93 @@ describe("buildJournal", () => {
   });
 });
 
+describe("a balance adjustment", () => {
+  const rows = {
+    trades: [
+      trade({ id: "a", exitPrice: "110", closedAt: at("2026-09-03") }), // +100, held 2 days
+      trade({ id: "b", side: "short", entryPrice: "50", exitPrice: "55", openedAt: at("2026-09-03"), closedAt: at("2026-09-03"), fees: "2" }), // −52
+      trade({ id: "c", symbol: "TSLA", entryPrice: "200", exitPrice: "230", openedAt: at("2026-09-10"), closedAt: at("2026-09-11") }), // +300
+      trade({ id: "d", symbol: "NVDA", openedAt: at("2026-09-20") }), // open
+    ],
+    cash: [cash({ id: "x" }), cash({ id: "y", kind: "withdrawal", amount: "200", occurredAt: at("2026-09-15") })],
+  };
+  const plain = buildJournal({ ...rows, adjustments: [] }, dayOf, "2026-09-30");
+  const journal = buildJournal(
+    {
+      ...rows,
+      adjustments: [
+        adjustment({ id: "swap", amount: "-12.40", occurredAt: at("2026-09-05"), note: "Swap" }),
+        adjustment({ id: "rebate", amount: "2.40", occurredAt: at("2026-09-11", 20) }),
+      ],
+    },
+    dayOf,
+    "2026-09-30"
+  );
+
+  it("moves the balance by its signed amount, and is neither a deposit nor a withdrawal", () => {
+    expect(journal.adjusted).toBe(-10);
+    expect(journal.balance).toBe(plain.balance - 10);
+    expect(journal.deposited).toBe(1000);
+    expect(journal.withdrawn).toBe(200);
+    expect(journal.realizedPnl).toBe(348);
+    expect(journal.adjustments.map((a) => [a.id, a.amount, a.day, a.note])).toEqual([
+      ["rebate", 2.4, "2026-09-11", null],
+      ["swap", -12.4, "2026-09-05", "Swap"],
+    ]);
+  });
+
+  it("is not a trade: the stats, the days and the breakdowns read the same", () => {
+    expect(journal.stats).toEqual(plain.stats);
+    expect(journal.days).toEqual(plain.days);
+    expect(journal.byWeekday).toEqual(plain.byWeekday);
+    expect(journal.bySymbol).toEqual(plain.bySymbol);
+    expect(journal.bySetup).toEqual(plain.bySetup);
+  });
+
+  it("moves the equity curve on its day, as P&L", () => {
+    expect(journal.equity.map((p) => [p.day, p.balance, p.cumulativePnl])).toEqual([
+      ["2026-09-01", 1000, 0],
+      ["2026-09-03", 1048, 48],
+      ["2026-09-05", 1035.6, 35.6],
+      ["2026-09-11", 1338, 338],
+      ["2026-09-15", 1138, 338],
+    ]);
+  });
+
+  it("counts in its month's P&L and return, never in the money the month had", () => {
+    expect(journal.months).toEqual([{ month: "2026-09", pnl: 338, returnPct: 338 / 1000 }]);
+  });
+
+  it("is in the balance a later trade's return is measured against", () => {
+    const by = (id: string) => journal.trades.find((t) => t.id === id);
+    expect(by("a")?.returnPct).toBeCloseTo(100 / 1000);
+    expect(by("c")?.returnPct).toBeCloseTo(300 / 1035.6);
+    expect(balanceBefore(journal.trades, journal.cash, journal.adjustments, by("c")?.closedAt ?? "", "c")).toBe(1035.6);
+  });
+
+  it("is in what the account held at an instant, with the trades closed by then", () => {
+    const closeOf = (id: string): string => journal.trades.find((t) => t.id === id)?.closedAt ?? "";
+    expect(balanceAt(journal.trades, journal.cash, journal.adjustments, closeOf("c"))).toBe(1335.6);
+    expect(balanceAt(journal.trades, journal.cash, journal.adjustments, "2000-01-01T00:00:00.000Z")).toBe(0);
+    expect(balanceAt(journal.trades, journal.cash, journal.adjustments, "9999-12-31T23:59:59.999Z")).toBe(journal.balance);
+  });
+
+  it("sets the plan's pace like a trade's result would", () => {
+    const j = buildJournal(
+      {
+        trades: [],
+        cash: [cash({ id: "x", occurredAt: at("2026-07-01", 9) })],
+        adjustments: [adjustment({ id: "fee", amount: "-50", occurredAt: at("2026-08-10") })],
+      },
+      dayOf,
+      "2026-09-20"
+    );
+    expect(j.months.map((m) => [m.month, m.pnl])).toEqual([["2026-07", 0], ["2026-08", -50], ["2026-09", 0]]);
+    expect(j.monthlyGrowthRate).toBeCloseTo(-0.05 / 2);
+    expect(j.stats.trades).toBe(0);
+  });
+});
+
 describe("growth for the plan", () => {
   it("averages the last complete months' returns, leaving today's month out", () => {
     const j = buildJournal(
@@ -210,6 +312,7 @@ describe("growth for the plan", () => {
           trade({ id: "3", exitPrice: "150", openedAt: at("2026-09-02"), closedAt: at("2026-09-10") }), // this month
         ],
         cash: [cash({ id: "x", occurredAt: at("2026-07-01", 9) })],
+        adjustments: [],
       },
       dayOf,
       "2026-09-20"
@@ -228,6 +331,7 @@ describe("growth for the plan", () => {
           cash({ id: "in", amount: "5000", occurredAt: at("2026-08-01", 9) }),
           cash({ id: "out", kind: "withdrawal", amount: "4000", occurredAt: at("2026-08-01", 10) }),
         ],
+        adjustments: [],
       },
       dayOf,
       "2026-09-20"
@@ -249,6 +353,6 @@ describe("growth for the plan", () => {
   });
 
   it("reads no pace without a complete month", () => {
-    expect(trailingMonthlyRate(journalMonths([], [], "2026-09-20"), "2026-09-20")).toEqual({ rate: 0, months: 0 });
+    expect(trailingMonthlyRate(journalMonths([], [], [], "2026-09-20"), "2026-09-20")).toEqual({ rate: 0, months: 0 });
   });
 });

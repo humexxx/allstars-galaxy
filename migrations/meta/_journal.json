@@ -477,6 +477,13 @@
       "when": 1794368338394,
       "tag": "0067_motionless_songbird",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1794797663321,
+      "tag": "0068_wandering_pete_wisdom",
+      "breakpoints": true
     }
   ]
 }

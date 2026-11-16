@@ -1608,3 +1608,25 @@ export const tradingCashMovements = pgTable(
     check("trading_cash_movements_amount_chk", sql`${t.amount} > 0`),
   ]
 ).enableRLS();
+
+// What the account gained or lost outside its trades — a swap, a commission —
+// signed. Its own table, not a cash kind: deposits and withdrawals are capital
+// the user moves, and this is a result of trading.
+export const tradingBalanceAdjustments = pgTable(
+  "trading_balance_adjustments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    amount: numeric("amount", { precision: 20, scale: 2 }).notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("trading_balance_adjustments_user_occurred_idx").on(t.userId, t.occurredAt),
+    check("trading_balance_adjustments_amount_chk", sql`${t.amount} <> 0`),
+  ]
+).enableRLS();

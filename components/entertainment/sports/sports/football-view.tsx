@@ -114,11 +114,7 @@ function LeagueView({
         tabs={
           <TabsList variant="line">
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            {league.league.hasKnockout && (
-              <TabsTrigger value="knockout" disabled={!hasKnockoutData}>
-                Knockout
-              </TabsTrigger>
-            )}
+            {league.league.hasKnockout && hasKnockoutData && <TabsTrigger value="knockout">Knockout</TabsTrigger>}
             {news.length > 0 && <TabsTrigger value="news">News</TabsTrigger>}
           </TabsList>
         }

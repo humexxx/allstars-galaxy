@@ -9,12 +9,15 @@ import {
 } from "@/lib/services/impersonation";
 import {
   setFinanceMilestones,
+  setMascotCharacter,
   setShowContextAvatar,
 } from "@/lib/services/user-preferences-service";
 import {
   setFinanceMilestonesSchema,
+  setMascotCharacterSchema,
   setShowContextAvatarSchema,
   type SetFinanceMilestonesInput,
+  type SetMascotCharacterData,
   type SetShowContextAvatarData,
 } from "@/schemas/user-preferences";
 
@@ -42,6 +45,27 @@ export async function setShowContextAvatarAction(
     revalidatePath(SETTINGS_PATH);
     // The avatar renders from the plans layout, so invalidate the whole subtree.
     revalidatePath("/portal/plans", "layout");
+    return { success: true };
+  });
+}
+
+export async function setMascotCharacterAction(
+  input: SetMascotCharacterData
+): Promise<ActionResult> {
+  return safe("user-preferences", async () => {
+    const ctx = await requireEffectiveContext();
+    const parsed = setMascotCharacterSchema.safeParse(input);
+    if (!parsed.success) {
+      return { success: false, error: "Unknown character" };
+    }
+    await setMascotCharacter(ctx.effectiveUserId, parsed.data.mascotCharacter);
+    await logImpersonatedMutation({
+      action: "contextAvatar.character",
+      entityTable: "user_preferences",
+      after: { mascotCharacter: parsed.data.mascotCharacter },
+    });
+    // Every module page draws the mascot, so the whole portal is stale.
+    revalidatePath("/portal", "layout");
     return { success: true };
   });
 }

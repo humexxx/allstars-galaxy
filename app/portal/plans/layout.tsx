@@ -44,11 +44,11 @@ export default function PlansLayout({
  */
 async function FinanceMascot(): Promise<React.ReactElement | null> {
   const ctx = await requireEffectiveContext();
-  const { showContextAvatar } = await getUserPreferences(ctx.effectiveUserId);
+  const { showContextAvatar, mascotCharacter } = await getUserPreferences(ctx.effectiveUserId);
   if (!showContextAvatar) return null;
 
   const mood = await getFinanceMood(ctx.effectiveUserId);
-  return <ContextAvatar variant="finance" mood={mood} />;
+  return <ContextAvatar variant="finance" mood={mood} character={mascotCharacter} />;
 }
 
 /** The assistant for admins on a server with an API key (see `canUseAssistant`). */

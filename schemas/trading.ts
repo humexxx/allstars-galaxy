@@ -120,3 +120,20 @@ export const cashMovementSchema = z.object({
 });
 export type CashMovementInput = z.input<typeof cashMovementSchema>;
 export type CashMovementData = z.infer<typeof cashMovementSchema>;
+
+/**
+ * What the account really holds; the journal records the difference to its own
+ * balance. A number and nothing coerced into one: an empty field would read as
+ * an account at $0.
+ */
+export const balanceAdjustmentSchema = z.object({
+  balance: z
+    .number("Balance must be a number")
+    .min(0, "The balance cannot go below $0.00")
+    .max(LARGEST, "Balance is too large")
+    .refine((n) => Math.round(n * 100) / 100 === n, "Balance has at most 2 decimals"),
+  occurredAt: instantSchema,
+  note: z.string().trim().max(200).nullable().default(null),
+});
+export type BalanceAdjustmentInput = z.input<typeof balanceAdjustmentSchema>;
+export type BalanceAdjustmentData = z.infer<typeof balanceAdjustmentSchema>;

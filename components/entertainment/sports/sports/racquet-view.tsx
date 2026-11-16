@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Minus } from "lucide-react";
+import { ArrowDown, ArrowUp } from "lucide-react";
 
 import { getRacquetDrawAction } from "@/app/actions/racquet";
 import {
@@ -254,11 +254,7 @@ function RankingsTable({ data }: { data: RacquetData }): React.ReactElement {
 
 function Movement({ movement }: { movement: number }): React.ReactElement {
   if (movement === 0) {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-        <Minus className="size-3" aria-hidden /> 0
-      </span>
-    );
+    return <span className="sr-only">No change</span>;
   }
   if (movement > 0) {
     return (

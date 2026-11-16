@@ -8,8 +8,10 @@ import { requireModuleContext } from "@/lib/services/module-access-service";
 import { searchInstruments } from "@/lib/services/trading-instrument-service";
 import {
   addCashMovement,
+  adjustBalance,
   closeTrade,
   createTrade,
+  deleteBalanceAdjustment,
   deleteCashMovement,
   deleteTrade,
   TradingJournalError,
@@ -17,17 +19,19 @@ import {
 } from "@/lib/services/trading-journal-service";
 import { idSchema } from "@/schemas/common";
 import {
+  balanceAdjustmentSchema,
   cashMovementSchema,
   closeTradeSchema,
   instrumentQuerySchema,
   tradeResultSchema,
   updateTradeResultSchema,
+  type BalanceAdjustmentInput,
   type CashMovementInput,
   type CloseTradeInput,
   type TradeResultInput,
   type UpdateTradeResultInput,
 } from "@/schemas/trading";
-import type { JournalTrade, TradingInstrument } from "@/types/trading";
+import type { JournalAdjustment, JournalTrade, TradingInstrument } from "@/types/trading";
 
 /** The journal, the plans (their trading card and net worth) and the dashboard. */
 function revalidateJournal(): void {
@@ -39,7 +43,7 @@ function revalidateJournal(): void {
 /** Runs a journal write: a refusal the user should read comes back as the error. */
 async function journalWrite<T>(
   action: string,
-  entityTable: "trading_trades" | "trading_cash_movements",
+  entityTable: "trading_trades" | "trading_cash_movements" | "trading_balance_adjustments",
   write: (userId: string) => Promise<T>
 ): Promise<ActionResult<T>> {
   const ctx = await requireModuleContext("trading");
@@ -104,6 +108,27 @@ export async function deleteCashMovementAction(id: string): Promise<ActionResult
     if (!idSchema.safeParse(id).success) return { success: false, error: "Movement not found" };
     const result = await journalWrite("trading.cash.delete", "trading_cash_movements", (userId) =>
       deleteCashMovement(userId, id)
+    );
+    return result.success ? { success: true } : result;
+  });
+}
+
+/** Sets the account to the balance it really holds; the difference is what gets recorded. */
+export async function adjustBalanceAction(input: BalanceAdjustmentInput): Promise<ActionResult<JournalAdjustment>> {
+  return safe("trading-journal", async () => {
+    const parsed = balanceAdjustmentSchema.safeParse(input);
+    if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+    return journalWrite("trading.adjustment.add", "trading_balance_adjustments", (userId) =>
+      adjustBalance(userId, parsed.data)
+    );
+  });
+}
+
+export async function deleteBalanceAdjustmentAction(id: string): Promise<ActionResult> {
+  return safe("trading-journal", async () => {
+    if (!idSchema.safeParse(id).success) return { success: false, error: "Adjustment not found" };
+    const result = await journalWrite("trading.adjustment.delete", "trading_balance_adjustments", (userId) =>
+      deleteBalanceAdjustment(userId, id)
     );
     return result.success ? { success: true } : result;
   });

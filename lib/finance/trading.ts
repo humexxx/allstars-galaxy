@@ -1,5 +1,6 @@
 import type {
   EquityPoint,
+  JournalAdjustment,
   JournalBreakdownRow,
   JournalCashMovement,
   JournalDay,
@@ -7,8 +8,10 @@ import type {
   JournalStats,
   JournalTrade,
   TradeLegs,
+  TradingBalanceAdjustmentRow,
   TradingCashMovementRow,
   TradingJournal,
+  TradingJournalRows,
   TradingTradeRow,
 } from "@/types/trading";
 
@@ -139,6 +142,19 @@ export function toJournalCash(
   };
 }
 
+export function toJournalAdjustment(
+  row: TradingBalanceAdjustmentRow,
+  dayOf: (d: Date) => string
+): JournalAdjustment {
+  return {
+    id: row.id,
+    amount: num(row.amount),
+    occurredAt: row.occurredAt.toISOString(),
+    day: dayOf(row.occurredAt),
+    note: row.note,
+  };
+}
+
 /** Closed trades, oldest close first. */
 function closedInOrder(trades: readonly JournalTrade[]): (JournalTrade & { pnl: number; closedDay: string })[] {
   return trades
@@ -149,21 +165,34 @@ function closedInOrder(trades: readonly JournalTrade[]): (JournalTrade & { pnl: 
 const cashFlow = (c: JournalCashMovement): number => (c.kind === "deposit" ? c.amount : -c.amount);
 
 /**
- * What the account held as a trade closing at `at` did: every deposit and
- * withdrawal up to that instant, and the P&L of the trades closed before it.
- * `exceptId` leaves one trade out — the one being edited.
+ * What the account held as a trade closing at `at` did: every deposit,
+ * withdrawal and balance adjustment up to that instant, and the P&L of the
+ * trades closed before it. `exceptId` leaves one trade out — the one being edited.
  */
 export function balanceBefore(
   trades: readonly JournalTrade[],
   cash: readonly JournalCashMovement[],
+  adjustments: readonly JournalAdjustment[],
   at: string,
   exceptId?: string
 ): number {
   const moved = cash.filter((c) => c.occurredAt <= at).reduce((s, c) => s + cashFlow(c), 0);
+  const adjusted = adjustments.filter((a) => a.occurredAt <= at).reduce((s, a) => s + a.amount, 0);
   const made = trades
     .filter((t) => t.id !== exceptId && t.closedAt != null && t.closedAt < at)
     .reduce((s, t) => s + (t.pnl ?? 0), 0);
-  return round2(moved + made);
+  return round2(moved + adjusted + made);
+}
+
+/** What the account held at `at`, everything dated that instant counted. */
+export function balanceAt(
+  trades: readonly JournalTrade[],
+  cash: readonly JournalCashMovement[],
+  adjustments: readonly JournalAdjustment[],
+  at: string
+): number {
+  const made = trades.filter((t) => t.closedAt === at).reduce((s, t) => s + (t.pnl ?? 0), 0);
+  return round2(balanceBefore(trades, cash, adjustments, at) + made);
 }
 
 /**
@@ -173,16 +202,20 @@ export function balanceBefore(
  */
 export function returnsOnBalance(
   trades: readonly JournalTrade[],
-  cash: readonly JournalCashMovement[]
+  cash: readonly JournalCashMovement[],
+  adjustments: readonly JournalAdjustment[]
 ): Map<string, number | null> {
   const closed = closedInOrder(trades);
-  const moves = [...cash].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
+  const moves = [
+    ...cash.map((c) => ({ occurredAt: c.occurredAt, amount: cashFlow(c) })),
+    ...adjustments.map((a) => ({ occurredAt: a.occurredAt, amount: a.amount })),
+  ].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
   const returns = new Map<string, number | null>();
   let balance = 0;
   let next = 0;
   for (let i = 0; i < closed.length; ) {
     const at = closed[i].closedAt ?? "";
-    for (; next < moves.length && moves[next].occurredAt <= at; next++) balance += cashFlow(moves[next]);
+    for (; next < moves.length && moves[next].occurredAt <= at; next++) balance += moves[next].amount;
     const base = round2(balance);
     for (; i < closed.length && closed[i].closedAt === at; i++) {
       returns.set(closed[i].id, base > 0 ? closed[i].pnl / base : null);
@@ -255,10 +288,14 @@ export function journalDays(trades: readonly JournalTrade[]): JournalDay[] {
 
 type DayFlow = { cashIn: number; cashOut: number; pnl: number };
 
-/** Money moving through the account, by day: deposits, withdrawals and realized P&L. */
+/**
+ * Money moving through the account, by day: deposits, withdrawals and realized
+ * P&L. A balance adjustment is P&L the trades did not record, never capital.
+ */
 function dailyFlows(
   trades: readonly JournalTrade[],
-  cash: readonly JournalCashMovement[]
+  cash: readonly JournalCashMovement[],
+  adjustments: readonly JournalAdjustment[]
 ): Map<string, DayFlow> {
   const flows = new Map<string, DayFlow>();
   const at = (day: string): DayFlow => {
@@ -271,15 +308,17 @@ function dailyFlows(
     else at(c.day).cashOut += c.amount;
   }
   for (const t of closedInOrder(trades)) at(t.closedDay).pnl += t.pnl;
+  for (const a of adjustments) at(a.day).pnl += a.amount;
   return flows;
 }
 
 /** The balance at the end of every day that moved it, oldest first. */
 export function equityCurve(
   trades: readonly JournalTrade[],
-  cash: readonly JournalCashMovement[]
+  cash: readonly JournalCashMovement[],
+  adjustments: readonly JournalAdjustment[]
 ): EquityPoint[] {
-  const flows = dailyFlows(trades, cash);
+  const flows = dailyFlows(trades, cash, adjustments);
   let balance = 0;
   let cumulativePnl = 0;
   return [...flows.entries()]
@@ -331,16 +370,17 @@ function nextMonth(month: string): string {
 }
 
 /**
- * Every month from the first activity to `today`'s: what trades made, and
- * that as a share of the money the month had to work with — the balance it
- * opened with plus what was deposited during it.
+ * Every month from the first activity to `today`'s: what trades made, with
+ * the month's balance adjustments, and that as a share of the money the month
+ * had to work with — the balance it opened with plus what was deposited during it.
  */
 export function journalMonths(
   trades: readonly JournalTrade[],
   cash: readonly JournalCashMovement[],
+  adjustments: readonly JournalAdjustment[],
   today: string
 ): JournalMonth[] {
-  const flows = dailyFlows(trades, cash);
+  const flows = dailyFlows(trades, cash, adjustments);
   const days = [...flows.keys()].sort();
   if (days.length === 0) return [];
   const byMonth = new Map<string, { cashIn: number; cashOut: number; pnl: number }>();
@@ -384,32 +424,34 @@ export function trailingMonthlyRate(
 }
 
 /** The whole journal, from the stored rows, with days read by `dayOf`. */
-export function buildJournal(
-  rows: { trades: readonly TradingTradeRow[]; cash: readonly TradingCashMovementRow[] },
-  dayOf: (d: Date) => string,
-  today: string
-): TradingJournal {
+export function buildJournal(rows: TradingJournalRows, dayOf: (d: Date) => string, today: string): TradingJournal {
   const cash = rows.cash
     .map((r) => toJournalCash(r, dayOf))
     .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
+  const adjustments = rows.adjustments
+    .map((r) => toJournalAdjustment(r, dayOf))
+    .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
   const read = rows.trades.map((r) => toJournalTrade(r, dayOf));
-  const returns = returnsOnBalance(read, cash);
+  const returns = returnsOnBalance(read, cash, adjustments);
   const trades = read
     .map((t) => ({ ...t, returnPct: returns.get(t.id) ?? null }))
     .sort((a, b) => b.openedAt.localeCompare(a.openedAt));
   const deposited = cash.filter((c) => c.kind === "deposit").reduce((s, c) => s + c.amount, 0);
   const withdrawn = cash.filter((c) => c.kind === "withdrawal").reduce((s, c) => s + c.amount, 0);
   const realizedPnl = trades.reduce((s, t) => s + (t.pnl ?? 0), 0);
-  const months = journalMonths(trades, cash, today);
+  const adjusted = adjustments.reduce((s, a) => s + a.amount, 0);
+  const months = journalMonths(trades, cash, adjustments, today);
   const growth = trailingMonthlyRate(months, today);
   return {
     today,
     trades,
     cash,
-    balance: round2(deposited - withdrawn + realizedPnl),
+    adjustments,
+    balance: round2(deposited - withdrawn + realizedPnl + adjusted),
     deposited: round2(deposited),
     withdrawn: round2(withdrawn),
     realizedPnl: round2(realizedPnl),
+    adjusted: round2(adjusted),
     openExposure: round2(
       trades
         .filter((t) => t.status === "open")
@@ -417,7 +459,7 @@ export function buildJournal(
     ),
     stats: journalStats(trades),
     days: journalDays(trades),
-    equity: equityCurve(trades, cash),
+    equity: equityCurve(trades, cash, adjustments),
     byWeekday: pnlByWeekday(trades),
     bySymbol: pnlBySymbol(trades),
     bySetup: pnlBySetup(trades),

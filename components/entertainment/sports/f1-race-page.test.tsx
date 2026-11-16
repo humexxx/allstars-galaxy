@@ -66,7 +66,7 @@ describe("F1RacePage", () => {
   // Beside the circuit: the pill and the time under it.
   const besideCircuit = (pill: string): HTMLElement => screen.getByText(pill).closest("div")!.parentElement!;
 
-  it("keeps F1's name row, its title a breadcrumb back to F1, and the sports beside it", () => {
+  it("keeps F1's name row, its title a breadcrumb back to F1, and the sports beside it from where they fit on its line", () => {
     renderPage(AUSTIN);
     const trail = screen.getByRole("navigation", { name: "Breadcrumb" });
     expect(within(trail).getByRole("link", { name: "Formula 1" })).toHaveAttribute(
@@ -76,13 +76,21 @@ describe("F1RacePage", () => {
     expect(screen.getByRole("heading", { level: 1, name: "United States Grand Prix" })).toBeInTheDocument();
     const sports = screen.getByRole("group", { name: "Sports" });
     expect(within(sports).getByRole("link", { current: "page" })).toHaveAccessibleName("F1 (favorite)");
+    // On a phone the breadcrumb is the way back, not a row of sports under it.
+    expect(sports.closest(".hidden")).toHaveClass("hidden", "@5xl:flex");
   });
 
-  it("opens on the Overview, the results a tab beside it, locked until a session has run", () => {
-    renderPage(AUSTIN);
+  it("has no tabs until a session has run: the Overview alone, even when the address asks for the results", () => {
+    renderPage(AUSTIN, { tab: "results" });
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.getByRole("tabpanel")).toContainElement(section("Weekend"));
+  });
+
+  it("opens on the Overview, the results a tab beside it once there are some", () => {
+    renderPage(SINGAPORE, { classification: null });
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview", "Results"]);
     expect(screen.getByRole("tab", { selected: true })).toHaveTextContent("Overview");
-    expect(screen.getByRole("tab", { name: "Results" })).toBeDisabled();
+    expect(screen.getByRole("tab", { name: "Results" })).toBeEnabled();
   });
 
   it("opens on the results when the address asks for them", () => {
@@ -123,6 +131,22 @@ describe("F1RacePage", () => {
     // Nothing run yet, so no podium and no classification.
     expect(screen.queryByRole("heading", { name: "Podium" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "Classification" })).toBeNull();
+  });
+
+  it("puts a finished race's podium and marks ahead of its weekend", () => {
+    renderPage(SINGAPORE, { classification: null });
+    const podium = section("Podium");
+    const weekend = section("Weekend");
+    expect(podium.compareDocumentPosition(weekend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const pole = screen.getByText("Pole");
+    expect(pole.compareDocumentPosition(weekend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("gives each session pick a thumb's width", () => {
+    const fp1 = { kind: "fp1" as const, rows: [{ position: "1", code: "LEC", name: "C. Leclerc", team: "Ferrari", time: "1:36.052" }] };
+    const fp2 = { kind: "fp2" as const, rows: [{ position: "1", code: "VER", name: "M. Verstappen", team: "Red Bull Racing", time: "1:35.900" }] };
+    renderPage(AUSTIN, { tab: "results", sessions: [fp1, fp2] });
+    for (const pick of screen.getAllByRole("radio")) expect(pick).toHaveClass("min-w-11", "max-sm:min-w-11");
   });
 
   it("puts the podium with each driver's gap to the winner", () => {
@@ -284,7 +308,8 @@ describe("F1RacePage", () => {
 
     it("has no results without any session in", () => {
       renderPage(AUSTIN, { tab: "results" });
-      expect(screen.getByRole("tab", { selected: true })).toHaveTextContent("Overview");
+      expect(screen.queryByRole("tab", { name: "Results" })).toBeNull();
+      expect(section("Weekend")).toBeVisible();
       expect(screen.queryByRole("heading", { name: "Sessions" })).toBeNull();
     });
   });

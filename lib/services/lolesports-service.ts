@@ -825,6 +825,7 @@ async function getStandingsAndPlayoffs(tournamentId: string): Promise<{
                 teamId: t.id,
                 wins: team.record?.wins ?? 0,
                 losses: team.record?.losses ?? 0,
+                ...(section.name ? { group: section.name } : {}),
               });
             }
           }
@@ -850,9 +851,14 @@ async function getStandingsAndPlayoffs(tournamentId: string): Promise<{
     }
   }
 
-  const dedupedStandings = rows.filter(
+  const unique = rows.filter(
     (row, idx, arr) => arr.findIndex((r) => r.teamId === row.teamId) === idx,
   );
+  // One table's name ("Regular Season") labels nothing; only groups are named.
+  const grouped = new Set(unique.map((r) => r.group)).size > 1;
+  const dedupedStandings = grouped
+    ? unique
+    : unique.map(({ position, teamId, wins, losses }) => ({ position, teamId, wins, losses }));
 
   return {
     teams: Array.from(teamsMap.values()),

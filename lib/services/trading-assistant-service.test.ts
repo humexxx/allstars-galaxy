@@ -4,7 +4,12 @@ import { z } from "zod";
 vi.mock("@/db", () => ({ db: {} }));
 
 import { tradingChangeSetSchema, type TradingChangeSetInput } from "@/schemas/trading-assistant";
-import type { TradingCashMovementRow, TradingTradeRow } from "@/types/trading";
+import type {
+  TradingBalanceAdjustmentRow,
+  TradingCashMovementRow,
+  TradingJournalRows,
+  TradingTradeRow,
+} from "@/types/trading";
 
 import { planTradingChanges, TradingChangeError } from "./trading-assistant-service";
 
@@ -43,8 +48,25 @@ const deposit = (amount: string): TradingCashMovementRow => ({
   updatedAt: NOW,
 });
 
-function plan(set: TradingChangeSetInput, rows = { trades: [trade()], cash: [deposit("1000")] }) {
-  return planTradingChanges(tradingChangeSetSchema.parse(set), rows, { now: NOW, timeZone: "America/Costa_Rica" });
+const adjustment = (amount: string): TradingBalanceAdjustmentRow => ({
+  id: ID(7),
+  userId: "u",
+  amount,
+  occurredAt: new Date("2026-10-02T12:00:00Z"),
+  note: null,
+  createdAt: NOW,
+  updatedAt: NOW,
+});
+
+function plan(
+  set: TradingChangeSetInput,
+  rows: Partial<TradingJournalRows> = { trades: [trade()], cash: [deposit("1000")] }
+) {
+  return planTradingChanges(
+    tradingChangeSetSchema.parse(set),
+    { trades: [], cash: [], adjustments: [], ...rows },
+    { now: NOW, timeZone: "America/Costa_Rica" }
+  );
 }
 
 describe("planTradingChanges", () => {
@@ -122,6 +144,15 @@ describe("planTradingChanges", () => {
     expect(() => plan({ summary: "x", changes: [{ op: "delete_cash_movement", movementId: ID(9) }] }, rows)).toThrow(
       /below/
     );
+  });
+
+  it("counts the journal's balance adjustments in the balance a withdrawal is checked against", () => {
+    const rows = { trades: [], cash: [deposit("1000")], adjustments: [adjustment("-40.00")] };
+    expect(() => plan({ summary: "x", changes: [{ op: "withdraw", amount: 1000 }] }, rows)).toThrow(/below \$0\.00/);
+
+    const planned = plan({ summary: "x", changes: [{ op: "withdraw", amount: 960 }] }, rows);
+    expect(planned.before.balance).toBe(960);
+    expect(planned.after.balance).toBe(0);
   });
 });
 

@@ -95,7 +95,56 @@ function storyFrom(article: EspnArticle): NewsStory | null {
   };
 }
 
-/** A league's or a tour's latest news, newest first. */
+/** espn.com's desk for each wire: the first step of a story's address. */
+const DESKS = ["nba", "nfl", "mlb", "nhl", "tennis", "soccer"] as const;
+
+/** Desks no wire here reads, whose stories ESPN cross-files all the same. */
+const OTHER_DESKS = [
+  "wnba",
+  "college-football",
+  "mens-college-basketball",
+  "womens-college-basketball",
+  "golf",
+  "f1",
+  "racing",
+  "mma",
+  "boxing",
+  "cricket",
+  "rugby",
+  "olympics",
+];
+
+function deskOf(feed: NewsFeed): (typeof DESKS)[number] {
+  if (feed === "atp") return "tennis";
+  return feed === "nba" || feed === "nfl" || feed === "mlb" || feed === "nhl" ? feed : "soccer";
+}
+
+/** Where espn.com filed a story: "nba" of espn.com/nba/story/…, "betting" of /espn/betting/…. */
+function filedUnder(story: NewsStory): string {
+  const [first = "", second = ""] = story.href.replace(/^https?:\/\/[^/]+\//, "").split("/");
+  return first === "espn" ? second : first;
+}
+
+/**
+ * A wire in the order worth reading: the league's own stories first, newest
+ * first, then its asides — the fantasy and betting desks' pieces — newest
+ * first too. A re-ordering, not a filter, with one exception: a story ESPN
+ * filed under another sport's desk (the NBA wire carries a soccer story when
+ * a striker copies a point guard's celebration) is dropped. Anything filed
+ * elsewhere — a clip, a general story, another edition's "futbol" — counts
+ * as the league's own, so an address ESPN changes costs the order, never a
+ * story.
+ */
+function inReadingOrder(feed: NewsFeed, stories: NewsStory[]): NewsStory[] {
+  const own = deskOf(feed);
+  const elsewhere = new Set<string>([...DESKS.filter((d) => d !== own), ...OTHER_DESKS]);
+  const aside = (s: NewsStory): number => (/^(fantasy|betting)$/.test(filedUnder(s)) ? 1 : 0);
+  return stories
+    .filter((s) => !elsewhere.has(filedUnder(s)))
+    .sort((a, b) => aside(a) - aside(b) || b.at.localeCompare(a.at));
+}
+
+/** A league's or a tour's latest news, each story once, in reading order. */
 async function fetchNews(feed: NewsFeed): Promise<NewsStory[]> {
   const res = await fetch(newsUrl(feed), { signal: upstreamSignal() });
   if (!res.ok) throw new Error(`espn news ${res.status} for ${feed}`);
@@ -105,7 +154,7 @@ async function fetchNews(feed: NewsFeed): Promise<NewsStory[]> {
     const story = storyFrom(article);
     if (story && !byId.has(story.id)) byId.set(story.id, story);
   }
-  return [...byId.values()].sort((a, b) => b.at.localeCompare(a.at));
+  return inReadingOrder(feed, [...byId.values()]);
 }
 
 /**
@@ -121,4 +170,4 @@ export const getEspnNews = cachedFeed(
 );
 
 /** The mappers, exported for their tests — nothing here touches the network. */
-export const __testing = { newsUrl, storyFrom };
+export const __testing = { newsUrl, storyFrom, inReadingOrder };

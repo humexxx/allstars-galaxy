@@ -470,6 +470,20 @@
       "when": 1794167346257,
       "tag": "0066_loving_rumiko_fujikawa",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1794368338394,
+      "tag": "0067_motionless_songbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1794797663321,
+      "tag": "0068_wandering_pete_wisdom",
+      "breakpoints": true
     }
   ]
 }

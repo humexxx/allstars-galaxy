@@ -137,7 +137,8 @@ export function ManageFavoritesSheet({
           </Button>
         </SheetTrigger>
       )}
-      <SheetContent side="right" className="flex flex-col gap-0">
+      {/* The base width is `data-[side=right]:w-3/4`; a bare `w-full` loses to it. */}
+      <SheetContent side="right" className="flex flex-col gap-0 data-[side=right]:w-full">
         <SheetHeader>
           <SheetTitle>Favorite sports</SheetTitle>
           <SheetDescription>
@@ -152,37 +153,38 @@ export function ManageFavoritesSheet({
               const isOn = selected.has(sport.id);
               const isPending = pending.has(sport.id);
               return (
-                <li
-                  key={sport.id}
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-3 transition-colors",
-                    isOn && "bg-primary/5"
-                  )}
-                >
-                  <span
-                    aria-hidden
-                    className="grid size-10 shrink-0 place-items-center rounded-lg bg-muted text-xl"
+                <li key={sport.id}>
+                  <label
+                    className={cn(
+                      "flex cursor-pointer items-center gap-3 px-3 py-3 transition-colors",
+                      isOn && "bg-primary/5"
+                    )}
                   >
-                    {sport.emoji}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <Text as="div" weight="medium">
-                      {sport.label}
-                    </Text>
-                    <Text variant="small" as="div">
-                      {COVERAGE[sport.id]}
-                    </Text>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {isPending && <Spinner className="size-3.5 text-muted-foreground" />}
-                    <Switch
-                      checked={isOn}
-                      aria-disabled={isPending}
-                      aria-busy={isPending}
-                      onCheckedChange={(value) => handleToggle(sport.id, value)}
-                      aria-label={`Toggle ${sport.label} as favorite`}
-                    />
-                  </div>
+                    <span
+                      aria-hidden
+                      className="grid size-10 shrink-0 place-items-center rounded-lg bg-muted text-xl"
+                    >
+                      {sport.emoji}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <Text as="div" weight="medium">
+                        {sport.label}
+                      </Text>
+                      <Text variant="small" as="div">
+                        {COVERAGE[sport.id]}
+                      </Text>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isPending && <Spinner className="size-3.5 text-muted-foreground" />}
+                      <Switch
+                        checked={isOn}
+                        aria-disabled={isPending}
+                        aria-busy={isPending}
+                        onCheckedChange={(value) => handleToggle(sport.id, value)}
+                        aria-label={`Toggle ${sport.label} as favorite`}
+                      />
+                    </div>
+                  </label>
                 </li>
               );
             })}

@@ -1,8 +1,6 @@
 "use client";
 
 import { useMemo, type ReactNode } from "react";
-import { Lock } from "lucide-react";
-
 import { Card, CardContent } from "@/components/ui/card";
 import { TableHead } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -10,6 +8,7 @@ import { isBracketDrawn } from "@/lib/sports/bracket";
 import { cn } from "@/lib/utils";
 import type { BracketRound, Match, NewsStory, SportId, Team } from "@/types/sports";
 
+import { ChampionCard } from "./champion-card";
 import { KnockoutBracket } from "./knockout-bracket";
 import { MatchesByDate } from "./matches-by-date";
 import { TeamNewsTab } from "./news-list";
@@ -29,9 +28,10 @@ export function useTeamsMap(teams: readonly Team[]): Map<string, Team> {
  * day by day beside the sport's own table, a team tapped in either narrowing
  * the games to its own), the bracket, and News when there is any.
  *
- * The bracket's tab is always there, locked until somebody is drawn into it:
- * where the bracket will be is worth knowing before it exists. Once there is
- * one the view opens on it, unless the sport says otherwise (`opensOnBracket`).
+ * The bracket's tab is not there until somebody is drawn into it: a locked
+ * tab was something to tap that did nothing, for most of a season. Once there
+ * is a bracket the view opens on it, unless the sport says otherwise
+ * (`opensOnBracket`).
  */
 export function LeagueView({
   sportId,
@@ -73,6 +73,8 @@ export function LeagueView({
 }): React.ReactElement {
   const hasPlayoffs = isBracketDrawn(playoffs);
   const hasNews = news.length > 0;
+  const finalRound = playoffs.find((round) => round.id === "final");
+  const final = finalRound?.matches.at(-1);
   const opening =
     initialTab === "news" && hasNews
       ? "news"
@@ -91,10 +93,7 @@ export function LeagueView({
         tabs={
           <TabsList variant="line">
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="bracket" disabled={!hasPlayoffs}>
-              {!hasPlayoffs && <Lock aria-hidden />}
-              {bracketLabel}
-            </TabsTrigger>
+            {hasPlayoffs && <TabsTrigger value="bracket">{bracketLabel}</TabsTrigger>}
             {hasNews && <TabsTrigger value="news">News</TabsTrigger>}
           </TabsList>
         }
@@ -103,7 +102,11 @@ export function LeagueView({
           {lead}
           <TeamPicksProvider matches={games}>
             <OverviewSplit
-              matches={<MatchesByDate matches={games} teams={teams} emptyTitle={emptyTitle} />}
+              matches={
+                games.length === 0 && table ? null : (
+                  <MatchesByDate matches={games} teams={teams} emptyTitle={emptyTitle} />
+                )
+              }
               table={table}
               tableLabel="Standings"
             />
@@ -112,11 +115,21 @@ export function LeagueView({
 
         {hasPlayoffs && (
           <TabsContent value="bracket">
-            <Card size="sm">
-              <CardContent>
-                <KnockoutBracket rounds={playoffs} teams={teams} />
-              </CardContent>
-            </Card>
+            <div className="flex flex-col gap-4">
+              {finalRound && final?.winnerTeamId && (
+                <ChampionCard
+                  competition={finalRound.label}
+                  championId={final.winnerTeamId}
+                  final={final}
+                  teams={teams}
+                />
+              )}
+              <Card size="sm">
+                <CardContent>
+                  <KnockoutBracket rounds={playoffs} teams={teams} />
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
         )}
 

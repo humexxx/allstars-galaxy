@@ -26,7 +26,7 @@ export default function TradingJournalLoading(): React.ReactElement {
       <span role="status" className="sr-only">
         Loading the journal…
       </span>
-      <PageHeaderSkeleton size="compact" actions={3} description={false} />
+      <PageHeaderSkeleton size="compact" actions={4} description={false} />
       <div className="grid gap-4 xl:grid-cols-4 xl:items-start">
         <Card className="min-w-0 xl:col-span-3 xl:h-[max(40rem,calc(100svh-11.5rem))]">
           <CardHeader>

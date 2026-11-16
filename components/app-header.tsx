@@ -85,11 +85,14 @@ export function AppHeader({
       className={cn(
         "sticky top-0 z-40 flex h-14 shrink-0 items-center gap-3 px-3 sm:gap-4 sm:px-6",
         // Frosted bar like the shadcn docs site — flat, no bottom divider, with
-        // a solid fallback where backdrop-filter isn't supported. The only time
-        // we frame it is while impersonating, to keep that state obvious.
+        // a solid fallback where backdrop-filter isn't supported. Only from
+        // `md`: on a phone the document scrolls under the bar, and a page's
+        // title and controls (the sport picker) showed through it as a smear.
+        // The only time we frame it is while impersonating, to keep that
+        // state obvious.
         isImpersonating
           ? "border-b border-warning/30 bg-warning/10"
-          : "bg-background/95 supports-[backdrop-filter]:bg-background/60 backdrop-blur"
+          : "bg-background md:bg-background/95 md:backdrop-blur md:supports-[backdrop-filter]:bg-background/60"
       )}
     >
       {/* Trigger only under `lg` — phones and tablets — where it opens the

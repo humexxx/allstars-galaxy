@@ -8,6 +8,7 @@ import { leadStory, teamInterest, type NewsInterest } from "@/lib/sports/news";
 import { cn } from "@/lib/utils";
 import type { NewsStory, Team } from "@/types/sports";
 
+import { ShowMoreRows, useShownRows } from "./show-more";
 import { StoryFoot, StoryImage, StoryLink } from "./story-parts";
 import { useSavedTeamFilter } from "./team-filter-context";
 import { useMatchTime } from "./time-zone-context";
@@ -28,6 +29,7 @@ export function NewsList({
   items: NewsStory[];
 }): React.ReactElement {
   const format = useMatchTime();
+  const rows = useShownRows(items);
   if (!lead && items.length === 0) {
     return (
       <EmptyState icon={Newspaper} title="No news yet" description="Stories land here as the wire brings them." />
@@ -53,35 +55,41 @@ export function NewsList({
             <Heading level="h3" as="h2" className="leading-snug">
               {lead.headline}
             </Heading>
-            {lead.description && (
+            {tells(lead) && (
               <Text variant="muted" className="line-clamp-4">
                 {lead.description}
               </Text>
             )}
-            <StoryFoot story={lead} day={format.day(lead.at)} />
+            <StoryFoot story={lead} day={format.shortDay(lead.at)} />
           </div>
         </StoryLink>
       )}
       <div className="grid gap-3 @xl:grid-cols-2">
-        {items.map((story) => (
+        {rows.shown.map((story) => (
           <StoryLink key={story.id} story={story} className={cn(CARD, "gap-3 p-3")}>
             <StoryImage story={story} sizes="80px" className="size-20 shrink-0 rounded-md" />
             <div className="flex min-w-0 flex-1 flex-col gap-1">
               <Text asChild weight="medium" className="leading-snug">
                 <h2>{story.headline}</h2>
               </Text>
-              {story.description && (
+              {tells(story) && (
                 <Text variant="small" className="line-clamp-2">
                   {story.description}
                 </Text>
               )}
-              <StoryFoot story={story} day={format.day(story.at)} />
+              <StoryFoot story={story} day={format.shortDay(story.at)} />
             </div>
           </StoryLink>
         ))}
       </div>
+      <ShowMoreRows rows={rows} />
     </div>
   );
+}
+
+/** Whether a story's standfirst says more than its headline: some wires send the headline twice. */
+function tells(story: NewsStory): boolean {
+  return !!story.description && story.description.trim() !== story.headline.trim();
 }
 
 /** A sport's News tab: its wire, led by the story most worth its reader's time. */

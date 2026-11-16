@@ -130,6 +130,20 @@ describe("RacquetTournamentPage", () => {
     expect(within(whole).getAllByText("Semi-finals")).toHaveLength(2);
   });
 
+  it("names the champion above a finished draw, the beaten finalist beside", () => {
+    renderPage(MILANO, ready());
+    const panel = screen.getByRole("tabpanel");
+    const winner = within(panel).getByText("Winner A. Coello / A. Tapia");
+    expect(within(panel).getByText("def. L. Augsburger / J. Lebron")).toBeInTheDocument();
+    const bracket = panel.querySelector<HTMLElement>('[data-layout="whole"]')!;
+    expect(winner.compareDocumentPosition(bracket) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("names no champion above a draw still being played", () => {
+    renderPage({ ...MILANO, status: "live" }, ready());
+    expect(screen.queryByText(/^Winner /)).toBeNull();
+  });
+
   it("opens on the Overview when the address asks for it", () => {
     renderPage(MILANO, ready(), { tab: "overview" });
     expect(openTab()).toBe("Overview");
@@ -190,6 +204,8 @@ describe("RacquetTournamentPage", () => {
       draw: { tournamentId: "padelapi-747", rounds: [], players: [], resultsHidden: true },
     });
     expect(screen.getByText(/only kept for about six months/)).toBeInTheDocument();
+    // The champions are the whole panel there; not said twice.
+    expect(screen.queryByText(/^Winner /)).toBeNull();
   });
 
   it("says a fixture tournament's draw is not available", () => {

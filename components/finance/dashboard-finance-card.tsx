@@ -70,7 +70,14 @@ type DashboardFinanceCardProps = {
 };
 
 export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps) {
-  const plans = await listUserPlans(userId);
+  // One round trip, not four in a row: none of these waits on another, and
+  // this card was the last on the dashboard to arrive.
+  const [plans, main, timeZone, portfolioOn] = await Promise.all([
+    listUserPlans(userId),
+    getMainPlan(userId),
+    getRequestTimeZone(),
+    isModuleEnabled(userId, "portfolio"),
+  ]);
 
   if (plans.length === 0) {
     return (
@@ -97,7 +104,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
   }
 
   const featured =
-    (await getMainPlan(userId)) ??
+    main ??
     plans.slice().sort(
       (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
     )[0];
@@ -106,10 +113,9 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
 
   // Exactly what the plan page shows: the calibrated plan (portfolio growth
   // included), with "now" as the day-aware position in the reader's zone.
-  const timeZone = await getRequestTimeZone();
   const now = todayInTimeZone(timeZone);
   const anchorDay = full.confirmationDayOfMonth;
-  const withPortfolio = full.includePortfolio && (await isModuleEnabled(userId, "portfolio"));
+  const withPortfolio = full.includePortfolio && portfolioOn;
   const [view, history, preferences, managed, lastConfirmedDay, tradingOn, portfolioHistory] = await Promise.all([
     loadCalibratedView(full, userId, now, { timeZone }),
     // The plan page's own read: its chart and this one draw the same series.

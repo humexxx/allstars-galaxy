@@ -1,10 +1,14 @@
 "use client";
 
 import { useTransition } from "react";
-import { ArrowDownLeft, ArrowUpRight, MoreHorizontal, Pencil, Trash2, X } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, MoreHorizontal, Pencil, Scale, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
-import { deleteCashMovementAction, deleteTradeAction } from "@/app/actions/trading-journal";
+import {
+  deleteBalanceAdjustmentAction,
+  deleteCashMovementAction,
+  deleteTradeAction,
+} from "@/app/actions/trading-journal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -22,7 +26,7 @@ import { positionLabel } from "@/lib/finance/trading";
 import { cn } from "@/lib/utils";
 import { formatDay } from "@/lib/utils/date";
 import { formatCurrency, formatSignedCurrency, formatSignedPercent, moneySign } from "@/lib/utils/format";
-import type { JournalCashMovement, JournalTrade } from "@/types/trading";
+import type { JournalAdjustment, JournalCashMovement, JournalTrade } from "@/types/trading";
 
 const toneText = (n: number): string =>
   moneySign(n) > 0 ? "text-success" : moneySign(n) < 0 ? "text-destructive" : "";
@@ -176,8 +180,18 @@ export function JournalTradesTable({
   );
 }
 
-/** The account's deposits and withdrawals, newest first. */
-export function JournalCashCard({ cash }: { cash: readonly JournalCashMovement[] }): React.ReactElement {
+type Movement =
+  | { kind: "cash"; at: string; cash: JournalCashMovement }
+  | { kind: "adjustment"; at: string; adjustment: JournalAdjustment };
+
+/** What moved the balance besides the trades: deposits, withdrawals and balance adjustments, newest first. */
+export function JournalCashCard({
+  cash,
+  adjustments,
+}: {
+  cash: readonly JournalCashMovement[];
+  adjustments: readonly JournalAdjustment[];
+}): React.ReactElement {
   const [, startTransition] = useTransition();
   const removeCash = (c: JournalCashMovement): void =>
     startTransition(async () => {
@@ -185,50 +199,108 @@ export function JournalCashCard({ cash }: { cash: readonly JournalCashMovement[]
       if (result.success) toast.success(c.kind === "deposit" ? "Deposit deleted" : "Withdrawal deleted");
       else toast.error(result.error);
     });
+  const removeAdjustment = (a: JournalAdjustment): void =>
+    startTransition(async () => {
+      const result = await deleteBalanceAdjustmentAction(a.id);
+      if (result.success) toast.success("Adjustment deleted");
+      else toast.error(result.error);
+    });
+
+  const movements: Movement[] = [
+    ...cash.map((c): Movement => ({ kind: "cash", at: c.occurredAt, cash: c })),
+    ...adjustments.map((a): Movement => ({ kind: "adjustment", at: a.occurredAt, adjustment: a })),
+  ].sort((a, b) => b.at.localeCompare(a.at));
 
   return (
     <Card className="gap-3 xl:min-h-0 xl:flex-1">
       <CardHeader>
         <Eyebrow size="sm" asChild>
-          <h3>Deposits &amp; withdrawals</h3>
+          <h3>Deposits, withdrawals &amp; adjustments</h3>
         </Eyebrow>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 xl:min-h-0 xl:overflow-y-auto">
-        {cash.length === 0 && <Text variant="small">No money moved yet.</Text>}
-        {cash.map((c) => (
-          <div key={c.id} className="group flex items-center justify-between gap-2">
-            <span className="flex min-w-0 items-center gap-2">
-              {c.kind === "deposit" ? (
-                <ArrowDownLeft className="size-4 shrink-0 text-success" aria-hidden />
-              ) : (
-                <ArrowUpRight className="size-4 shrink-0 text-destructive" aria-hidden />
-              )}
-              <span className="flex min-w-0 flex-col">
-                <span className="text-sm">{c.kind === "deposit" ? "Deposit" : "Withdrawal"}</span>
-                <span className="truncate text-2xs text-muted-foreground">
-                  {formatDay(c.day)}
-                  {c.note ? ` · ${c.note}` : ""}
-                </span>
-              </span>
-            </span>
-            <span className="flex items-center gap-1">
-              <Mono className={cn("text-sm", c.kind === "deposit" ? "text-success" : "text-destructive")}>
-                {c.kind === "deposit" ? "+" : "-"}
-                {formatCurrency(c.amount)}
-              </Mono>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                aria-label="Delete this movement"
-                className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-                onClick={() => removeCash(c)}
-              >
-                <Trash2 />
-              </Button>
-            </span>
-          </div>
-        ))}
+        {movements.length === 0 && <Text variant="small">No money moved yet.</Text>}
+        {movements.map((m) =>
+          m.kind === "cash" ? (
+            <MovementRow
+              key={m.cash.id}
+              icon={
+                m.cash.kind === "deposit" ? (
+                  <ArrowDownLeft className="size-4 shrink-0 text-success" aria-hidden />
+                ) : (
+                  <ArrowUpRight className="size-4 shrink-0 text-destructive" aria-hidden />
+                )
+              }
+              label={m.cash.kind === "deposit" ? "Deposit" : "Withdrawal"}
+              day={m.cash.day}
+              note={m.cash.note}
+              amount={`${m.cash.kind === "deposit" ? "+" : "-"}${formatCurrency(m.cash.amount)}`}
+              tone={m.cash.kind === "deposit" ? "text-success" : "text-destructive"}
+              deleteLabel="Delete this movement"
+              onDelete={() => removeCash(m.cash)}
+            />
+          ) : (
+            <MovementRow
+              key={m.adjustment.id}
+              icon={<Scale className="size-4 shrink-0 text-muted-foreground" aria-hidden />}
+              label="Balance adjustment"
+              day={m.adjustment.day}
+              note={m.adjustment.note}
+              amount={formatSignedCurrency(m.adjustment.amount)}
+              tone={toneText(m.adjustment.amount)}
+              deleteLabel="Delete this adjustment"
+              onDelete={() => removeAdjustment(m.adjustment)}
+            />
+          )
+        )}
       </CardContent>
     </Card>
+  );
+}
+
+function MovementRow({
+  icon,
+  label,
+  day,
+  note,
+  amount,
+  tone,
+  deleteLabel,
+  onDelete,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  day: string;
+  note: string | null;
+  amount: string;
+  tone: string;
+  deleteLabel: string;
+  onDelete: () => void;
+}): React.ReactElement {
+  return (
+    <div className="group flex items-center justify-between gap-2">
+      <span className="flex min-w-0 items-center gap-2">
+        {icon}
+        <span className="flex min-w-0 flex-col">
+          <span className="text-sm">{label}</span>
+          <span className="truncate text-2xs text-muted-foreground">
+            {formatDay(day)}
+            {note ? ` · ${note}` : ""}
+          </span>
+        </span>
+      </span>
+      <span className="flex items-center gap-1">
+        <Mono className={cn("text-sm", tone)}>{amount}</Mono>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          aria-label={deleteLabel}
+          className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+          onClick={onDelete}
+        >
+          <Trash2 />
+        </Button>
+      </span>
+    </div>
   );
 }

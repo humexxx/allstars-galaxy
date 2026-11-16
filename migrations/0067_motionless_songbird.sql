@@ -1,0 +1,1 @@
+ALTER TABLE "user_preferences" ADD COLUMN "mascot_character" text DEFAULT 'explorer' NOT NULL;

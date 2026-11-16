@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { ReactNode } from "react";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { DashboardMatch, DashboardSportCard as Card } from "@/types/sports";
@@ -138,6 +138,87 @@ describe("DashboardSportCard", () => {
     expect(screen.getByText("Just finished")).toBeInTheDocument();
     expect(screen.getByText("Winner C. Alcaraz")).toBeInTheDocument();
     expect(screen.getByText("def. J. Sinner")).toBeInTheDocument();
+  });
+
+  it("shows a tournament's top seeds beside its name, and the winner's face by the winner", async () => {
+    const player = (id: string, seed: string) => ({ id, name: "🇺🇸", shortName: id, code: seed });
+    await renderCard({
+      ...card([]),
+      sportId: "tennis",
+      label: "Tennis",
+      event: {
+        name: "Stockholm Open",
+        detail: "Stockholm",
+        status: "completed",
+        winner: "T. Fritz",
+        seeds: [player("T. Fritz", "1"), player("C. Ruud", "2"), player("H. Rune", "3")],
+        winnerFace: player("T. Fritz", "1"),
+      },
+    });
+    const seeds = within(screen.getByRole("list", { name: "Top seeds" })).getAllByRole("listitem");
+    expect(seeds.map((li) => li.textContent)).toEqual(["🇺🇸Seed 1: T. Fritz", "🇺🇸Seed 2: C. Ruud", "🇺🇸Seed 3: H. Rune"]);
+    // The winner's line sits outside the seeds' row, so a long name cannot run under the faces.
+    const winner = screen.getByText("Winner T. Fritz");
+    expect(screen.getByRole("list", { name: "Top seeds" }).parentElement).not.toContainElement(winner);
+  });
+
+  it("draws an event's bracket in the table's place, a column a round", async () => {
+    const side = (code: string, score: number, winner: boolean) => ({ name: code, code, score, winner });
+    await renderCard({
+      ...card([]),
+      sportId: "lol",
+      label: "League of Legends",
+      featured: undefined,
+      bracket: {
+        label: "Worlds 2026 bracket",
+        short: "Bracket",
+        rounds: [
+          { label: "Semifinals", ties: [{ id: "s1", home: side("BLG", 3, true), away: side("T1", 1, false), decided: true }] },
+          {
+            label: "Finals",
+            ties: [
+              { id: "f", home: side("GEN", 1, false), away: side("BLG", 3, true), decided: true, playedAt: "2026-11-14T19:00:00Z" },
+            ],
+          },
+        ],
+      },
+    });
+    // No column headings: the round and the day are each tie's accessible name and tooltip.
+    expect(screen.queryByText("Semifinals")).toBeNull();
+    expect(within(screen.getByRole("list", { name: "Finals" })).getByRole("listitem")).toHaveTextContent(
+      /^Finals · Nov 14: /
+    );
+    expect(screen.getByRole("heading", { level: 3, name: "Worlds 2026 bracket" })).toBeInTheDocument();
+    const final = within(screen.getByRole("list", { name: "Finals" })).getByRole("listitem");
+    // Each side reads its code and score, the loser first as the final was drawn.
+    expect(final.textContent).toMatch(/GEN.*1.*BLG.*3/);
+  });
+
+  it("switches one slot between an event's draw and the rankings rather than stacking them", async () => {
+    const entrant = (code: string, score: number, winner: boolean) => ({ name: code, code, score, winner, photos: [null] });
+    await renderCard({
+      ...card([]),
+      sportId: "tennis",
+      label: "Tennis",
+      featured: undefined,
+      bracket: {
+        label: "Stockholm Open draw",
+        short: "Draw",
+        rounds: [{ label: "Final", ties: [{ id: "f", home: entrant("Fritz", 2, true), away: entrant("Tirante", 0, false), decided: true }] }],
+      },
+      tables: [{ id: "atp", label: "Rankings", rows: [{ position: 1, name: "A. Zverev", value: "9,320" }] }],
+    });
+    const views = screen.getByRole("group", { name: "Tennis views" });
+    expect(within(views).getAllByRole("radio").map((r) => r.textContent)).toEqual(["Draw", "Rankings"]);
+    // Both are laid out, so the slot keeps the taller one's height; only the chosen one is live.
+    // A side's name is printed twice: the short one seen, the full one read out.
+    const shown = (text: string): boolean =>
+      screen.getAllByText(text)[0].closest("[data-view]")!.hasAttribute("inert") === false;
+    expect(shown("Fritz")).toBe(true);
+    expect(shown("A. Zverev")).toBe(false);
+    fireEvent.click(within(views).getByRole("radio", { name: "Rankings" }));
+    expect(shown("A. Zverev")).toBe(true);
+    expect(shown("Fritz")).toBe(false);
   });
 
   it("asks for the card on the championship it is set to", async () => {

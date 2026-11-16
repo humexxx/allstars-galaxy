@@ -34,11 +34,10 @@ describe("MlbView", () => {
     expect(screen.getByText("Season 2026")).toBeInTheDocument();
   });
 
-  it("opens on Overview with the Postseason locked while there is no bracket", () => {
+  it("opens on Overview with no Postseason tab while there is no bracket", () => {
     renderOn(REGULAR_SEASON);
     expect(openTab()).toBe("Overview");
-    expect(postseason()).toBeDisabled();
-    expect(postseason().querySelector("svg")).not.toBeNull();
+    expect(screen.queryByRole("tab", { name: "Postseason" })).toBeNull();
   });
 
   it("opens on the bracket while the postseason has a series", () => {
@@ -166,7 +165,8 @@ describe("MlbView", () => {
     expect(shownDays(container)).toEqual(["2026-10-25", "2026-10-27", "2026-10-28", "2026-10-29"]);
     expect(screen.getByText("F/10")).toBeInTheDocument();
     expect(screen.getByText("Top 7th")).toBeInTheDocument();
-    expect(screen.getByText("World Series · Game 5, if necessary")).toBeInTheDocument();
+    // The one stage of the day is said in its heading, not on the card.
+    expect(screen.getByText(/World Series · Game 5, if necessary/)).toBeInTheDocument();
   });
 
   it("narrows the games to a team tapped in the table, and back on a second tap", () => {

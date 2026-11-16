@@ -14,11 +14,10 @@ const postseason = () => screen.getByRole("tab", { name: "Postseason" });
 const openTab = () => screen.getByRole("tab", { selected: true }).textContent;
 
 describe("NbaView", () => {
-  it("shows the Postseason tab locked while there is no bracket", () => {
+  it("has no Postseason tab while there is no bracket", () => {
     render(<NbaView data={{ ...NBA_DATA, playoffs: [] }} />);
     expect(openTab()).toBe("Overview");
-    expect(postseason()).toBeDisabled();
-    expect(postseason().querySelector("svg")).not.toBeNull();
+    expect(screen.queryByRole("tab", { name: "Postseason" })).toBeNull();
   });
 
   it("opens on the bracket once the postseason has one", () => {

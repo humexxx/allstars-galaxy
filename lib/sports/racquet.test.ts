@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { RacquetTournament } from "@/types/sports";
+import type { BracketMatch, BracketRound, RacquetTournament } from "@/types/sports";
 
 import {
   addDays,
@@ -10,6 +10,7 @@ import {
   drawsShipped,
   featuredTournament,
   justFinished,
+  playLine,
   statusByDates,
 } from "./racquet";
 
@@ -111,5 +112,45 @@ describe("clampDay / addDays", () => {
   it("counts calendar days across a month and a year", () => {
     expect(addDays("2026-10-30", 3)).toBe("2026-11-02");
     expect(addDays("2027-01-02", -45)).toBe("2026-11-18");
+  });
+});
+
+describe("playLine", () => {
+  const live = { ...t("turin", "live", "2026-11-15", "2026-11-22"), name: "ATP Finals", location: "Turin" };
+  const tie = (id: string, extra: Partial<BracketMatch> = {}): BracketMatch => ({
+    id,
+    homeTeamId: `${id}-a`,
+    awayTeamId: `${id}-b`,
+    ...extra,
+  });
+  const semis = (...matches: BracketMatch[]): BracketRound[] => [
+    { id: "semi-final", label: "Semi-finals", matches },
+    { id: "final", label: "Final", matches: [{ id: "f", homeTeamId: null, awayTeamId: null }] },
+  ];
+
+  it("says when a tournament still to start starts", () => {
+    expect(playLine({ ...live, status: "upcoming" }, undefined, "2026-11-14")).toBe("Starts tomorrow");
+  });
+
+  it("names the stage played before the draw while there is no round to name", () => {
+    expect(playLine({ ...live, stageInPlay: "Group stage" }, undefined, "2026-11-15")).toBe("Group stage under way");
+  });
+
+  it("calls a round next while its ties have two names and nothing played", () => {
+    expect(playLine(live, semis(tie("s1"), tie("s2")), "2026-11-15")).toBe("Semi-finals next");
+  });
+
+  it("calls a round under way once a tie in it is decided or has a score", () => {
+    expect(playLine(live, semis(tie("s1", { winnerTeamId: "s1-a" }), tie("s2")), "2026-11-21")).toBe(
+      "Semi-finals under way"
+    );
+    expect(
+      playLine(live, semis(tie("s1", { legs: [{ homeScore: 3, awayScore: 2 }] }), tie("s2")), "2026-11-21")
+    ).toBe("Semi-finals under way");
+  });
+
+  it("says nothing with no draw, or with every tie decided", () => {
+    expect(playLine(live, undefined, "2026-11-15")).toBeNull();
+    expect(playLine(live, [{ id: "final", label: "Final", matches: [tie("f", { winnerTeamId: "f-a" })] }], "2026-11-22")).toBeNull();
   });
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CalendarDays, ChevronRight, Lock, MapPin, Trophy } from "lucide-react";
+import { CalendarDays, ChevronRight, MapPin, Trophy } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,12 +46,13 @@ type SurfTab = "overview" | "draw" | "news";
  * The men's Championship Tour, laid out as padel's and tennis's tours:
  * Overview (the stop on now, else next, else the last surfed, the season
  * around it and the rankings beside them) and Draw (the featured stop's heats,
- * round by round), and with news, News. Draw stays on the strip, locked,
- * until a draw exists.
+ * round by round), and with news, News. Draw is not on the strip until a
+ * draw has a surfer in it: the feed ships the heats as seed slots before
+ * anybody is named.
  */
 export function SurfView({ data, news = [], initialTab }: SurfViewProps): React.ReactElement {
   const featured = data.events.find((e) => e.id === data.draw?.eventId) ?? featuredEvent(data.events);
-  const draw = data.draw && data.draw.rounds.length > 0 ? data.draw : undefined;
+  const draw = data.draw && isDrawn(data.draw) ? data.draw : undefined;
   const hasNews = news.length > 0;
   const opening: SurfTab =
     initialTab === "news" && hasNews
@@ -72,10 +73,7 @@ export function SurfView({ data, news = [], initialTab }: SurfViewProps): React.
         tabs={
           <TabsList variant="line">
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="draw" disabled={!draw}>
-              {!draw && <Lock aria-hidden />}
-              Draw
-            </TabsTrigger>
+            {draw && <TabsTrigger value="draw">Draw</TabsTrigger>}
             {hasNews && <TabsTrigger value="news">News</TabsTrigger>}
           </TabsList>
         }
@@ -190,6 +188,10 @@ function SurfOverview({
       )}
     </div>
   );
+}
+
+function isDrawn(draw: SurfDraw): boolean {
+  return draw.rounds.some((r) => r.heats.some((h) => h.surfers.some((s) => s.athleteId)));
 }
 
 /**

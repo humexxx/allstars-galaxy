@@ -25,7 +25,7 @@ const tradingTools = toolbox<TradingAssistantContext, TradingAssistantEvent>(
     defineTool({
       name: "get_journal",
       description:
-        "The trading journal: the balance, money deposited and withdrawn, realized P&L, the monthly growth pace, the stats (win rate, profit factor, expectancy, average win and loss, max drawdown), the last six months' P&L and return, the setups in use, every open trade, the latest 40 closed trades and the latest deposits and withdrawals, each with its id.",
+        "The trading journal: the balance, money deposited and withdrawn, realized P&L, the balance adjustments' sum, the monthly growth pace, the stats (win rate, profit factor, expectancy, average win and loss, max drawdown), the last six months' P&L and return, the setups in use, every open trade, the latest 40 closed trades and the latest deposits and withdrawals, each with its id.",
       input: z.object({}),
       status: "Reading your journal",
       run: (_input, c) => getAssistantJournal(c.userId, c.timeZone),

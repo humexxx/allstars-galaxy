@@ -2,6 +2,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import { ReaderTimeZoneProvider } from "@/components/reader-time-zone";
 import type { Match, Team } from "@/types/sports";
 
 import { ScoreCard } from "./score-card";
@@ -30,10 +31,54 @@ describe("ScoreCard", () => {
     expect(screen.getAllByText("1")).toHaveLength(2);
   });
 
+  it("leaves its stage out under a heading that says it for the whole day", () => {
+    const { rerender } = render(<ScoreCard match={shootout} teams={teams} />);
+    expect(screen.getByText("Round of 32")).toBeInTheDocument();
+    rerender(<ScoreCard match={shootout} teams={teams} hideStage />);
+    expect(screen.queryByText("Round of 32")).toBeNull();
+  });
+
   it("marks the side that won the shoot-out", () => {
     render(<ScoreCard match={shootout} teams={teams} />);
     expect(screen.getByText("Paraguay")).toHaveClass("font-semibold");
     expect(screen.getByText("Germany")).not.toHaveClass("font-semibold");
+  });
+
+  describe("when it is played", () => {
+    const fixture: Match = {
+      id: "m-3",
+      homeTeamId: "germany",
+      awayTeamId: "paraguay",
+      homeScore: null,
+      awayScore: null,
+      kickoff: "2026-10-28T23:00:00Z",
+      status: "scheduled",
+    };
+    const show = (m: Match, hideDay?: boolean): void => {
+      render(
+        <ReaderTimeZoneProvider timeZone="America/Costa_Rica">
+          <ScoreCard match={m} teams={teams} hideDay={hideDay} />
+        </ReaderTimeZoneProvider>
+      );
+    };
+
+    it("prints the day over the kick-off time, the time in the names' colour", () => {
+      show(fixture);
+      expect(screen.getByText("Oct 28")).toBeInTheDocument();
+      expect(screen.getByText("5:00 PM")).toHaveClass("text-xs", "text-foreground");
+    });
+
+    it("leaves the day out under a heading that names it, and keeps the time", () => {
+      show(fixture, true);
+      expect(screen.queryByText("Oct 28")).toBeNull();
+      expect(screen.getByText("5:00 PM")).toBeInTheDocument();
+    });
+
+    it("leaves a result its status alone once the day is the heading's", () => {
+      show({ ...fixture, status: "ft", homeScore: 2, awayScore: 1 }, true);
+      expect(screen.queryByText("Oct 28")).toBeNull();
+      expect(screen.getByText("FT")).toBeInTheDocument();
+    });
   });
 
   describe("where to watch", () => {

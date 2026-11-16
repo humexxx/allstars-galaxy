@@ -32,8 +32,6 @@ export type DashboardSide = {
   color?: string;
   score: number | null;
   winner: boolean;
-  /** A player or a pair: a name with no crest beside it. */
-  plain?: boolean;
 };
 
 export type DashboardMatch = {
@@ -41,7 +39,7 @@ export type DashboardMatch = {
   home: DashboardSide;
   away: DashboardSide;
   status: "live" | "upcoming" | "result";
-  /** An instant; the card formats it in the reader's zone. "" where a draw has not dated the tie. */
+  /** An instant; the card formats it in the reader's zone. */
   startsAt: string;
   /** "Matchday 3", "Swiss · BO1". */
   label?: string;
@@ -179,11 +177,6 @@ export type DashboardSportCard = {
   swiss?: DashboardSwiss;
   /** The knockouts of the event the card leads with, in place of a table. */
   bracket?: DashboardBracket;
-  /**
-   * The games to come while a knockout is in a round too big for `bracket`
-   * (before the last eight): shown in the bracket's place.
-   */
-  upNext?: DashboardMatch[];
   /**
    * In place of a table the sport has none of yet: the NBA's last champion
    * before the opener. `when` is an instant the card prints in the reader's

@@ -922,19 +922,15 @@ describe("footballCard", () => {
     matches: Array.from({ length: 8 }, (_, i) => drawn(`r${i}`, decided ? a.id : undefined)),
   });
 
-  it("lists the games to come while the knockout is in a round bigger than the last eight", () => {
+  it("draws no bracket while the knockout is in a round bigger than the last eight", () => {
     const knockout: BracketRound[] = [
       sixteenRound(false),
       { id: "quarter-final", label: "Quarter-finals", matches: [open("q0"), open("q1"), open("q2"), open("q3")] },
     ];
     const card = __testing.footballCard(base, { ...league, knockout });
     expect(card.bracket).toBeUndefined();
-    const scheduled = league.matches.filter((m) => m.status === "scheduled").length;
-    expect(card.upNext).toHaveLength(Math.min(5, scheduled));
-    expect(card.upNext!.every((m) => m.status === "upcoming")).toBe(true);
-    // Soonest first.
-    const starts = card.upNext!.map((m) => Date.parse(m.startsAt));
-    expect(starts).toEqual([...starts].sort((x, y) => x - y));
+    // The table stands as it did in the league phase.
+    expect(card.tables).toEqual(__testing.footballCard(base, { ...league, knockout: [] }).tables);
   });
 
   it("draws the bracket from the quarter-finals on, slots TBD, a two-legged tie by its aggregate", () => {
@@ -953,9 +949,7 @@ describe("footballCard", () => {
       { id: "semi-final", label: "Semi-finals", matches: [{ id: "s0", homeTeamId: a.id, awayTeamId: null }, open("s1")] },
       { id: "final", label: "Final", matches: [open("f")] },
     ];
-    const card = __testing.footballCard(base, { ...league, knockout });
-    expect(card.upNext).toBeUndefined();
-    const bracket = card.bracket!;
+    const bracket = __testing.footballCard(base, { ...league, knockout }).bracket!;
     expect(bracket.label).toBe(`${league.league.name} knockout`);
     expect(bracket.rounds.map((r) => `${r.label} ${r.ties.length}`)).toEqual([
       "Quarter-finals 4",
@@ -976,10 +970,8 @@ describe("footballCard", () => {
     ];
     const wildCard: BracketRound = { id: "round-1", label: "Wild card", matches: [drawn("w0"), drawn("w1")] };
     const roundOne: BracketRound = { id: "round-of-16", label: "Round One", matches: Array.from({ length: 8 }, (_, i) => drawn(`r${i}`)) };
-    // The wild card is on: two ties, but not the last eight — the games to come, not a two-tie "bracket".
-    const early = __testing.footballCard(base, { ...league, knockout: [wildCard, roundOne, ...rest] });
-    expect(early.bracket).toBeUndefined();
-    expect(early.upNext).toBeDefined();
+    // The wild card is on: two ties, but not the last eight — no two-tie "bracket".
+    expect(__testing.footballCard(base, { ...league, knockout: [wildCard, roundOne, ...rest] }).bracket).toBeUndefined();
 
     // Round One played, the conference semi-finals on, one of them against ESPN's stand-in club.
     const standIn = { ...a, id: "tbd-away", name: "TBD Away", shortName: "TBD Away", code: "TBD" };
@@ -1094,18 +1086,15 @@ describe("leadOrChampion", () => {
     expect(lead.bracket?.rounds[2].ties[0]).toMatchObject({ home: { tbd: true }, away: { tbd: true }, decided: false });
   });
 
-  it("lists the games to come while the postseason is in a round bigger than the last eight", () => {
+  it("draws no bracket while the postseason is in a round bigger than the last eight", () => {
     const clock = { timeZone: "UTC", now: Date.parse("2026-10-01T12:00:00Z") };
     const first: BracketRound[] = [
       { id: "round-of-16", label: "First round", matches: Array.from({ length: 8 }, (_, i) => ({ id: `r${i}`, homeTeamId: "tb", awayTeamId: "mil" })) },
       { id: "quarter-final", label: "Division Series", matches: [{ id: "d1", homeTeamId: null, awayTeamId: null }] },
     ];
-    const next: Match = { ...game, id: "g2", kickoff: "2026-10-02T23:00:00Z", status: "scheduled", homeScore: null, awayScore: null };
-    const lead = __testing.leadOrChampion([game, next], first, teams, clock);
+    const lead = __testing.leadOrChampion([game], first, teams, clock);
     expect(lead.bracket).toBeUndefined();
-    expect(lead.upNext?.map((m) => m.id)).toEqual(["g2"]);
-    // No postseason: nothing in the bracket's place.
-    expect(__testing.leadOrChampion([game, next], [], teams, clock).upNext).toBeUndefined();
+    expect(lead.featured).toBeDefined();
   });
 
   it("says Just finished for two weeks after the final", () => {
@@ -1278,30 +1267,14 @@ describe("racquetCard", () => {
       expect([tie.home.score, tie.away.score]).toEqual([1, 0]);
     });
 
-    it("lists the ties still to play, not a draw, while the event is before its last eight", () => {
-      const sixteen = Array.from({ length: 16 }, (_, i) => ({
-        id: `r${i}`,
-        homeTeamId: "fritz",
-        awayTeamId: "paul",
-        ...(i === 0 ? { winnerTeamId: "fritz" } : {}),
-      }));
+    it("draws no bracket while the event is before its last eight, even with a quarter-final drawn", () => {
+      const sixteen = Array.from({ length: 16 }, (_, i) => ({ id: `r${i}`, homeTeamId: "fritz", awayTeamId: "paul" }));
       const early: BracketRound[] = [
         { id: "round-of-32", label: "Round of 32", matches: sixteen },
-        // A quarter-final already drawn does not make it the last eight yet.
         { id: "quarter-final", label: "Quarter-finals", matches: [{ id: "q0", homeTeamId: "fritz", awayTeamId: "ruud" }] },
       ];
       const week = { ...tour([{ ...tournament("Stockholm", "live"), bracket: early }]), drawPlayers: players };
-      const card = __testing.racquetCard(base, week, "ATP", sunday);
-      expect(card.bracket).toBeUndefined();
-      // Five of the fifteen ties still open, by surname, no crest, the round as their label.
-      expect(card.upNext).toHaveLength(5);
-      expect(card.upNext![0]).toMatchObject({
-        id: "r1",
-        home: { code: "fritz", plain: true },
-        away: { code: "paul", plain: true },
-        status: "upcoming",
-        label: "Round of 32",
-      });
+      expect(__testing.racquetCard(base, week, "ATP", sunday).bracket).toBeUndefined();
     });
 
     it("draws no bracket for an event still to start", () => {

@@ -82,29 +82,18 @@ export async function DashboardSportCard({
         </ul>
       </div>
     ));
-  // The knockout's place: its bracket from the last eight, the games to come before that.
-  const upNext = !card.bracket && card.upNext && card.upNext.length > 0 ? card.upNext : null;
-  const upNextList = upNext && (
-    <ul role="list" aria-label="Up next" className="flex flex-col gap-1">
-      {upNext.map((m) => (
-        <MatchLine key={m.id} match={m} format={format} />
-      ))}
-    </ul>
-  );
-  const tables = (card.tables.length > 0 || card.swiss || card.bracket || upNext || card.note) && (
+  const tables = (card.tables.length > 0 || card.swiss || card.bracket || card.note) && (
     <>
-      {(card.bracket || upNext) && card.tables.length > 0 ? (
+      {card.bracket && card.tables.length > 0 ? (
         // One slot, switched: a draw over a table made the card half as tall again.
         <DashboardCardSwitch
           label={`${card.label} views`}
           views={[
-            card.bracket
-              ? {
-                  id: "bracket",
-                  label: card.bracket.short,
-                  content: <DashboardBracket bracket={card.bracket} format={format} hideLabel />,
-                }
-              : { id: "up-next", label: "Up next", content: upNextList },
+            {
+              id: "bracket",
+              label: card.bracket.short,
+              content: <DashboardBracket bracket={card.bracket} format={format} hideLabel />,
+            },
             ...card.tables.map((t) => ({
               id: t.id,
               label: t.label,
@@ -115,14 +104,6 @@ export async function DashboardSportCard({
       ) : (
         <>
           {card.bracket && <DashboardBracket bracket={card.bracket} format={format} />}
-          {upNext && (
-            <div className="flex flex-col gap-2">
-              <Eyebrow size="sm" asChild>
-                <h3>Up next</h3>
-              </Eyebrow>
-              {upNextList}
-            </div>
-          )}
           {card.tables.length > 0 && <DashboardSportTables tables={card.tables} />}
         </>
       )}
@@ -404,7 +385,7 @@ function MatchLine({ match, format }: { match: DashboardMatch; format: MatchTime
     <li className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 rounded-md px-1.5 py-1 text-xs odd:bg-muted/40">
       <span className="flex min-w-0 items-center justify-end gap-1.5">
         <span className={cn("truncate", match.home.winner && "font-semibold")}>{match.home.name}</span>
-        {!match.home.plain && <TeamBadge team={badgeTeam(match.home)} size="sm" />}
+        <TeamBadge team={badgeTeam(match.home)} size="sm" />
       </span>
       <span className="flex w-16 flex-col items-center leading-tight">
         {scored ? (
@@ -412,16 +393,15 @@ function MatchLine({ match, format }: { match: DashboardMatch; format: MatchTime
             {match.home.score}–{match.away.score}
           </Mono>
         ) : (
-          // A draw may not have dated a tie yet: "v", and the round under it.
-          <Mono className="text-2xs">{match.startsAt ? format.time(match.startsAt) : "v"}</Mono>
+          <Mono className="text-2xs">{format.time(match.startsAt)}</Mono>
         )}
         <Mono className="flex items-center gap-1 text-2xs text-muted-foreground">
           {match.status === "live" && <span aria-hidden className="size-1.5 rounded-full bg-success" />}
-          {match.status === "live" ? "Live" : match.startsAt ? format.shortDay(match.startsAt) : ""}
+          {match.status === "live" ? "Live" : format.shortDay(match.startsAt)}
         </Mono>
       </span>
       <span className="flex min-w-0 items-center gap-1.5">
-        {!match.away.plain && <TeamBadge team={badgeTeam(match.away)} size="sm" />}
+        <TeamBadge team={badgeTeam(match.away)} size="sm" />
         <span className={cn("truncate", match.away.winner && "font-semibold")}>{match.away.name}</span>
       </span>
     </li>

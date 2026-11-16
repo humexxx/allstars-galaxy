@@ -64,7 +64,7 @@ export async function DashboardProductivityCard({ userId }: DashboardProductivit
       {/* Side by side once the card is wide enough for two readable lists. */}
       <CardContent className="@container">
         <div className="grid gap-3 @2xl:grid-cols-2">
-          <section className="flex flex-col gap-3 rounded-lg border p-4" aria-labelledby="dash-today">
+          <section className="flex min-w-0 flex-col gap-3 rounded-lg border p-4" aria-labelledby="dash-today">
             <Eyebrow asChild>
               <h3 id="dash-today">Today’s board</h3>
             </Eyebrow>
@@ -107,7 +107,7 @@ export async function DashboardProductivityCard({ userId }: DashboardProductivit
             ) : null}
           </section>
 
-          <section className="flex flex-col gap-3 rounded-lg border p-4" aria-labelledby="dash-habits">
+          <section className="flex min-w-0 flex-col gap-3 rounded-lg border p-4" aria-labelledby="dash-habits">
             <Eyebrow asChild>
               <h3 id="dash-habits">Habits</h3>
             </Eyebrow>

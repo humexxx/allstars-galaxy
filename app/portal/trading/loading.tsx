@@ -41,7 +41,7 @@ export default function TradingJournalLoading(): React.ReactElement {
                 <Skeleton className="h-3.5 w-56 max-sm:h-4" />
               </div>
               <div className="flex flex-col gap-2 max-sm:w-full sm:items-end">
-                <Skeleton className="h-10 w-28 sm:h-8 sm:w-66" />
+                <Skeleton className="h-10 w-full sm:h-8 sm:w-66" />
                 <Skeleton className="h-9 w-full sm:h-8 sm:w-70" />
               </div>
             </div>

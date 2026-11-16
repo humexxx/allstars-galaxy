@@ -28,6 +28,7 @@ import { calendarDayInTimeZone, formatDay, formatDayRange } from "@/lib/utils/da
 import { topSeeds } from "@/lib/sports/racquet";
 import type {
   BracketRound,
+  DashboardBracket,
   DashboardCompetitions,
   DashboardMatch,
   DashboardSide,
@@ -616,7 +617,9 @@ function lolOffSeasonCard(
   const round = (event.playoffs ?? []).find((r) => r.matches.some((m) => m.id === final.id))?.label;
   const recent = final.date !== undefined && clock.now - new Date(final.date).getTime() < JUST_FINISHED_MS;
   const comingUp = lolComingUp(data);
-  const champions = lolChampionsTable(data, event);
+  const bracket = lolBracket(event, teams);
+  // The bracket says who won and how; the champions' list stands in only for an event with none.
+  const champions = bracket ? null : lolChampionsTable(data, event);
   return {
     ...base,
     context: round ? `${event.name} · ${round}` : event.name,
@@ -635,7 +638,38 @@ function lolOffSeasonCard(
     },
     matches: [],
     tables: [comingUp, champions].filter((t) => t !== null),
+    bracket,
   };
+}
+
+/** How many rounds a card's bracket has room for: the last ones, down to the final. */
+const BRACKET_ROUNDS = 3;
+
+/**
+ * An event's knockouts for its card: the last rounds, each tie with both
+ * sides drawn. A double elimination's lower half is left to the event's own
+ * page — a column a round has no room for two trees.
+ */
+function lolBracket(event: LolSplit, teams: Map<string, Team>): DashboardBracket | undefined {
+  const rounds = (event.playoffs ?? [])
+    .map((round) => ({
+      label: round.label,
+      ties: round.matches.flatMap((m) =>
+        m.homeTeamId && m.awayTeamId && m.side !== "lower"
+          ? [
+              {
+                id: m.id,
+                home: side(teams.get(m.homeTeamId), m.homeTeamId, m.homeScore ?? null, m.winnerTeamId === m.homeTeamId),
+                away: side(teams.get(m.awayTeamId), m.awayTeamId, m.awayScore ?? null, m.winnerTeamId === m.awayTeamId),
+                decided: Boolean(m.winnerTeamId),
+              },
+            ]
+          : []
+      ),
+    }))
+    .filter((round) => round.ties.length > 0)
+    .slice(-BRACKET_ROUNDS);
+  return rounds.length > 0 ? { label: `${event.name} bracket`, rounds } : undefined;
 }
 
 /** Each league's next tournament and the day it starts, soonest first. */

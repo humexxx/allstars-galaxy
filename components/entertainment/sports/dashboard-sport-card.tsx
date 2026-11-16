@@ -24,6 +24,7 @@ import type {
   Team,
 } from "@/types/sports";
 
+import { DashboardBracket } from "./dashboard-bracket";
 import { DashboardCompetitionPicker } from "./dashboard-competition-picker";
 import { DashboardSportTables } from "./dashboard-sport-tables";
 import { DashboardSwiss } from "./dashboard-swiss";
@@ -83,8 +84,9 @@ export async function DashboardSportCard({
         </ul>
       </div>
     ));
-  const tables = (card.tables.length > 0 || card.swiss || card.note) && (
+  const tables = (card.tables.length > 0 || card.swiss || card.bracket || card.note) && (
     <>
+      {card.bracket && <DashboardBracket bracket={card.bracket} />}
       {card.tables.length > 0 && <DashboardSportTables tables={card.tables} />}
       {card.swiss && <DashboardSwiss swiss={card.swiss} />}
       {card.note && (

@@ -74,6 +74,19 @@ export type DashboardSwiss = {
   }[];
 };
 
+/**
+ * An event's knockouts, a column a round, for a card that leads with the
+ * event just played (LoL's off-season).
+ */
+export type DashboardBracket = {
+  /** "Worlds 2026 bracket". */
+  label: string;
+  rounds: {
+    label: string;
+    ties: { id: string; home: DashboardSide; away: DashboardSide; decided: boolean }[];
+  }[];
+};
+
 export type DashboardTable = {
   id: string;
   label: string;
@@ -127,6 +140,8 @@ export type DashboardSportCard = {
   tables: DashboardTable[];
   /** LoL's Swiss stage while it is played, in place of a table. */
   swiss?: DashboardSwiss;
+  /** The knockouts of the event the card leads with, in place of a table. */
+  bracket?: DashboardBracket;
   /**
    * In place of a table the sport has none of yet: the NBA's last champion
    * before the opener. `when` is an instant the card prints in the reader's

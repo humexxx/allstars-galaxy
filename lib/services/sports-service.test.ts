@@ -687,7 +687,7 @@ describe("the LoL card across a season", () => {
     ["2026-12-10", "Latest event"],
     ["2027-01-05", "Latest event"],
   ] as const) {
-    it(`after the final (${day}): the event with its champion and score, then the season's champions`, async () => {
+    it(`after the final (${day}): the event with its champion and score, then its bracket`, async () => {
       const card = await lolCardOn(`${day}T12:00:00Z`);
 
       expect(card.context).toBe("Worlds 2026 · Finals");
@@ -706,13 +706,20 @@ describe("the LoL card across a season", () => {
         runnerUp: "GEN",
         score: "3–2",
       });
-      // Each region's from its Finals: LPL's last round (IG) is not its final.
-      const champions = table(card).at(-1);
-      expect(champions).toEqual({
-        label: "2026 champions",
-        rows: ["T1 Worlds", "Team Liquid LCS", "G2 Esports LEC", "Anyone's Legend LPL", "Gen.G LCK"],
+      // The knockouts in the table's place, a column a round, down to the final.
+      // No champions' list beside it; only what comes next, once Lolesports lists it.
+      expect(card.tables.filter((t) => t.id !== "coming-up")).toEqual([]);
+      expect(card.bracket?.label).toBe("Worlds 2026 bracket");
+      expect(card.bracket?.rounds.map((r) => `${r.label} ${r.ties.length}`)).toEqual([
+        "Quarterfinals 4",
+        "Semifinals 2",
+        "Finals 1",
+      ]);
+      expect(card.bracket?.rounds.at(-1)?.ties[0]).toMatchObject({
+        home: { code: "T1", score: 3, winner: true },
+        away: { code: "GEN", score: 2, winner: false },
+        decided: true,
       });
-      expect(card.tables.at(-1)!.unranked).toBe(true);
     });
   }
 
@@ -801,7 +808,7 @@ describe("the LoL card after MSI or First Stand", () => {
     };
   }
 
-  it("lists each league's next tournament ahead of the champions once the feed has them", () => {
+  it("lists each league's next tournament under the bracket once the feed has them", () => {
     const card = __testing.lolCard(base, {
       splits: [finished("msi", "MSI 2027", ["T1", "GEN"], "2027-07-12T19:00:00Z")],
       upcoming: [
@@ -810,7 +817,8 @@ describe("the LoL card after MSI or First Stand", () => {
       ],
     });
 
-    expect(card.tables.map((t) => t.label)).toEqual(["Coming up", "Latest champions"]);
+    expect(card.tables.map((t) => t.label)).toEqual(["Coming up"]);
+    expect(card.bracket?.rounds.map((r) => r.label)).toEqual(["Finals"]);
     expect(card.tables[0].rows.map((r) => `${r.name} ${r.value}`)).toEqual([
       "LCK Cup Jan 14, 2027",
       "First Stand 2027 Mar 10, 2027",
@@ -820,16 +828,17 @@ describe("the LoL card after MSI or First Stand", () => {
   it.each([
     ["first-stand", "First Stand 2027"],
     ["msi", "MSI 2027"],
-  ] as const)("after %s's final the split winners are the latest champions, not the season's", (region, name) => {
+  ] as const)("with no bracket to draw after %s, the split winners are the latest champions, not the season's", (region, name) => {
     const card = __testing.lolCard(base, {
       splits: [
-        finished(region, name, ["GEN", "BLG"], "2027-03-22T12:00:00Z"),
+        { ...finished(region, name, ["GEN", "BLG"], "2027-03-22T12:00:00Z"), playoffs: undefined },
         finished("lck", "LCK Split 1", ["HLE", "T1"], "2027-03-01T08:00:00Z"),
         finished("lec", "LEC Split 1", ["G2", "FNC"], "2027-03-08T16:00:00Z"),
       ],
     });
 
-    expect(card.context).toBe(`${name} · Finals`);
+    expect(card.context).toBe(name);
+    expect(card.bracket).toBeUndefined();
     expect(card.tables.map((t) => ({ label: t.label, rows: t.rows.map((r) => `${r.code} ${r.value}`) }))).toEqual([
       { label: "Latest champions", rows: [`GEN ${region === "msi" ? "MSI" : "First Stand"}`, "HLE LCK", "G2 LEC"] },
     ]);

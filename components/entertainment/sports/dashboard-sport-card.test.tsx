@@ -162,6 +162,27 @@ describe("DashboardSportCard", () => {
     expect(screen.getByRole("list", { name: "Top seeds" }).parentElement).not.toContainElement(winner);
   });
 
+  it("draws an event's bracket in the table's place, a column a round", async () => {
+    const side = (code: string, score: number, winner: boolean) => ({ name: code, code, score, winner });
+    await renderCard({
+      ...card([]),
+      sportId: "lol",
+      label: "League of Legends",
+      featured: undefined,
+      bracket: {
+        label: "Worlds 2026 bracket",
+        rounds: [
+          { label: "Semifinals", ties: [{ id: "s1", home: side("BLG", 3, true), away: side("T1", 1, false), decided: true }] },
+          { label: "Finals", ties: [{ id: "f", home: side("GEN", 1, false), away: side("BLG", 3, true), decided: true }] },
+        ],
+      },
+    });
+    expect(screen.getByRole("heading", { level: 3, name: "Worlds 2026 bracket" })).toBeInTheDocument();
+    const final = within(screen.getByRole("list", { name: "Finals" })).getByRole("listitem");
+    // Each side reads its code and score, the loser first as the final was drawn.
+    expect(final.textContent).toMatch(/GEN.*1.*BLG.*3/);
+  });
+
   it("asks for the card on the championship it is set to", async () => {
     await renderCard(card([]), "lck");
 

@@ -943,6 +943,32 @@ describe("leadOrChampion", () => {
     });
   });
 
+  it("draws the postseason's closing rounds beside the champion", () => {
+    const clock = { timeZone: "UTC", now: Date.parse("2026-11-15T12:00:00Z") };
+    const tie = (id: string) => ({ id, homeTeamId: "tb", awayTeamId: "mil", homeScore: 1, awayScore: 3, winnerTeamId: "mil" });
+    const postseason: BracketRound[] = [
+      // Eight ties: too many for a card.
+      { id: "round-of-16", label: "Wild Card", matches: Array.from({ length: 8 }, (_, i) => tie(`wc${i}`)) },
+      { id: "quarter-final", label: "Division Series", matches: [tie("d1"), tie("d2"), tie("d3"), tie("d4")] },
+      { id: "semi-final", label: "League Championship Series", matches: [tie("l1"), tie("l2")] },
+      ...series,
+    ];
+    const lead = __testing.leadOrChampion([], postseason, teams, clock);
+    expect(lead.bracket).toMatchObject({ label: "Postseason bracket", short: "Bracket" });
+    expect(lead.bracket?.rounds.map((r) => `${r.label} ${r.ties.length}`)).toEqual([
+      "Division Series 4",
+      "League Championship Series 2",
+      "World Series 1",
+    ]);
+    expect(lead.bracket?.rounds.at(-1)?.ties[0]).toMatchObject({
+      home: { code: "TB", score: 1, winner: false },
+      away: { code: "MIL", score: 4, winner: true },
+      playedAt: "2026-10-28T23:00:00Z",
+    });
+    // While games are still listed, the card keeps them and draws no bracket.
+    expect(__testing.leadOrChampion([game], postseason, teams, { ...clock, now: Date.parse("2026-10-29T12:00:00Z") }).bracket).toBeUndefined();
+  });
+
   it("says Just finished for two weeks after the final", () => {
     const clock = { timeZone: "UTC", now: Date.parse("2026-11-01T12:00:00Z") };
     expect(__testing.leadOrChampion([], series, teams, clock).event?.label).toBeUndefined();

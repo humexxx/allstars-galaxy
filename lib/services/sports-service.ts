@@ -660,7 +660,16 @@ const fitsCard = (round: { ties: unknown[] }): boolean => round.ties.length > 0 
  * page — a column a round has no room for two trees.
  */
 function lolBracket(event: LolSplit, teams: Map<string, Team>): DashboardBracket | undefined {
-  const rounds = (event.playoffs ?? [])
+  return teamBracket(`${event.name} bracket`, event.playoffs, teams);
+}
+
+/** A knockout between teams, for a card: LoL's events, a league's postseason. */
+function teamBracket(
+  label: string,
+  playoffs: BracketRound[] | undefined,
+  teams: Map<string, Team>
+): DashboardBracket | undefined {
+  const rounds = (playoffs ?? [])
     .map((round) => ({
       label: round.label,
       ties: round.matches.flatMap((m) =>
@@ -679,7 +688,7 @@ function lolBracket(event: LolSplit, teams: Map<string, Team>): DashboardBracket
     }))
     .filter(fitsCard)
     .slice(-BRACKET_ROUNDS);
-  return rounds.length > 0 ? { label: `${event.name} bracket`, short: "Bracket", rounds } : undefined;
+  return rounds.length > 0 ? { label, short: "Bracket", rounds } : undefined;
 }
 
 /**
@@ -1086,7 +1095,7 @@ function leadOrChampion(
   playoffs: BracketRound[] | undefined,
   teams: Map<string, Team>,
   clock: CardClock
-): Pick<DashboardSportCard, "featured" | "following" | "matches" | "event"> {
+): Pick<DashboardSportCard, "featured" | "following" | "matches" | "event" | "bracket"> {
   const lead = featuredAndFollowing(games, teams, clock);
   if (lead.featured) return lead;
   const round = playoffs?.find((r) => r.id === "final");
@@ -1097,6 +1106,8 @@ function leadOrChampion(
   const recent = final.date !== undefined && clock.now - new Date(final.date).getTime() < JUST_FINISHED_MS;
   return {
     matches: [],
+    // How they got there, in the slot the standings share.
+    bracket: teamBracket("Postseason bracket", playoffs, teams),
     event: {
       name: round.label,
       detail: [final.bestOf && `Best of ${final.bestOf}`, final.date && formatDay(final.date, clock.timeZone)]

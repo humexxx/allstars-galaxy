@@ -678,6 +678,29 @@ function lolBracket(event: LolSplit, teams: Map<string, Team>): DashboardBracket
   return teamBracket(`${event.name} bracket`, event.playoffs, teams);
 }
 
+/**
+ * A two-legged tie nobody is drawn into yet reaches us as one tie per leg —
+ * a feed cannot pair fixtures without clubs. Read as they come, a semi-final
+ * showed four slots, or the one club already through twice.
+ */
+type BracketTie = DashboardBracket["rounds"][number]["ties"][number];
+
+function withoutSpareLegs(ties: BracketTie[], feeding: number | undefined): BracketTie[] {
+  const alone = new Set<string>();
+  const once = ties.filter((t) => {
+    if (t.home.tbd === t.away.tbd) return true;
+    const known = t.home.tbd ? t.away : t.home;
+    const key = known.code + known.name;
+    if (alone.has(key)) return false;
+    alone.add(key);
+    return true;
+  });
+  const slots = feeding === undefined ? once.length : Math.ceil(feeding / 2);
+  if (feeding === undefined || once.length <= slots || once.length > feeding) return once;
+  let spare = once.length - slots;
+  return once.filter((t) => !(t.home.tbd && t.away.tbd && spare-- > 0));
+}
+
 /** A knockout between teams, for a card: LoL's events, a league's postseason. */
 function teamBracket(
   label: string,
@@ -693,6 +716,8 @@ function teamBracket(
     return side(team, id, score ?? null, winner);
   };
   const all = (playoffs ?? [])
+    // The third-place game is no step towards the final, and would take a column from one.
+    .filter((round) => round.id !== "third-place")
     .map((round) => ({
       label: round.label,
       ties: round.matches
@@ -707,6 +732,7 @@ function teamBracket(
         })),
     }))
     .filter((round) => round.ties.length > 0)
+    .map((round, i, list) => ({ ...round, ties: withoutSpareLegs(round.ties, list[i - 1]?.ties.length) }))
     // A preliminary round — fewer ties than the round it feeds (MLS's wild
     // card) — is no column of the bracket: alone, it read as the whole of it.
     .filter((round, i, list) => i === list.length - 1 || round.ties.length >= list[i + 1].ties.length);
@@ -715,7 +741,9 @@ function teamBracket(
   // rounds, their sides "TBD" until known.
   const playing = all.findIndex((round) => round.ties.some((t) => !t.decided));
   if (playing !== -1 && all[playing].ties.length > BRACKET_TIES) return undefined;
-  let start = Math.max(0, all.length - BRACKET_ROUNDS);
+  // The round being played leads, unless too few follow it to fill the card.
+  const tail = Math.max(0, all.length - BRACKET_ROUNDS);
+  let start = playing === -1 ? tail : Math.min(playing, tail);
   while (start < all.length && all[start].ties.length > BRACKET_TIES) start++;
   const rounds = all.slice(start, start + BRACKET_ROUNDS);
   const drawn = rounds.some((round) => round.ties.some((t) => !t.home.tbd || !t.away.tbd));

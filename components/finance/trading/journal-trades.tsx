@@ -90,8 +90,8 @@ export function JournalTradesTable({
             <TableHeader className="sticky top-0 z-10 bg-card">
               <TableRow>
                 <TableHead>Instrument</TableHead>
-                <TableHead>Opened</TableHead>
-                <TableHead>Closed</TableHead>
+                <TableHead className="hidden sm:table-cell">Opened</TableHead>
+                <TableHead className="hidden sm:table-cell">Closed</TableHead>
                 <TableHead className="text-right">P&amp;L</TableHead>
                 <TableHead className="hidden md:table-cell">Notes</TableHead>
                 <TableHead className="w-8" />
@@ -107,18 +107,26 @@ export function JournalTradesTable({
               )}
               {shown.map((t) => {
                 const position = positionLabel(t);
+                const opened = formatDay(t.openedDay).replace(/, \d{4}$/, "");
+                const closed = t.closedDay ? formatDay(t.closedDay).replace(/, \d{4}$/, "") : null;
                 return (
                   <TableRow key={t.id} className={cn(pending && "opacity-70")}>
                     <TableCell>
                       <span className="flex flex-col">
                         <span className="font-medium">{t.symbol}</span>
                         {position && <span className="text-2xs text-muted-foreground">{position}</span>}
+                        {/* A phone has no room for two date columns beside the result:
+                            the dates ride under the instrument, and the P&L stays on screen. */}
+                        <span className="font-mono text-2xs text-muted-foreground sm:hidden">
+                          {opened}
+                          {closed == null ? " · open" : closed === opened ? "" : ` → ${closed}`}
+                        </span>
                       </span>
                     </TableCell>
-                    <TableCell className="font-mono">{formatDay(t.openedDay).replace(/, \d{4}$/, "")}</TableCell>
-                    <TableCell className="font-mono">
-                      {t.closedDay ? (
-                        formatDay(t.closedDay).replace(/, \d{4}$/, "")
+                    <TableCell className="hidden font-mono sm:table-cell">{opened}</TableCell>
+                    <TableCell className="hidden font-mono sm:table-cell">
+                      {closed ? (
+                        closed
                       ) : (
                         <Badge variant="outline" className="border-primary/50 text-primary">
                           Open

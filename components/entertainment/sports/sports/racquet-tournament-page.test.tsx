@@ -184,11 +184,12 @@ describe("RacquetTournamentPage", () => {
 
   it("says when a tournament not drawn yet starts, and that its draw is not out", () => {
     renderPage(KUWAIT, { status: "pending" });
-    expect(screen.getByText("The draw is not out yet")).toBeInTheDocument();
-
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Overview" }), { button: 0 });
+    // With no bracket to show, the page opens on the Overview.
     expect(screen.getByText("Starts in 8 days")).toBeInTheDocument();
     expect(document.querySelector("img")?.getAttribute("src")).toBe(KUWAIT.imageUrl);
+
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Bracket" }), { button: 0 });
+    expect(screen.getByText("The draw is not out yet")).toBeInTheDocument();
   });
 
   it("asks again by refreshing the page when the draw did not load", () => {
@@ -210,6 +211,7 @@ describe("RacquetTournamentPage", () => {
 
   it("says a fixture tournament's draw is not available", () => {
     renderPage({ ...MILANO, id: "wpt-m-doha" }, { status: "unavailable" });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Bracket" }), { button: 0 });
     expect(screen.getByText("This draw is not available")).toBeInTheDocument();
   });
 

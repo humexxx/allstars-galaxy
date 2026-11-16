@@ -24,9 +24,8 @@ import { getTennisData } from "@/lib/services/espn-tennis-service";
 import { leadRace, startsIn, weekendNow } from "@/lib/sports/f1-weekend";
 import { tournamentPath } from "@/lib/sports/paths";
 import { splitSeasonLabel } from "@/lib/sports/season";
-import { calendarDayInTimeZone, formatDayRange } from "@/lib/utils/date";
+import { calendarDayInTimeZone, formatDay, formatDayRange } from "@/lib/utils/date";
 import type {
-  BracketMatch,
   DashboardCompetitions,
   DashboardMatch,
   DashboardSide,
@@ -511,7 +510,7 @@ function lolSplitCard(base: CardBase, data: LolData, split: LolSplit | undefined
   if (!split) return { ...base, context: "No event on", matches: [], tables: [] };
   const teams = teamsById(split.teams);
   if (split.international && split.champion) {
-    return lolOffSeasonCard(base, data, { ...split, champion: split.champion }, teams);
+    return lolOffSeasonCard(base, data, { ...split, champion: split.champion }, teams, clock);
   }
   const lead = leadGames(
     split.matches.filter((m) => m.status !== "postponed" && m.status !== "cancelled").map((m) => lolCardMatch(m, teams)),
@@ -586,29 +585,59 @@ function swissFinished(stage: SwissStage): boolean {
   return stage.exits.length > 0 && stage.exits.every((exit) => exit.teamIds.length >= exit.slots);
 }
 
+/** How long a decided event still reads as "Just finished" on its card. */
+const JUST_FINISHED_MS = 14 * 86_400_000;
+
 /**
- * After an international final, until the next split starts: the final, the
- * rest of the knockouts, and the season's champions.
+ * After an international final, until the next split starts: the event with
+ * its champion and the final's score, the way a padel or tennis card leads
+ * with the tournament just won — the knockouts are a week old by then and
+ * live on the event's own page. Under it, what comes next, then the season's
+ * champions.
  */
 function lolOffSeasonCard(
   base: CardBase,
   data: LolData,
   event: LolSplit & { champion: LolChampion },
-  teams: Map<string, Team>
+  teams: Map<string, Team>,
+  clock: CardClock
 ): DashboardSportCard {
-  const knockouts = (event.playoffs ?? [])
-    .flatMap((round) => round.matches.map((match) => lolBracketCardMatch(match, round.label, teams)))
-    .filter((m) => m !== null)
-    .sort((a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime());
-  const featured = knockouts.find((m) => m.id === event.champion.final.id) ?? knockouts[0];
+  const { final, teamId } = event.champion;
+  const beatenId = final.homeTeamId === teamId ? final.awayTeamId : final.homeTeamId;
+  const games = [final.homeScore, final.awayScore].filter((n) => n != null).sort((x, y) => y - x);
+  const round = (event.playoffs ?? []).find((r) => r.matches.some((m) => m.id === final.id))?.label;
+  const recent = final.date !== undefined && clock.now - new Date(final.date).getTime() < JUST_FINISHED_MS;
+  const comingUp = lolComingUp(data);
   const champions = lolChampionsTable(data, event);
   return {
     ...base,
-    context: lolContext(event, featured),
-    featured,
-    following: knockouts.filter((m) => m !== featured).slice(0, CARD_SLIDES - 1),
+    context: round ? `${event.name} · ${round}` : event.name,
+    event: {
+      name: event.name,
+      detail: [round, final.bestOf && `BO${final.bestOf}`, final.date && formatDay(final.date, clock.timeZone)]
+        .filter(Boolean)
+        .join(" · "),
+      status: "completed",
+      label: recent ? undefined : "Latest event",
+      winner: teams.get(teamId)?.shortName ?? teamId,
+      // The code, not the name: "def. Gen.G Esports 3–1" lost its score on a phone.
+      runnerUp: beatenId ? (teams.get(beatenId)?.code ?? beatenId) : undefined,
+      score: games.length === 2 ? `${games[0]}–${games[1]}` : undefined,
+    },
     matches: [],
-    tables: champions ? [champions] : [],
+    tables: [comingUp, champions].filter((t) => t !== null),
+  };
+}
+
+/** Each league's next tournament and the day it starts, soonest first. */
+function lolComingUp(data: LolData): DashboardTable | null {
+  const next = (data.upcoming ?? []).slice(0, CARD_ROWS);
+  if (next.length === 0) return null;
+  return {
+    id: "coming-up",
+    label: "Coming up",
+    unranked: true,
+    rows: next.map((u, i) => ({ position: i + 1, name: u.name, flagEmoji: "🗓️", value: formatDay(u.startDate) })),
   };
 }
 
@@ -903,33 +932,6 @@ function lolCardMatch(match: LolMatch, teams: Map<string, Team>): DashboardMatch
     status: match.status === "live" ? "live" : match.status === "scheduled" ? "upcoming" : "result",
     startsAt: match.date,
     label: match.stageLabel ? `${match.stageLabel} · BO${match.bestOf}` : `BO${match.bestOf}`,
-  };
-}
-
-/** A knockout read off the bracket. Null until it is drawn, or when the schedule never dated it. */
-function lolBracketCardMatch(
-  match: BracketMatch,
-  round: string,
-  teams: Map<string, Team>
-): DashboardMatch | null {
-  if (!match.date || !match.homeTeamId || !match.awayTeamId) return null;
-  return {
-    id: match.id,
-    home: side(
-      teams.get(match.homeTeamId),
-      match.homeTeamId,
-      match.homeScore ?? null,
-      match.winnerTeamId === match.homeTeamId
-    ),
-    away: side(
-      teams.get(match.awayTeamId),
-      match.awayTeamId,
-      match.awayScore ?? null,
-      match.winnerTeamId === match.awayTeamId
-    ),
-    status: match.winnerTeamId ? "result" : "upcoming",
-    startsAt: match.date,
-    label: match.bestOf ? `${round} · BO${match.bestOf}` : round,
   };
 }
 

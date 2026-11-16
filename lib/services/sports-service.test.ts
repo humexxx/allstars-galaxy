@@ -680,32 +680,35 @@ describe("the LoL card across a season", () => {
     ]);
   });
 
-  for (const day of ["2026-11-20", "2026-12-10", "2027-01-05"]) {
-    it(`after the final (${day}): the final, the other knockouts and the season's champions`, async () => {
+  for (const [day, label] of [
+    ["2026-11-20", undefined],
+    ["2026-12-10", "Latest event"],
+    ["2027-01-05", "Latest event"],
+  ] as const) {
+    it(`after the final (${day}): the event with its champion and score, then the season's champions`, async () => {
       const card = await lolCardOn(`${day}T12:00:00Z`);
 
       expect(card.context).toBe("Worlds 2026 · Finals");
-      expect(card.featured).toMatchObject({
-        status: "result",
-        label: "Finals · BO5",
-        startsAt: "2026-11-14T19:00:00Z",
-        home: { code: "T1", score: 3, winner: true },
-        away: { code: "GEN", score: 2, winner: false },
+      // The event leads, as a padel tournament does; the knockouts are a week old.
+      expect(card.featured).toBeUndefined();
+      expect(card.following).toBeUndefined();
+      expect(card.event).toEqual({
+        name: "Worlds 2026",
+        detail: "Finals · BO5 · Nov 14, 2026",
+        status: "completed",
+        // "Just finished" for two weeks, then no longer true.
+        label,
+        winner: "T1",
+        runnerUp: "GEN",
+        score: "3–2",
       });
-      expect(card.following!.map(line)).toEqual([
-        "HLE v GEN result",
-        "KT v T1 result",
-        "G2 v GEN result",
-        "HLE v CFO result",
-      ]);
       // Each region's from its Finals: LPL's last round (IG) is not its final.
-      expect(table(card)).toEqual([
-        {
-          label: "2026 champions",
-          rows: ["T1 Worlds", "Team Liquid LCS", "G2 Esports LEC", "Anyone's Legend LPL", "Gen.G LCK"],
-        },
-      ]);
-      expect(card.tables[0].unranked).toBe(true);
+      const champions = table(card).at(-1);
+      expect(champions).toEqual({
+        label: "2026 champions",
+        rows: ["T1 Worlds", "Team Liquid LCS", "G2 Esports LEC", "Anyone's Legend LPL", "Gen.G LCK"],
+      });
+      expect(card.tables.at(-1)!.unranked).toBe(true);
     });
   }
 
@@ -793,6 +796,22 @@ describe("the LoL card after MSI or First Stand", () => {
       champion: { teamId: final.winnerTeamId!, final },
     };
   }
+
+  it("lists each league's next tournament ahead of the champions once the feed has them", () => {
+    const card = __testing.lolCard(base, {
+      splits: [finished("msi", "MSI 2027", ["T1", "GEN"], "2027-07-12T19:00:00Z")],
+      upcoming: [
+        { region: "lck", name: "LCK Cup", startDate: "2027-01-14" },
+        { region: "first-stand", name: "First Stand 2027", startDate: "2027-03-10" },
+      ],
+    });
+
+    expect(card.tables.map((t) => t.label)).toEqual(["Coming up", "Latest champions"]);
+    expect(card.tables[0].rows.map((r) => `${r.name} ${r.value}`)).toEqual([
+      "LCK Cup Jan 14, 2027",
+      "First Stand 2027 Mar 10, 2027",
+    ]);
+  });
 
   it.each([
     ["first-stand", "First Stand 2027"],

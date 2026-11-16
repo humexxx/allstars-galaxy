@@ -292,12 +292,12 @@ function FeaturedEvent({
   href: string;
 }): React.ReactElement {
   return (
-    <FeatureBox href={href} label={EVENT_LABEL[event.status]} status={<StatusPill status={event.status} />}>
+    <FeatureBox href={href} label={event.label ?? EVENT_LABEL[event.status]} status={<StatusPill status={event.status} />}>
       <span className="truncate text-sm font-semibold">{event.name}</span>
       <Text variant="small" as="span" className="truncate">
         {event.detail}
       </Text>
-      {event.winner && <WinnerLine winner={event.winner} beside={event.runnerUp && `def. ${event.runnerUp}`} />}
+      {event.winner && <WinnerLine winner={event.winner} beside={event.runnerUp && [`def. ${event.runnerUp}`, event.score].filter(Boolean).join(" ")} />}
     </FeatureBox>
   );
 }

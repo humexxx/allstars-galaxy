@@ -81,6 +81,17 @@ function tint(pnl: number, scale: number): string {
   return ["", "bg-destructive/10", "bg-destructive/15", "bg-destructive/25"][strength];
 }
 
+/**
+ * A day's result in the five characters a phone's cell has: no currency sign,
+ * the minus kept (colour alone would not say a loss), a decimal only under 10k.
+ */
+function cellAmount(pnl: number): string {
+  const abs = Math.abs(pnl);
+  const body =
+    abs < 9_950 || abs >= 999_500 ? formatCurrencyCompact(abs).replace("$", "") : `${Math.round(abs / 1_000)}k`;
+  return `${moneySign(pnl) < 0 && body !== "0" ? "-" : ""}${body}`;
+}
+
 const toneText = (n: number): string =>
   moneySign(n) > 0 ? "text-success" : moneySign(n) < 0 ? "text-destructive" : "text-muted-foreground";
 
@@ -170,11 +181,11 @@ export function JournalCalendarGrid({
   return (
     <div className="@container flex flex-col gap-1 xl:min-h-0 xl:flex-1">
       {/* What a cell says follows the width the calendar has, not the screen's: a
-          tablet's cell is narrower than a phone's is tall. Under 28rem the week
+          tablet's cell is narrower than a phone's is tall. Under 36rem the week
           column goes — seven days are the calendar, and an eighth cut every amount. */}
-      <div className="grid grid-cols-7 gap-0.5 text-center @md:grid-cols-8 sm:gap-1">
+      <div className="grid grid-cols-7 gap-0.5 text-center @xl:grid-cols-8 sm:gap-1">
         {[...WEEKDAY_HEADS, "Week"].map((d) => (
-          <Eyebrow key={d} size="sm" as="div" className={cn("py-1", d === "Week" && "hidden @md:block")}>
+          <Eyebrow key={d} size="sm" as="div" className={cn("py-1", d === "Week" && "hidden @xl:block")}>
             {d}
           </Eyebrow>
         ))}
@@ -188,7 +199,7 @@ export function JournalCalendarGrid({
         return (
           <div
             key={week[0]}
-            className="grid grid-cols-7 gap-0.5 @md:grid-cols-8 sm:gap-1 xl:min-h-0 xl:flex-1"
+            className="grid grid-cols-7 gap-0.5 @xl:grid-cols-8 sm:gap-1 xl:min-h-0 xl:flex-1"
             // The day cells take what the bars under them leave.
             style={{ gridTemplateRows: `minmax(0, 1fr) repeat(${lanes}, auto)` }}
           >
@@ -206,7 +217,7 @@ export function JournalCalendarGrid({
                   title={adjustment == null ? undefined : `Balance adjustment ${formatSignedCurrency(adjustment)}`}
                   style={{ gridColumn: i + 1, gridRow: 1 }}
                   className={cn(
-                    "flex min-h-16 min-w-0 cursor-pointer flex-col items-start gap-0.5 overflow-hidden rounded-md border p-1 text-left @md:p-1.5 outline-none transition-colors hover:border-foreground/30 focus-visible:ring-2 focus-visible:ring-ring sm:min-h-20 xl:min-h-12",
+                    "flex min-h-16 min-w-0 cursor-pointer flex-col items-start gap-0.5 overflow-hidden rounded-md border px-0.5 py-1 text-left @xl:p-1.5 outline-none transition-colors hover:border-foreground/30 focus-visible:ring-2 focus-visible:ring-ring sm:min-h-20 xl:min-h-12",
                     d ? tint(d.pnl, scale) : "bg-card",
                     outside && "opacity-40",
                     picked === day && "ring-2 ring-primary/60"
@@ -249,13 +260,12 @@ export function JournalCalendarGrid({
                   {d && (
                     <Mono
                       className={cn(
-                        "mt-auto w-full shrink-0 truncate text-2xs font-semibold @md:text-xs @5xl:text-sm",
+                        "mt-auto w-full shrink-0 overflow-hidden whitespace-nowrap text-2xs font-semibold @xl:text-xs @5xl:text-sm",
                         toneText(d.pnl)
                       )}
                     >
-                      {/* The colour says which way; a phone's cell has room for the size alone. */}
-                      <span className="@md:hidden">{formatCurrencyCompact(Math.abs(d.pnl)).replace("$", "")}</span>
-                      <span className="hidden @md:inline @3xl:hidden">{formatCurrencyCompact(d.pnl)}</span>
+                      <span className="@xl:hidden">{cellAmount(d.pnl)}</span>
+                      <span className="hidden @xl:inline @3xl:hidden">{formatCurrencyCompact(d.pnl)}</span>
                       <span className="hidden @3xl:inline">{formatSignedCurrency(d.pnl)}</span>
                     </Mono>
                   )}
@@ -264,7 +274,7 @@ export function JournalCalendarGrid({
             })}
             <div
               style={{ gridColumn: 8, gridRow: 1 }}
-              className="hidden min-w-0 flex-col items-end justify-center gap-0.5 rounded-md bg-muted/40 p-1.5 @md:flex"
+              className="hidden min-w-0 flex-col items-end justify-center gap-0.5 rounded-md bg-muted/40 p-1.5 @xl:flex"
             >
               <Mono className={cn("truncate text-xs font-semibold", toneText(weekPnl))}>
                 {weekTrades > 0 ? formatCurrencyCompact(weekPnl) : "—"}
@@ -295,7 +305,7 @@ export function JournalCalendarGrid({
                   {b.trade.symbol}
                   {!isResultOnly(b.trade) && (b.trade.side === "long" ? " ↑" : " ↓")}
                 </span>
-                <Mono className="hidden shrink-0 @md:inline">
+                <Mono className="hidden shrink-0 @xl:inline">
                   {b.trade.status === "open" ? "open" : formatCurrencyCompact(b.trade.pnl ?? 0)}
                 </Mono>
               </button>

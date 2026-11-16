@@ -119,7 +119,7 @@ export function JournalTradesTable({
                             the dates ride under the instrument, and the P&L stays on screen. */}
                         <span className="font-mono text-2xs text-muted-foreground sm:hidden">
                           {opened}
-                          {closed == null ? " · open" : closed === opened ? "" : ` → ${closed}`}
+                          {closed == null ? " · open" : t.closedDay === t.openedDay ? "" : ` → ${closed}`}
                         </span>
                       </span>
                     </TableCell>

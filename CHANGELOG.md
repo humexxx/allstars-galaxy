@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.21.1](https://github.com/humexxx/allstars-galaxy/compare/v0.21.0...v0.21.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* **finance:** keep a loss's minus in a phone's calendar cell and widen where the week column starts ([7ad36a7](https://github.com/humexxx/allstars-galaxy/commit/7ad36a7b20c93d5130dde0a315c34a62e611bd7b))
+* **portal:** fit the journal calendar, trades and dashboard to phones and tablets ([cce1f95](https://github.com/humexxx/allstars-galaxy/commit/cce1f95bc64d4ee635c3b99760ecaa93641e90c6))
+* **portal:** fit the journal calendar, trades and dashboard to phones and tablets ([f9cfaab](https://github.com/humexxx/allstars-galaxy/commit/f9cfaabb9702bafecca991ede80b53987e2b287c))
+* **portal:** fit the journal calendar, trades and dashboard to phones and tablets ([73f089a](https://github.com/humexxx/allstars-galaxy/commit/73f089a3246a9c1c004f00720c6797caea740351))
+
 ## [0.21.0](https://github.com/humexxx/allstars-galaxy/compare/v0.20.0...v0.21.0) (2026-11-16)
 
 

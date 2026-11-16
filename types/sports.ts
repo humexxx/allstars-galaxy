@@ -114,6 +114,8 @@ export type DashboardBracketSide = DashboardSide & {
   photos?: Array<string | null>;
   /** The seed in this event, for an entry that has one. */
   seed?: string;
+  /** Nobody yet: the slot waits for an earlier tie's winner. */
+  tbd?: boolean;
   /** The score as it is written where a bare number is not it: a surf heat total, "16.90". */
   scoreLabel?: string;
 };

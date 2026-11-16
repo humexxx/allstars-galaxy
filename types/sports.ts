@@ -81,11 +81,27 @@ export type DashboardSwiss = {
 export type DashboardBracket = {
   /** "Worlds 2026 bracket". */
   label: string;
+  /** The name of its view where the card switches between it and a table ("Bracket", "Draw"). */
+  short: string;
   rounds: {
     label: string;
-    ties: { id: string; home: DashboardSide; away: DashboardSide; decided: boolean }[];
+    ties: {
+      id: string;
+      home: DashboardBracketSide;
+      away: DashboardBracketSide;
+      decided: boolean;
+      /** When it was played, an instant or a calendar day, for the tie's tooltip. */
+      playedAt?: string;
+    }[];
   }[];
 };
+
+/**
+ * A side of a bracket tie. A team shows its crest; a player or a pair sets
+ * `flag` instead — the flag emoji, or "" for none — and `code` carries the
+ * surname(s) the tie prints.
+ */
+export type DashboardBracketSide = DashboardSide & { flag?: string };
 
 export type DashboardTable = {
   id: string;

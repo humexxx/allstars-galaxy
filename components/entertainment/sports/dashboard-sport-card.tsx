@@ -25,6 +25,7 @@ import type {
 } from "@/types/sports";
 
 import { DashboardBracket } from "./dashboard-bracket";
+import { DashboardCardSwitch } from "./dashboard-card-switch";
 import { DashboardCompetitionPicker } from "./dashboard-competition-picker";
 import { DashboardSportTables } from "./dashboard-sport-tables";
 import { DashboardSwiss } from "./dashboard-swiss";
@@ -86,8 +87,29 @@ export async function DashboardSportCard({
     ));
   const tables = (card.tables.length > 0 || card.swiss || card.bracket || card.note) && (
     <>
-      {card.bracket && <DashboardBracket bracket={card.bracket} />}
-      {card.tables.length > 0 && <DashboardSportTables tables={card.tables} />}
+      {card.bracket && card.tables.length > 0 ? (
+        // One slot, switched: a draw over a table made the card half as tall again.
+        <DashboardCardSwitch
+          label={`${card.label} views`}
+          views={[
+            {
+              id: "bracket",
+              label: card.bracket.short,
+              content: <DashboardBracket bracket={card.bracket} format={format} hideLabel />,
+            },
+            ...card.tables.map((t) => ({
+              id: t.id,
+              label: t.label,
+              content: <DashboardSportTables tables={[t]} hideLabel />,
+            })),
+          ]}
+        />
+      ) : (
+        <>
+          {card.bracket && <DashboardBracket bracket={card.bracket} format={format} />}
+          {card.tables.length > 0 && <DashboardSportTables tables={card.tables} />}
+        </>
+      )}
       {card.swiss && <DashboardSwiss swiss={card.swiss} />}
       {card.note && (
         <div className="flex flex-col gap-1">

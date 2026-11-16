@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { ReactNode } from "react";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { DashboardMatch, DashboardSportCard as Card } from "@/types/sports";
@@ -171,16 +171,51 @@ describe("DashboardSportCard", () => {
       featured: undefined,
       bracket: {
         label: "Worlds 2026 bracket",
+        short: "Bracket",
         rounds: [
           { label: "Semifinals", ties: [{ id: "s1", home: side("BLG", 3, true), away: side("T1", 1, false), decided: true }] },
-          { label: "Finals", ties: [{ id: "f", home: side("GEN", 1, false), away: side("BLG", 3, true), decided: true }] },
+          {
+            label: "Finals",
+            ties: [
+              { id: "f", home: side("GEN", 1, false), away: side("BLG", 3, true), decided: true, playedAt: "2026-11-14T19:00:00Z" },
+            ],
+          },
         ],
       },
     });
+    // No column headings: the round and the day are each tie's tooltip.
+    expect(screen.queryByText("Semifinals")).toBeNull();
+    expect(within(screen.getByRole("list", { name: "Finals" })).getByRole("listitem")).toHaveAttribute(
+      "title",
+      "Finals · Nov 14"
+    );
     expect(screen.getByRole("heading", { level: 3, name: "Worlds 2026 bracket" })).toBeInTheDocument();
     const final = within(screen.getByRole("list", { name: "Finals" })).getByRole("listitem");
     // Each side reads its code and score, the loser first as the final was drawn.
     expect(final.textContent).toMatch(/GEN.*1.*BLG.*3/);
+  });
+
+  it("switches one slot between an event's draw and the rankings rather than stacking them", async () => {
+    const entrant = (code: string, score: number, winner: boolean) => ({ name: code, code, score, winner, flag: "" });
+    await renderCard({
+      ...card([]),
+      sportId: "tennis",
+      label: "Tennis",
+      featured: undefined,
+      bracket: {
+        label: "Stockholm Open draw",
+        short: "Draw",
+        rounds: [{ label: "Final", ties: [{ id: "f", home: entrant("Fritz", 2, true), away: entrant("Tirante", 0, false), decided: true }] }],
+      },
+      tables: [{ id: "atp", label: "Rankings", rows: [{ position: 1, name: "A. Zverev", value: "9,320" }] }],
+    });
+    const views = screen.getByRole("group", { name: "Tennis views" });
+    expect(within(views).getAllByRole("radio").map((r) => r.textContent)).toEqual(["Draw", "Rankings"]);
+    expect(screen.getByText("Fritz")).toBeInTheDocument();
+    expect(screen.queryByText("A. Zverev")).toBeNull();
+    fireEvent.click(within(views).getByRole("radio", { name: "Rankings" }));
+    expect(screen.getByText("A. Zverev")).toBeInTheDocument();
+    expect(screen.queryByText("Fritz")).toBeNull();
   });
 
   it("asks for the card on the championship it is set to", async () => {

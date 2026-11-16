@@ -15,7 +15,14 @@ import { TeamBadge } from "./shared/team-badge";
  * A client island inside a server card: which table is showing is the only
  * state, so that is all that ships.
  */
-export function DashboardSportTables({ tables }: { tables: DashboardTable[] }): React.ReactElement | null {
+export function DashboardSportTables({
+  tables,
+  hideLabel = false,
+}: {
+  tables: DashboardTable[];
+  /** Inside a switch, whose control already names a lone table. */
+  hideLabel?: boolean;
+}): React.ReactElement | null {
   const [active, setActive] = useState(tables[0]?.id);
   const table = tables.find((t) => t.id === active) ?? tables[0];
   if (!table) return null;
@@ -38,9 +45,11 @@ export function DashboardSportTables({ tables }: { tables: DashboardTable[] }): 
           ))}
         </ToggleGroup>
       ) : (
-        <Eyebrow size="sm" asChild>
-          <h3>{table.label}</h3>
-        </Eyebrow>
+        !hideLabel && (
+          <Eyebrow size="sm" asChild>
+            <h3>{table.label}</h3>
+          </Eyebrow>
+        )
       )}
       <ol role="list" className="flex flex-col gap-1">
         {table.rows.map((row) => (

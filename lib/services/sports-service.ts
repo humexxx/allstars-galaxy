@@ -662,6 +662,7 @@ function lolBracket(event: LolSplit, teams: Map<string, Team>): DashboardBracket
                 home: side(teams.get(m.homeTeamId), m.homeTeamId, m.homeScore ?? null, m.winnerTeamId === m.homeTeamId),
                 away: side(teams.get(m.awayTeamId), m.awayTeamId, m.awayScore ?? null, m.winnerTeamId === m.awayTeamId),
                 decided: Boolean(m.winnerTeamId),
+                playedAt: m.date,
               },
             ]
           : []
@@ -669,7 +670,57 @@ function lolBracket(event: LolSplit, teams: Map<string, Team>): DashboardBracket
     }))
     .filter((round) => round.ties.length > 0)
     .slice(-BRACKET_ROUNDS);
-  return rounds.length > 0 ? { label: `${event.name} bracket`, rounds } : undefined;
+  return rounds.length > 0 ? { label: `${event.name} bracket`, short: "Bracket", rounds } : undefined;
+}
+
+/**
+ * A racquet event's draw for its card: the last rounds, each side by surname
+ * (a pair's two) with the sets it won. A tie nobody is drawn into yet is left
+ * out, so an event under way shows the rounds it has reached.
+ */
+function racquetBracket(
+  name: string,
+  rounds: BracketRound[] | undefined,
+  players: Team[],
+  pairs: boolean
+): DashboardBracket | undefined {
+  const byId = teamsById(players);
+  const entrant = (id: string, sets: number | null, winner: boolean): DashboardBracket["rounds"][number]["ties"][number]["home"] => {
+    const p = byId.get(id);
+    const shortName = p?.shortName ?? id;
+    return {
+      name: shortName,
+      // "Coello/Tapia"; a player goes by the surname ("T. Fritz" → "Fritz").
+      code: pairs ? shortName.replace(" / ", "/") : (shortName.split(" ").at(-1) ?? shortName),
+      score: sets,
+      winner,
+      flag: pairs ? "" : (p?.name ?? ""),
+    };
+  };
+  const drawn = (rounds ?? [])
+    .map((round) => ({
+      label: round.label,
+      ties: round.matches.flatMap((m) => {
+        if (!m.homeTeamId || !m.awayTeamId) return [];
+        const played = (m.legs ?? []).filter((leg) => leg.homeScore !== null && leg.awayScore !== null);
+        const sets = (home: boolean): number | null =>
+          played.length === 0
+            ? null
+            : played.filter((leg) => (home ? leg.homeScore! > leg.awayScore! : leg.awayScore! > leg.homeScore!)).length;
+        return [
+          {
+            id: m.id,
+            home: entrant(m.homeTeamId, sets(true), m.winnerTeamId === m.homeTeamId),
+            away: entrant(m.awayTeamId, sets(false), m.winnerTeamId === m.awayTeamId),
+            decided: Boolean(m.winnerTeamId),
+            playedAt: m.date ?? played.at(-1)?.date,
+          },
+        ];
+      }),
+    }))
+    .filter((round) => round.ties.length > 0)
+    .slice(-BRACKET_ROUNDS);
+  return drawn.length > 0 ? { label: `${name} draw`, short: "Draw", rounds: drawn } : undefined;
 }
 
 /** Each league's next tournament and the day it starts, soonest first. */
@@ -800,9 +851,14 @@ function racquetCard(
   draw: RacquetDraw | null = null
 ): DashboardSportCard {
   const event = leadEvent(data.tournaments, (t) => t.champion, clock);
-  const faces = event
-    ? eventFaces(draw?.rounds ?? event.bracket, draw?.players ?? data.drawPlayers ?? [])
-    : {};
+  const rounds = draw?.rounds ?? event?.bracket;
+  const players = draw?.players ?? data.drawPlayers ?? [];
+  const faces = event ? eventFaces(rounds, players) : {};
+  // An event still to start has no draw worth a column: the rankings stand alone.
+  const bracket =
+    event && event.status !== "upcoming"
+      ? racquetBracket(event.name, rounds, players, base.sportId === "padel")
+      : undefined;
   return {
     ...base,
     context,
@@ -819,6 +875,7 @@ function racquetCard(
         }
       : undefined,
     matches: [],
+    bracket,
     tables: [
       {
         id: data.tour,

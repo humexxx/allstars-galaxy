@@ -1047,6 +1047,35 @@ describe("racquetCard", () => {
       expect(event.winnerFace).toBeUndefined();
     });
 
+    it("draws the event's last rounds by surname, with the sets each side won", () => {
+      const final = rounds("fritz");
+      final[1].matches[0] = {
+        ...final[1].matches[0],
+        date: "2026-10-25",
+        legs: [
+          { homeScore: 6, awayScore: 4 },
+          { homeScore: 7, awayScore: 6 },
+        ],
+      };
+      const named = players.map((p) => (p.id === "fritz" ? { ...p, shortName: "T. Fritz" } : p));
+      const week = { ...tour([{ ...won, bracket: final }]), drawPlayers: named };
+      const bracket = __testing.racquetCard(base, week, "ATP", sunday).bracket!;
+      expect(bracket).toMatchObject({ label: "Stockholm draw", short: "Draw" });
+      expect(bracket.rounds.map((r) => r.label)).toEqual(["Semi-finals", "Final"]);
+      expect(bracket.rounds[1].ties[0]).toMatchObject({
+        home: { code: "Fritz", score: 2, winner: true, flag: "🇺🇸" },
+        away: { code: "tirante", score: 0, winner: false },
+        decided: true,
+        playedAt: "2026-10-25",
+      });
+    });
+
+    it("draws no bracket for an event still to start", () => {
+      const next = { ...tournament("Stockholm", "upcoming"), bracket: rounds() };
+      const week = { ...tour([next]), drawPlayers: players };
+      expect(__testing.racquetCard(base, week, "ATP", sunday).bracket).toBeUndefined();
+    });
+
     it("reads a draw the feed did not ship, and goes without when there is none", () => {
       const week = tour([won]);
       expect(__testing.racquetCard(base, week, "ATP", sunday).event?.seeds).toBeUndefined();

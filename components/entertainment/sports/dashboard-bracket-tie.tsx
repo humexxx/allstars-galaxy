@@ -53,6 +53,19 @@ export function BracketTie({
         {[tie.home, tie.away].map((side, i) => (
           <span key={i} className="flex items-center justify-between gap-4">
             <span className={cn("flex items-center gap-2", side.winner ? "font-semibold" : tie.decided && "opacity-70")}>
+              {/* A team's crest, as the tie itself draws it; a player's or a pair's face below. */}
+              {side.photos === undefined && !side.tbd && (
+                <TeamBadge
+                  team={{
+                    name: side.name,
+                    shortName: side.name,
+                    code: side.code,
+                    primaryColor: side.color,
+                    logoUrl: side.logoUrl,
+                  }}
+                  size="sm"
+                />
+              )}
               {side.photos && side.photos.length > 0 && (
                 <span className="flex shrink-0">
                   {side.photos.map((src, n) =>

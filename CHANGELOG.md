@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.20.0](https://github.com/humexxx/allstars-galaxy/compare/v0.19.1...v0.20.0) (2026-11-16)
+
+
+### Features
+
+* **entertainment:** draw a surf stop's closing heats and its winner's face on the card ([082cb01](https://github.com/humexxx/allstars-galaxy/commit/082cb01eafff4895c3567470d057b145a8c09428))
+* **entertainment:** draw the last event's bracket on the LoL dashboard card ([f67f427](https://github.com/humexxx/allstars-galaxy/commit/f67f427cb56edacb0c78db0f48246abb7da3f001))
+* **entertainment:** print the seed on a draw's ties and show the faces in their tooltip ([2fbba2f](https://github.com/humexxx/allstars-galaxy/commit/2fbba2fffcc2c903003f177c13cff2be4261239d))
+* **entertainment:** show a tournament's top seeds and its winner's face on the dashboard card ([2608015](https://github.com/humexxx/allstars-galaxy/commit/260801568984dcc0635ee4918e32f007eb1a0976))
+* **entertainment:** show less to scroll past in the sports hub and nothing that is not there yet ([57ea905](https://github.com/humexxx/allstars-galaxy/commit/57ea9050c92ad17070dff9e73cf7e54772e58f72))
+* **entertainment:** shrink the card bracket and give tennis and padel their draw ([0ad04ae](https://github.com/humexxx/allstars-galaxy/commit/0ad04ae647776ae46476cf2eb015901bc46e001e))
+* **entertainment:** tooltips on the card's bracket and faces, and a switch that keeps its height ([70d5ffc](https://github.com/humexxx/allstars-galaxy/commit/70d5ffc4fbab84e06ead59705ff4235cb971aa31))
+* **finance:** adjust the trading journal's balance to what the account really holds ([62db076](https://github.com/humexxx/allstars-galaxy/commit/62db076e5f9dfb0ec43051854c1780a0eab88963))
+* **finance:** record a trade by its result and pick its instrument from the market ([a938b7e](https://github.com/humexxx/allstars-galaxy/commit/a938b7e0407f236596f968d0690eb0a1e7d5b213))
+* **portal:** give the mascot a plainer cap, a collar and a steadier face ([e2c3b3c](https://github.com/humexxx/allstars-galaxy/commit/e2c3b3c5d2fa81c3d8069444ac8b65a7317ecbd5))
+* **portal:** let each account pick who plays the module mascot ([273910a](https://github.com/humexxx/allstars-galaxy/commit/273910a8705aba6f63e082a0c4717838d0098769))
+* **portal:** shade the mascot and its ground like a handheld overworld ([36ef64e](https://github.com/humexxx/allstars-galaxy/commit/36ef64e9508793029ad0d4c78972f1de2185d974))
+* **portfolio:** head the owner's chart with allocations and margin against last month ([e556c19](https://github.com/humexxx/allstars-galaxy/commit/e556c1991b0740dfaa1cb47c2aea134774c767c5))
+* sports hub phone pass, card brackets, balance adjustments and mascot characters ([0478972](https://github.com/humexxx/allstars-galaxy/commit/047897205685b6fb9ba014bc381670e9f8572e41))
+* sports hub phone pass, card brackets, trading balance adjustment and mascot characters ([4898e62](https://github.com/humexxx/allstars-galaxy/commit/4898e62f7a209efeb43342f78096f350fa702657))
+
+
+### Bug Fixes
+
+* **entertainment:** keep the card's bracket to late rounds and count only sets that are won ([9b47acd](https://github.com/humexxx/allstars-galaxy/commit/9b47acda649452b6b78ca44444848f9aef4ba096))
+* **entertainment:** lead the LoL card with the event just won and keep the phone header solid ([ca7df99](https://github.com/humexxx/allstars-galaxy/commit/ca7df990353bde8f443d3add9f876b1479c43a4c))
+* **entertainment:** lead the sports hub with what matters on a phone ([d411381](https://github.com/humexxx/allstars-galaxy/commit/d411381dc1a084b067ae3799f0a179ca3b6d73c1))
+* **entertainment:** name a finished league's champion on its card and show the winner's crest ([28b4356](https://github.com/humexxx/allstars-galaxy/commit/28b43567aaa7db93dd77449fa839ff69e4e4836d))
+* **finance:** app-styled trade date picker and a clearer owner overview ([7bc617a](https://github.com/humexxx/allstars-galaxy/commit/7bc617ac4227a996f644c261f673a67c16dade84))
+* **finance:** measure net worth's change from the snapshot before this period's confirmation ([b71b8f9](https://github.com/humexxx/allstars-galaxy/commit/b71b8f9d0a098555f0dd29151abe3698999d30a3))
+* **finance:** net worth's change baseline, and a trade form that asks for the result ([c8d5483](https://github.com/humexxx/allstars-galaxy/commit/c8d54835cce53bf609b9e6a4ae65f96c7aff5921))
+* **finance:** pick a trade's day and time from the app's own calendar ([9c037de](https://github.com/humexxx/allstars-galaxy/commit/9c037dee9e433b342e4ea1f4af1f03ddc71765da))
+
 ## [0.19.1](https://github.com/humexxx/allstars-galaxy/compare/v0.19.0...v0.19.1) (2026-11-10)
 
 

@@ -1115,7 +1115,7 @@ describe("racquetCard", () => {
 
     it("draws no bracket while the event is in rounds too big for a card", () => {
       const sixteen = Array.from({ length: 16 }, (_, i) => ({ id: `r${i}`, homeTeamId: "fritz", awayTeamId: "paul" }));
-      const early = [{ id: "round-of-32", label: "Round of 32", matches: sixteen }];
+      const early: BracketRound[] = [{ id: "round-of-32", label: "Round of 32", matches: sixteen }];
       const week = { ...tour([{ ...tournament("Stockholm", "live"), bracket: early }]), drawPlayers: players };
       expect(__testing.racquetCard(base, week, "ATP", sunday).bracket).toBeUndefined();
     });

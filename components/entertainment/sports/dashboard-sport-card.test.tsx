@@ -211,7 +211,9 @@ describe("DashboardSportCard", () => {
     const views = screen.getByRole("group", { name: "Tennis views" });
     expect(within(views).getAllByRole("radio").map((r) => r.textContent)).toEqual(["Draw", "Rankings"]);
     // Both are laid out, so the slot keeps the taller one's height; only the chosen one is live.
-    const shown = (text: string): boolean => screen.getByText(text).closest("[data-view]")!.hasAttribute("inert") === false;
+    // A side's name is printed twice: the short one seen, the full one read out.
+    const shown = (text: string): boolean =>
+      screen.getAllByText(text)[0].closest("[data-view]")!.hasAttribute("inert") === false;
     expect(shown("Fritz")).toBe(true);
     expect(shown("A. Zverev")).toBe(false);
     fireEvent.click(within(views).getByRole("radio", { name: "Rankings" }));

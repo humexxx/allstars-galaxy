@@ -545,6 +545,11 @@ export type F1Data = {
   drivers: F1Driver[];
   constructors: F1Constructor[];
   races: F1Race[];
+  /**
+   * The last round both tables count. A race reads as completed before its
+   * points land, so this, not the calendar, says what is still to score.
+   */
+  standingsRound?: number;
 };
 
 // ---------- NBA ----------
@@ -634,6 +639,11 @@ export type RacquetTournament = {
   prize?: { amount: number; currency: string };
   /** Last edition's champion — the name to beat before this one has a final. */
   defendingChampion?: string;
+  /**
+   * A stage outside the knockout draw that is being played right now: the ATP
+   * Finals' "Group stage". Set only while it has started and has ties left.
+   */
+  stageInPlay?: string;
 };
 
 /** One line of a tour's season calendar: no draw, just enough to list it and open it. */
@@ -889,6 +899,8 @@ export type LolStanding = {
   losses: number;
   /** Recent form, most recent first (max 5). */
   form?: FormResult[];
+  /** Its group ("Legend Group"), when the split is played in more than one. */
+  group?: string;
 };
 
 export type LolMatch = {

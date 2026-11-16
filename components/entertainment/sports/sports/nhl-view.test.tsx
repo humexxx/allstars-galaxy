@@ -44,11 +44,10 @@ describe("NhlView", () => {
     expect(screen.getByText("Season 2026–27")).toBeInTheDocument();
   });
 
-  it("opens on Overview with the Playoffs locked while there is no bracket", () => {
+  it("opens on Overview with no Playoffs tab while there is no bracket", () => {
     renderOn(REGULAR_SEASON);
     expect(openTab()).toBe("Overview");
-    expect(playoffs()).toBeDisabled();
-    expect(playoffs().querySelector("svg")).not.toBeNull();
+    expect(screen.queryByRole("tab", { name: "Playoffs" })).toBeNull();
   });
 
   it("keeps last spring's finished bracket behind its tab once there are games again", () => {

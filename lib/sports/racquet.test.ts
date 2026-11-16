@@ -132,7 +132,10 @@ describe("playLine", () => {
     expect(playLine({ ...live, status: "upcoming" }, undefined, "2026-11-14")).toBe("Starts tomorrow");
   });
 
-  // ESPN names both sides of the ATP Finals' semi-finals "TBD", with ids, from day one.
+  it("names the stage played before the draw while there is no round to name", () => {
+    expect(playLine({ ...live, stageInPlay: "Group stage" }, undefined, "2026-11-15")).toBe("Group stage under way");
+  });
+
   it("calls a round next while its ties have two names and nothing played", () => {
     expect(playLine(live, semis(tie("s1"), tie("s2")), "2026-11-15")).toBe("Semi-finals next");
   });

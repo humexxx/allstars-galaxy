@@ -31,6 +31,13 @@ describe("ScoreCard", () => {
     expect(screen.getAllByText("1")).toHaveLength(2);
   });
 
+  it("leaves its stage out under a heading that says it for the whole day", () => {
+    const { rerender } = render(<ScoreCard match={shootout} teams={teams} />);
+    expect(screen.getByText("Round of 32")).toBeInTheDocument();
+    rerender(<ScoreCard match={shootout} teams={teams} hideStage />);
+    expect(screen.queryByText("Round of 32")).toBeNull();
+  });
+
   it("marks the side that won the shoot-out", () => {
     render(<ScoreCard match={shootout} teams={teams} />);
     expect(screen.getByText("Paraguay")).toHaveClass("font-semibold");

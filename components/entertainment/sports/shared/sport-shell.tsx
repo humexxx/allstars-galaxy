@@ -196,7 +196,10 @@ export function SportShell({
           </div>
         </div>
         {hubControls && (
-          <div className="flex max-w-full min-w-0 items-center gap-2">
+          // Under a sport (a race, a tournament) the breadcrumb is the way
+          // back: the sports only show where they fit on the name's line,
+          // not as a row of their own between the name and the tabs.
+          <div className={cn("max-w-full min-w-0 items-center gap-2", parent ? "hidden @5xl:flex" : "flex")}>
             {hubControls}
           </div>
         )}

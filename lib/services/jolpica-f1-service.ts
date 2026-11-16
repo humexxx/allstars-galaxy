@@ -692,11 +692,19 @@ function tallyPodiums(racesWithResults: JolpicaRace[]): {
 /** The calendar and both championships: what the view cannot do without. */
 type F1Core = {
   season: number;
+  /** The last round both standings count; nothing when the feed's is unreadable. */
+  standingsRound?: number;
   races: JolpicaRace[];
   drivers: JolpicaDriverStanding[];
   constructors: JolpicaConstructorStanding[];
   portraits: F1DriverPortrait[];
 };
+
+/** The last round both tables count: one can refresh a round ahead of the other. */
+function standingsRound(drivers: string, constructors: string): number | undefined {
+  const round = Math.min(parseInt(drivers, 10), parseInt(constructors, 10));
+  return Number.isNaN(round) ? undefined : round;
+}
 
 async function fetchF1Core(): Promise<F1Core> {
   // Alongside Jolpica, not after it. Pictures are an extra: when ESPN fails
@@ -719,6 +727,7 @@ async function fetchF1Core(): Promise<F1Core> {
 
   return {
     season: parseInt(schedule.MRData.RaceTable.season, 10),
+    standingsRound: standingsRound(drivers.round, constructors.round),
     races: schedule.MRData.RaceTable.Races,
     drivers: drivers.DriverStandings,
     constructors: constructors.ConstructorStandings,
@@ -797,6 +806,7 @@ export async function getF1Data(now: number = Date.now()): Promise<F1Data> {
       },
       now,
     ),
+    standingsRound: core.standingsRound,
   };
 }
 
@@ -902,4 +912,5 @@ export const __testing = {
   fastestLapsByRound,
   sprintWinnersByRound,
   deriveRaceStatus,
+  standingsRound,
 };

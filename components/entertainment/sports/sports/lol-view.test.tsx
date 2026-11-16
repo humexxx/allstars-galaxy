@@ -278,12 +278,49 @@ describe("LolView, a league's matches and table", () => {
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Standings" }), { button: 0 });
 
     const table = screen.getByRole("table", { name: "LCK Split 3 standings" });
-    expect(within(table).getAllByRole("rowheader").map((h) => h.textContent)).toEqual([
-      "Gen.G",
-      "Hanwha Life Esports",
-    ]);
+    const heads = within(table).getAllByRole("rowheader");
+    expect(heads).toHaveLength(2);
+    expect(within(heads[1]).getByText("Hanwha Life Esports")).toBeInTheDocument();
     expect(within(table).getByRole("columnheader", { name: "Wins" })).toHaveTextContent("W");
     expect(within(table).getByRole("columnheader", { name: "Losses" })).toHaveTextContent("L");
+  });
+
+  it("gives a phone the team's code and keeps its name for wider screens", () => {
+    renderView({ splits: [played] });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Standings" }), { button: 0 });
+
+    const [, hle] = within(screen.getByRole("table")).getAllByRole("rowheader");
+    expect(within(hle).getByText("HLE")).toHaveClass("sm:hidden");
+    expect(within(hle).getByText("Hanwha Life Esports")).toHaveClass("hidden", "sm:inline");
+  });
+
+  it("labels each group of a split played in groups, once, above its first team", () => {
+    const groups: LolSplit = {
+      ...played,
+      standings: [
+        { position: 1, teamId: "gen", wins: 5, losses: 3, group: "Legend Group" },
+        { position: 2, teamId: "hle", wins: 4, losses: 4, group: "Legend Group" },
+        { position: 1, teamId: "kt", wins: 4, losses: 4, group: "Rise Group" },
+      ],
+    };
+    renderView({ splits: [groups] });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Standings" }), { button: 0 });
+
+    const rows = within(screen.getByRole("table")).getAllByRole("row");
+    expect(rows.map((r) => within(r).queryByRole("columnheader", { name: /Group/ })?.textContent ?? "team")).toEqual([
+      "team",
+      "Legend Group",
+      "team",
+      "team",
+      "Rise Group",
+      "team",
+    ]);
+  });
+
+  it("puts no label above a single table", () => {
+    renderView({ splits: [played] });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Standings" }), { button: 0 });
+    expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(3);
   });
 });
 
@@ -316,9 +353,9 @@ describe("LolView, an international event's stages", () => {
 
   it("is a tab a stage, in the order played, on the Swiss stage while the playoffs are undrawn", () => {
     renderView({ splits: [during, lck] });
-    expect(tabs()).toEqual(["Play-ins", "Swiss stage", "Playoffs"]);
+    // No Playoffs tab until the bracket is drawn: a locked one was a tab to nothing.
+    expect(tabs()).toEqual(["Play-ins", "Swiss stage"]);
     expect(openTab()).toBe("Swiss stage");
-    expect(screen.getByRole("tab", { name: "Playoffs" })).toBeDisabled();
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Play-ins" }), { button: 0 });
     expect(screen.getAllByText("Final").length).toBeGreaterThan(0);
   });

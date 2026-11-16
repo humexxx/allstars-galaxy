@@ -1,6 +1,6 @@
 "use client";
 
-import { Lock, RotateCw, Timer } from "lucide-react";
+import { RotateCw, Timer } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition, type ReactNode, type Ref } from "react";
 
@@ -58,12 +58,14 @@ type F1RacePageProps = {
 
 /**
  * One race on a page of its own, laid out as F1's page is: the same name
- * row with the favourites and the sport picker, its title a breadcrumb
- * ("Formula 1 › Mexico City Grand Prix"). Overview: the circuit, big, with
- * its place and what is on or next, beside the weekend's timetable, the
- * podium, pole, fastest lap and sprint. Results (locked until a session has
- * run): every session's order as it comes in and, for a finished race, the
- * whole field with its points.
+ * row, its title a breadcrumb ("Formula 1 › Mexico City Grand Prix"), the
+ * favourites and the sport picker beside it where they fit on its line.
+ * Overview: the circuit, big, with its place and what is on or next, beside
+ * the weekend's timetable, the podium, pole, fastest lap and sprint. Results
+ * (a tab only once a session has run, and no tab strip before; the
+ * timetable says when that is):
+ * every session's order as it comes in and, for a finished race, the whole
+ * field with its points.
  *
  * Everything comes with the page (read on the server); what was not in yet is
  * asked for again by refreshing it.
@@ -125,15 +127,14 @@ export function F1RacePage({
           title={race.name}
           subtitle={`Round ${race.round} · ${season} Season`}
           parent={{ label: F1?.label ?? "Formula 1", href: sportPath("f1") }}
+          // No strip for the Overview alone: one tab is nothing to choose.
           tabs={
-            <TabsList variant="line">
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              {/* Locked until a session has run: where its orders will be is worth knowing. */}
-              <TabsTrigger value="results" disabled={!hasTables}>
-                {!hasTables && <Lock aria-hidden />}
-                Results
-              </TabsTrigger>
-            </TabsList>
+            hasTables && (
+              <TabsList variant="line">
+                <TabsTrigger value="overview">Overview</TabsTrigger>
+                <TabsTrigger value="results">Results</TabsTrigger>
+              </TabsList>
+            )
           }
         >
           <TabsContent value="overview">

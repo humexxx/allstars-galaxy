@@ -10,11 +10,11 @@ import type { NflData } from "@/types/sports";
 import { NflView } from "./nfl-view";
 
 describe("NflView", () => {
-  it("is headed by the league, and opens on Overview with the bracket locked", () => {
+  it("is headed by the league, and opens on Overview with no bracket tab", () => {
     render(<NflView data={{ ...NFL_DATA, playoffs: [] }} />);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("NFL");
     expect(screen.getByRole("tab", { selected: true })).toHaveTextContent("Overview");
-    expect(screen.getByRole("tab", { name: "Playoffs" })).toBeDisabled();
+    expect(screen.queryByRole("tab", { name: "Playoffs" })).toBeNull();
   });
 
   it("puts the standings beside the games, in the shared split", () => {
@@ -41,13 +41,13 @@ describe("NflView", () => {
     expect(screen.getByRole("table", { name: "NFC standings" })).toBeInTheDocument();
   });
 
-  it("keeps the Playoffs locked while the bracket has nobody in it, and opens on it once it has", () => {
+  it("has no Playoffs tab while the bracket has nobody in it, and opens on it once it has", () => {
     const [home, away] = NFL_DATA.teams;
     const round = (homeTeamId: string | null, awayTeamId: string | null): NflData["playoffs"] => [
       { id: "final", label: "Super Bowl", matches: [{ id: "sb", homeTeamId, awayTeamId }] },
     ];
     const { unmount } = render(<NflView data={{ ...NFL_DATA, playoffs: round(null, null) }} />);
-    expect(screen.getByRole("tab", { name: "Playoffs" })).toBeDisabled();
+    expect(screen.queryByRole("tab", { name: "Playoffs" })).toBeNull();
     unmount();
 
     render(<NflView data={{ ...NFL_DATA, playoffs: round(home.id, away.id) }} />);

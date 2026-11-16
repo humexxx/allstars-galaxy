@@ -192,6 +192,8 @@ describe("SportShell", () => {
     const favorites = screen.getByRole("button", { name: "Manage favorites (2)" });
     const sport = screen.getByRole("button", { name: "⚽ Football, change sport" });
     const end = nameRow().lastElementChild!;
+    expect(end).toHaveClass("flex");
+    expect(end).not.toHaveClass("hidden");
     expect(end).toContainElement(favorites);
     expect(end).toContainElement(sport);
     expect(end).not.toContainElement(screen.getByRole("heading", { level: 1 }));
@@ -200,6 +202,20 @@ describe("SportShell", () => {
     // They scroll away with the name.
     expect(tabsRow()).not.toContainElement(favorites);
     expect(tabsRow()).not.toContainElement(sport);
+  });
+
+  it("keeps the hub's controls off a phone on a page under a sport, where the breadcrumb leads back", () => {
+    render(
+      <SportHubControls.Provider value={HUB}>
+        <SportShell sportId="f1" title="Monaco Grand Prix" parent={{ label: "Formula 1", href: "/f1" }}>
+          Race
+        </SportShell>
+      </SportHubControls.Provider>
+    );
+    const end = screen.getByRole("button", { name: "Manage favorites (2)" }).parentElement!;
+    expect(end).toHaveClass("hidden", "@5xl:flex");
+    expect(end).not.toHaveClass("flex");
+    expect(screen.getByRole("link", { name: "Formula 1" })).toHaveAttribute("href", "/f1");
   });
 
   it("leaves the name row to the name outside the hub", () => {

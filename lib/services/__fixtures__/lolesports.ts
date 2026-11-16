@@ -152,6 +152,8 @@ type Regional = {
   /** The stage slug and section name the league files its playoff under. */
   playoffStage: [slug: string, section: string];
   ranking: [code: string, wins: number, losses: number][];
+  /** The table as groups instead, for a split played in them. */
+  groups?: [name: string, ranking: [code: string, wins: number, losses: number][]][];
   playoffs: Spec[];
   /** A stage after the final (LPL's Regional Qualifier). */
   after?: { stage: [slug: string, section: string]; matches: Spec[] };
@@ -189,6 +191,8 @@ const REGIONALS_2026: Record<string, Regional> = {
     tournament: { id: "lck_split_3_2026", slug: "lck_split_3_2026", startDate: "2026-07-28", endDate: "2026-09-13" },
     playoffStage: ["regional_championship", "Regional Championship"],
     ranking: [["GEN", 16, 2], ["HLE", 14, 4]],
+    // As lolesports sent it in 2026: two groups, each ranked from 1.
+    groups: [["Legend Group", [["GEN", 16, 2], ["HLE", 14, 4]]], ["Rise Group", [["DK", 12, 6]]]],
     playoffs: [
       final("lck", "2026-09-12T05:00:00Z", "Playoffs", "HLE", "T1", [3, 1]),
       final("lck", "2026-09-13T05:00:00Z", "Finals", "GEN", "HLE", [3, 1]),
@@ -283,7 +287,9 @@ function standingsFor(tournamentId: string, now: string): object | null {
     const [slug, section] = regional.playoffStage;
     return {
       stages: [
-        { slug: "regular_season", name: "Regular Season", sections: [{ name: "Regular Season", rankings: ranked(regional.ranking) }] },
+        regional.groups
+          ? { slug: "groups", name: "Groups", sections: regional.groups.map(([name, rows]) => ({ name, rankings: ranked(rows) })) }
+          : { slug: "regular_season", name: "Regular Season", sections: [{ name: "Regular Season", rankings: ranked(regional.ranking) }] },
         { slug, name: section, sections: [{ name: section, rankings: [], matches: regional.playoffs.map((s) => standingsMatch(s, now)) }] },
         ...(regional.after
           ? [

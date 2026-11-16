@@ -10,7 +10,7 @@ import {
   type ReactElement,
   type Ref,
 } from "react";
-import { CalendarX, Lock, RotateCw } from "lucide-react";
+import { CalendarX, RotateCw } from "lucide-react";
 
 import { getLolSplitAction } from "@/app/actions/lol";
 import { Button } from "@/components/ui/button";
@@ -178,11 +178,8 @@ export function LolView({ data, news = [], initialTab, initialRegion }: LolViewP
 
   // Once the final is played the bracket and the news are what is read, so
   // they lead the strip; until then the tabs keep the order of play.
-  const playoffsTrigger = playoffs && (
-    <TabsTrigger value="playoffs" disabled={stages && !playoffsDrawn}>
-      {stages && !playoffsDrawn && <Lock aria-hidden />}
-      Playoffs
-    </TabsTrigger>
+  const playoffsTrigger = playoffs && !(stages && !playoffsDrawn) && (
+    <TabsTrigger value="playoffs">Playoffs</TabsTrigger>
   );
   const newsTrigger = hasNews && <TabsTrigger value="news">News</TabsTrigger>;
 
@@ -591,17 +588,28 @@ function LolStandings({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.shown.map((row) => {
+            {rows.shown.map((row, i) => {
               const team = teamsMap.get(row.teamId);
+              const opensGroup = row.group && row.group !== rows.shown[i - 1]?.group;
               return (
-                <TableRow key={row.teamId}>
+                <Fragment key={row.teamId}>
+                {opensGroup && (
+                  <TableRow className="bg-muted/20 hover:bg-muted/20">
+                    <TableHead scope="colgroup" colSpan={5} className="h-8 pl-3">
+                      <Eyebrow as="span">{row.group}</Eyebrow>
+                    </TableHead>
+                  </TableRow>
+                )}
+                <TableRow>
                   <TableCell className="pl-3 text-sm tabular-nums text-muted-foreground">
                     {row.position}
                   </TableCell>
                   <TableHead scope="row" className="font-normal text-foreground">
                     <div className="flex items-center gap-2">
                       {team && <TeamBadge team={team} size="sm" />}
-                      <span className="text-sm">{team?.shortName ?? row.teamId}</span>
+                      {/* The code on a phone: a full name pushed "Last 5" off the row. */}
+                      <span className="text-sm sm:hidden">{team?.code ?? row.teamId}</span>
+                      <span className="hidden text-sm sm:inline">{team?.shortName ?? row.teamId}</span>
                     </div>
                   </TableHead>
                   <TableCell className="text-center">
@@ -616,6 +624,7 @@ function LolStandings({
                     )}
                   </TableCell>
                 </TableRow>
+                </Fragment>
               );
             })}
           </TableBody>

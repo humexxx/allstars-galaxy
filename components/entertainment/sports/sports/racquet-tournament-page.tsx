@@ -20,9 +20,9 @@ import { TournamentCard, TournamentFacts } from "./racquet-tournaments";
 
 /**
  * One padel or tennis tournament on a page of its own, laid out as the
- * sport's page is: the same name row, the favourites and the sport picker
- * at its end, its title a breadcrumb back to the sport ("Padel › Kuwait
- * Major 2026"). Two tabs: the Bracket, which it opens on, the whole draw the
+ * sport's page is: the same name row, its title a breadcrumb back to the
+ * sport ("Padel › Kuwait Major 2026"), the favourites and the sport picker
+ * at its end where they fit on its line. Two tabs: the Bracket, which it opens on, the whole draw the
  * width of the page under the champion's name once it is over; and the Overview, a card with the poster, the facts
  * (the champions among them, once there are some) and the three best seeds.
  *

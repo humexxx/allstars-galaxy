@@ -19,7 +19,12 @@ const DECIDED: BracketRound[] = UNDECIDED.map((round) =>
     : round
 );
 
-function renderView(props: { games?: Match[]; playoffs?: BracketRound[]; table?: React.ReactNode }): void {
+function renderView(props: {
+  games?: Match[];
+  playoffs?: BracketRound[];
+  table?: React.ReactNode;
+  initialTab?: string;
+}): void {
   render(
     <SportsTodayProvider today="2026-11-15">
       <LeagueView
@@ -32,6 +37,7 @@ function renderView(props: { games?: Match[]; playoffs?: BracketRound[]; table?:
         playoffs={props.playoffs ?? []}
         bracketLabel="Postseason"
         news={[]}
+        initialTab={props.initialTab}
         emptyTitle="No games scheduled"
         table={props.table}
       />
@@ -40,6 +46,16 @@ function renderView(props: { games?: Match[]; playoffs?: BracketRound[]; table?:
 }
 
 describe("LeagueView", () => {
+  it("has no bracket tab until somebody is drawn into it, and a link to it lands on the Overview", () => {
+    renderView({
+      initialTab: "bracket",
+      playoffs: [{ id: "final", label: "World Series", matches: [{ id: "ws", homeTeamId: null, awayTeamId: null }] }],
+    });
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Overview"]);
+    expect(screen.getByRole("tab", { selected: true })).toHaveTextContent("Overview");
+    expect(screen.getByRole("tabpanel")).not.toBeEmptyDOMElement();
+  });
+
   it("names the champion above a decided bracket, under the final's own name", () => {
     renderView({ playoffs: DECIDED });
     expect(screen.getByText("World Series champions")).toBeInTheDocument();

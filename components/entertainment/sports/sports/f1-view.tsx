@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Trophy } from "lucide-react";
 
 import {
   Table,
@@ -12,6 +13,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Mono, Text } from "@/components/ui/typography";
+import { f1Champions } from "@/lib/sports/f1-title";
 import { f1Interest, fromF1Wire, leadStory } from "@/lib/sports/news";
 import { cn } from "@/lib/utils";
 import type {
@@ -71,6 +73,7 @@ export function F1View({ data, news = [], initialTab, weekend }: F1ViewProps): R
   const opening = openingView(initialTab, news.length > 0);
   const [championship, setChampionship] = useState<Championship>(opening.championship);
   const wire = useMemo(() => leadStory(fromF1Wire(news), f1Interest(data)), [news, data]);
+  const champions = useMemo(() => f1Champions(data), [data]);
 
   return (
     <Tabs defaultValue={opening.tab} className="gap-6">
@@ -107,9 +110,16 @@ export function F1View({ data, news = [], initialTab, weekend }: F1ViewProps): R
                   </ToggleGroup>
                 </div>
                 {championship === "drivers" ? (
-                  <DriversTable drivers={data.drivers} constructors={data.constructors} />
+                  <DriversTable
+                    drivers={data.drivers}
+                    constructors={data.constructors}
+                    champion={champions.driver}
+                  />
                 ) : (
-                  <ConstructorsTable constructors={data.constructors} />
+                  <ConstructorsTable
+                    constructors={data.constructors}
+                    champion={champions.constructorName}
+                  />
                 )}
               </TableCard>
             }
@@ -127,12 +137,28 @@ export function F1View({ data, news = [], initialTab, weekend }: F1ViewProps): R
   );
 }
 
+/**
+ * Beside the name of whoever has the title won, and of nobody until the
+ * points left cannot change it (`f1Champions`).
+ */
+function ChampionMark(): React.ReactElement {
+  return (
+    <>
+      <Trophy aria-hidden className="ml-1 inline size-3.5 align-text-bottom text-warning" />
+      <span className="sr-only"> (Champion)</span>
+    </>
+  );
+}
+
 function DriversTable({
   drivers,
   constructors,
+  champion,
 }: {
   drivers: F1Driver[];
   constructors: F1Constructor[];
+  /** The code of the driver who has clinched the title. */
+  champion?: string;
 }): React.ReactElement {
   // Faces come from ESPN. Without them the table keeps its flags, in a slot
   // only as wide as a flag, and the team's name under the driver's.
@@ -165,6 +191,7 @@ function DriversTable({
                     <span className="flex flex-col leading-tight">
                       <Text as="span" weight="medium">
                         {d.shortName}
+                        {d.code === champion && <ChampionMark />}
                         <span className="sr-only">, {d.team}</span>
                       </Text>
                       <DroppedFigures wins={d.wins} podiums={d.podiums} />
@@ -174,7 +201,10 @@ function DriversTable({
                   <div className="flex items-center gap-3">
                     <span className="text-base leading-none">{d.flagEmoji}</span>
                     <div className="leading-tight">
-                      <Text as="div" weight="medium">{d.shortName}</Text>
+                      <Text as="div" weight="medium">
+                        {d.shortName}
+                        {d.code === champion && <ChampionMark />}
+                      </Text>
                       <Text variant="small" as="div">{d.team}</Text>
                       <DroppedFigures wins={d.wins} podiums={d.podiums} />
                     </div>
@@ -242,7 +272,14 @@ function DroppedFigures({ wins, podiums }: { wins: number; podiums: number }): R
   );
 }
 
-function ConstructorsTable({ constructors }: { constructors: F1Constructor[] }): React.ReactElement {
+function ConstructorsTable({
+  constructors,
+  champion,
+}: {
+  constructors: F1Constructor[];
+  /** The name of the team that has clinched the title. */
+  champion?: string;
+}): React.ReactElement {
   const rows = useShownRows(constructors);
   return (
     <>
@@ -274,7 +311,10 @@ function ConstructorsTable({ constructors }: { constructors: F1Constructor[] }):
                       team: with the logo beside it, "Cadillac F1
                       Team" pushed Podiums off a phone's screen. */}
                   <span className="flex flex-col leading-tight">
-                    <Text as="span" weight="medium">{c.shortName}</Text>
+                    <Text as="span" weight="medium">
+                      {c.shortName}
+                      {c.name === champion && <ChampionMark />}
+                    </Text>
                     <DroppedFigures wins={c.wins} podiums={c.podiums} />
                   </span>
                 </div>

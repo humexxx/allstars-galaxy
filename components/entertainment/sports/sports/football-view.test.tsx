@@ -160,11 +160,10 @@ describe("FootballView", () => {
     expect(within(west).getAllByRole("rowheader")[0]).toHaveTextContent("Vancouver");
   });
 
-  it("keeps the Knockout tab locked until the play-offs are drawn", () => {
+  it("has no Knockout tab until the play-offs are drawn", () => {
     renderLeague("mls");
-    expect(tabs()).toEqual(["Overview", "Knockout"]);
+    expect(tabs()).toEqual(["Overview"]);
     expect(openTab()).toBe("Overview");
-    expect(screen.getByRole("tab", { name: "Knockout" })).toBeDisabled();
   });
 
   it("opens on the play-offs once they are drawn", () => {

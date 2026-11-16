@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { matchDays } from "@/lib/sports/match-days";
 import type { Match, MatchStatus, SavedTeamFilter, Team } from "@/types/sports";
 
-import { MatchesByDate, openingDayIndex } from "./matches-by-date";
+import { closingDayIndex, MatchesByDate, openingDayIndex } from "./matches-by-date";
 import { SportShell } from "./sport-shell";
 import { StandingsTable } from "./standings-table";
 import { SavedTeamFilterProvider } from "./team-filter-context";
@@ -128,6 +128,19 @@ const shownDays = (container: HTMLElement): (string | null)[] =>
 const earlierButton = (): HTMLElement | null =>
   screen.queryByRole("button", { name: /^Earlier: Show / });
 
+const laterButton = (): HTMLElement | null =>
+  screen.queryByRole("button", { name: /^Later: Show / });
+
+// A week of nightly games from today on, after one night of results.
+const nightly = [
+  match("n-17", "2026-10-17T20:00:00Z", "ft"),
+  ...[18, 19, 20, 21, 22, 23, 24, 25].map((d) =>
+    match(`n-${d}`, `2026-10-${d}T20:00:00Z`, "scheduled")
+  ),
+];
+
+const staged = (m: Match, stageLabel: string): Match => ({ ...m, stageLabel });
+
 const teamFilter = (): HTMLElement | null => screen.queryByRole("button", { name: /^Filter by team/ });
 
 /** The heading line over `day`'s matches. */
@@ -213,7 +226,110 @@ describe("openingDayIndex", () => {
   });
 });
 
+describe("closingDayIndex", () => {
+  const days = matchDays(nightly, ZONE);
+
+  it("stops three match days from today on, counted from the opening day", () => {
+    expect(closingDayIndex(days, TODAY, 1, 3)).toBe(4);
+    // Opening on yesterday's results: they are not one of the three.
+    expect(closingDayIndex(days, TODAY, 0, 3)).toBe(4);
+  });
+
+  it("shows a single day left over rather than hiding it behind a tap", () => {
+    expect(closingDayIndex(days.slice(0, 5), TODAY, 1, 3)).toBe(5);
+    expect(closingDayIndex(days.slice(0, 6), TODAY, 1, 3)).toBe(4);
+  });
+
+  it("runs to the end of a list with no more days than that", () => {
+    expect(closingDayIndex(days.slice(0, 3), TODAY, 1, 3)).toBe(3);
+    expect(closingDayIndex(matchDays(season.slice(0, 3), ZONE), TODAY, 2, 3)).toBe(3);
+  });
+});
+
 describe("MatchesByDate", () => {
+  it("opens on today and the next match days, three in all, the rest behind Later", () => {
+    const { container } = renderList(nightly);
+    expect(shownDays(container)).toEqual(["2026-10-18", "2026-10-19", "2026-10-20"]);
+    expect(laterButton()).toHaveAccessibleName("Later: Show Oct 21 – Oct 23");
+    expect(screen.getByText("5 more match days")).toBeInTheDocument();
+    // Under the last day, on a line of its own, not on a day's heading.
+    expect(laterButton()!.closest("[data-day]")).toBeNull();
+    const lastDay = [...container.querySelectorAll("[data-day]")].at(-1)!;
+    expect(lastDay.compareDocumentPosition(laterButton()!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it("brings in three later days a tap, focusing the first of them without scrolling", () => {
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    const { container } = renderList(nightly);
+
+    fireEvent.click(laterButton()!);
+    expect(shownDays(container)).toHaveLength(6);
+    expect(container.querySelector('[data-day="2026-10-21"]')).toHaveFocus();
+    expect(laterButton()).toHaveAccessibleName("Later: Show Oct 24 – Oct 25");
+    expect(screen.getByText("2 more match days")).toBeInTheDocument();
+
+    fireEvent.click(laterButton()!);
+    expect(shownDays(container)).toHaveLength(8);
+    expect(container.querySelector('[data-day="2026-10-24"]')).toHaveFocus();
+    expect(laterButton()).toBeNull();
+    expect(scrolled).not.toHaveBeenCalled();
+  });
+
+  it("keeps Earlier and Later apart: one grows the top, the other the bottom", () => {
+    const { container } = renderList(nightly);
+    fireEvent.click(earlierButton()!);
+    expect(shownDays(container)).toEqual(["2026-10-17", "2026-10-18", "2026-10-19", "2026-10-20"]);
+    fireEvent.click(laterButton()!);
+    expect(shownDays(container)[0]).toBe("2026-10-17");
+    expect(shownDays(container)).toHaveLength(7);
+  });
+
+  it("gives a team's own fixtures five match days ahead, and starts again on another pick", () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    const { container } = renderList(nightly, { list: LA_LIGA, teamIds: ["rma"] });
+    expect(shownDays(container)).toEqual([
+      "2026-10-17",
+      "2026-10-18",
+      "2026-10-19",
+      "2026-10-20",
+      "2026-10-21",
+      "2026-10-22",
+    ]);
+    fireEvent.click(laterButton()!);
+    expect(shownDays(container)).toHaveLength(9);
+    expect(laterButton()).toBeNull();
+
+    openFilter();
+    fireEvent.click(screen.getByRole("option", { name: "All teams" }));
+    expect(shownDays(container)).toEqual(["2026-10-18", "2026-10-19", "2026-10-20"]);
+  });
+
+  it("says a stage every card of a day shares once, in the day's heading", () => {
+    const { container } = renderList([
+      staged(match("a", "2026-10-18T18:00:00Z", "scheduled"), "Matchday 9"),
+      staged(match("b", "2026-10-18T20:00:00Z", "scheduled", "atm", "sev"), "Matchday 9"),
+    ]);
+    expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent(/^Today · .+ · Matchday 9$/);
+    expect(within(container.querySelector("ul")!).queryByText("Matchday 9")).toBeNull();
+  });
+
+  it("keeps the stage on the cards of a day that mixes them, or has a card with none", () => {
+    const { container } = renderList([
+      staged(match("a", "2026-10-18T18:00:00Z", "scheduled"), "Matchday 9"),
+      staged(match("b", "2026-10-18T20:00:00Z", "scheduled", "atm", "sev"), "Matchday 4"),
+      staged(match("c", "2026-10-19T18:00:00Z", "scheduled"), "Matchday 9"),
+      match("d", "2026-10-19T20:00:00Z", "scheduled", "atm", "sev"),
+    ]);
+    const [first, second] = screen.getAllByRole("heading", { level: 2 });
+    expect(first).not.toHaveTextContent("Matchday");
+    expect(second).not.toHaveTextContent("Matchday");
+    const cards = container.querySelectorAll("ul");
+    expect(within(cards[0] as HTMLElement).getByText("Matchday 9")).toBeInTheDocument();
+    expect(within(cards[0] as HTMLElement).getByText("Matchday 4")).toBeInTheDocument();
+    expect(within(cards[1] as HTMLElement).getByText("Matchday 9")).toBeInTheDocument();
+  });
+
   it("opens on the freshest results on a day with no game, and keeps the days before behind Earlier", () => {
     const { container } = renderList(restDay);
     expect(shownDays(container)).toEqual(["2026-10-17", "2026-10-21"]);

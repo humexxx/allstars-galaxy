@@ -17,6 +17,8 @@ type ScoreCardProps = {
   as?: "div" | "li";
   /** Under a heading that already names the day: the card leaves it out. */
   hideDay?: boolean;
+  /** Under a heading that already names the stage every card of the day shares. */
+  hideStage?: boolean;
   className?: string;
 };
 
@@ -71,6 +73,7 @@ export function ScoreCard({
   teams,
   as: Root = "div",
   hideDay = false,
+  hideStage = false,
   className,
 }: ScoreCardProps): React.ReactElement | null {
   const format = useMatchTime();
@@ -100,7 +103,7 @@ export function ScoreCard({
       )}
     >
       <div className="flex min-w-0 flex-col gap-1">
-        {match.stageLabel && (
+        {match.stageLabel && !hideStage && (
           <Eyebrow size="sm" className="truncate">
             {match.stageLabel}
           </Eyebrow>

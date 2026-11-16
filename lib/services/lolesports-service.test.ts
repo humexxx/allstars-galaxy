@@ -541,6 +541,18 @@ describe("getLolData across the end of a season", () => {
     });
   });
 
+  it("names a row's group only where the split is played in more than one", async () => {
+    const data = await lolDataOn("2026-11-20T12:00:00Z");
+
+    expect(split(data, "lck").standings.map((r) => [r.position, r.teamId, r.group])).toEqual([
+      [1, "gen", "Legend Group"],
+      [2, "hle", "Legend Group"],
+      [1, "dk", "Rise Group"],
+    ]);
+    // One section, "Regular Season": a name for the table, not a group.
+    expect(split(data, "lec").standings.every((r) => !("group" in r))).toBe(true);
+  });
+
   it("still leads with Worlds in December, when the old three weeks were up", async () => {
     const data = await lolDataOn("2026-12-10T12:00:00Z");
 

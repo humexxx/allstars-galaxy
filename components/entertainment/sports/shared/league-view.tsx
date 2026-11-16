@@ -1,8 +1,6 @@
 "use client";
 
 import { useMemo, type ReactNode } from "react";
-import { Lock } from "lucide-react";
-
 import { Card, CardContent } from "@/components/ui/card";
 import { TableHead } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -30,9 +28,10 @@ export function useTeamsMap(teams: readonly Team[]): Map<string, Team> {
  * day by day beside the sport's own table, a team tapped in either narrowing
  * the games to its own), the bracket, and News when there is any.
  *
- * The bracket's tab is always there, locked until somebody is drawn into it:
- * where the bracket will be is worth knowing before it exists. Once there is
- * one the view opens on it, unless the sport says otherwise (`opensOnBracket`).
+ * The bracket's tab is not there until somebody is drawn into it: a locked
+ * tab was something to tap that did nothing, for most of a season. Once there
+ * is a bracket the view opens on it, unless the sport says otherwise
+ * (`opensOnBracket`).
  */
 export function LeagueView({
   sportId,
@@ -94,10 +93,7 @@ export function LeagueView({
         tabs={
           <TabsList variant="line">
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="bracket" disabled={!hasPlayoffs}>
-              {!hasPlayoffs && <Lock aria-hidden />}
-              {bracketLabel}
-            </TabsTrigger>
+            {hasPlayoffs && <TabsTrigger value="bracket">{bracketLabel}</TabsTrigger>}
             {hasNews && <TabsTrigger value="news">News</TabsTrigger>}
           </TabsList>
         }

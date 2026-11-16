@@ -58,12 +58,8 @@ export function WorldCupView({
         titleMenu={leagues}
         tabs={
           <TabsList variant="line">
-            <TabsTrigger value="groups" disabled={!hasGroups}>
-              Groups
-            </TabsTrigger>
-            <TabsTrigger value="knockout" disabled={!hasKnockout}>
-              Knockout
-            </TabsTrigger>
+            {hasGroups && <TabsTrigger value="groups">Groups</TabsTrigger>}
+            {hasKnockout && <TabsTrigger value="knockout">Knockout</TabsTrigger>}
             {news.length > 0 && <TabsTrigger value="news">News</TabsTrigger>}
           </TabsList>
         }

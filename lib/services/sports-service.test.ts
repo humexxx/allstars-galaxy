@@ -369,7 +369,9 @@ describe("getDashboardSportCard", () => {
       headline,
       published: `2026-10-24T0${id}:00:00Z`,
       images: [{ type: "header", url: `https://a.espncdn.com/photo/${id}.jpg`, width: 600 }],
-      links: { web: { href: `https://www.espn.com/nba/story/_/id/${id}` } },
+      // No sport's desk: one wire serves all three here, and a story filed
+      // under another sport's is dropped.
+      links: { web: { href: `https://www.espn.com/espn/story/_/id/${id}` } },
     });
     vi.stubGlobal(
       "fetch",

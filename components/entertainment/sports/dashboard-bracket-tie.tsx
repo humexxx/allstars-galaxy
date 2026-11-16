@@ -18,15 +18,35 @@ type Tie = DashboardBracket["rounds"][number]["ties"][number];
  * streaming is not an element yet — the trigger rendered nothing, and the
  * column came out empty in the server's HTML.
  */
-export function BracketTie({ tie, when }: { tie: Tie; when: string }): React.ReactElement {
+export function BracketTie({
+  tie,
+  when,
+  oneLine = false,
+}: {
+  tie: Tie;
+  when: string;
+  /** "ORL 1–0 CIN" on one line, for a column of more than four ties. */
+  oneLine?: boolean;
+}): React.ReactElement {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <li className="flex flex-col rounded-md bg-muted/40 px-1.5 py-0.5">
-          <span className="sr-only">{when}: </span>
-          <BracketSide side={tie.home} decided={tie.decided} />
-          <BracketSide side={tie.away} decided={tie.decided} />
-        </li>
+        {oneLine ? (
+          <li className="flex h-5 items-center gap-1 rounded-md bg-muted/40 px-1.5 text-2xs">
+            <span className="sr-only">{when}: </span>
+            <LineSide side={tie.home} decided={tie.decided} />
+            <Mono className="shrink-0 text-2xs text-muted-foreground">
+              {tie.home.score !== null && tie.away.score !== null ? `${tie.home.score}–${tie.away.score}` : "v"}
+            </Mono>
+            <LineSide side={tie.away} decided={tie.decided} end />
+          </li>
+        ) : (
+          <li className="flex flex-col rounded-md bg-muted/40 px-1.5 py-0.5">
+            <span className="sr-only">{when}: </span>
+            <BracketSide side={tie.home} decided={tie.decided} />
+            <BracketSide side={tie.away} decided={tie.decided} />
+          </li>
+        )}
       </TooltipTrigger>
       <TooltipContent className="flex flex-col gap-1.5 px-3 py-2">
         <span className="opacity-70">{when}</span>
@@ -76,11 +96,45 @@ export function BracketTie({ tie, when }: { tie: Tie; when: string }): React.Rea
   );
 }
 
+/** A side of a one-line tie: its code, the crest beside it where the column is wide enough. */
+function LineSide({
+  side,
+  decided,
+  end = false,
+}: {
+  side: DashboardBracketSide;
+  decided: boolean;
+  end?: boolean;
+}): React.ReactElement {
+  const lost = (decided && !side.winner) || side.tbd;
+  return (
+    <span
+      className={cn(
+        "flex min-w-0 flex-1 items-center gap-1",
+        end && "flex-row-reverse",
+        lost && "text-muted-foreground"
+      )}
+    >
+      {!side.tbd && (
+        <TeamBadge
+          team={{ name: side.name, shortName: side.name, code: side.code, primaryColor: side.color, logoUrl: side.logoUrl }}
+          size="sm"
+          className={cn("size-4 max-sm:hidden", lost && "opacity-60")}
+        />
+      )}
+      <span className={cn("truncate", side.winner && "font-semibold")}>
+        <span aria-hidden>{side.code}</span>
+        <span className="sr-only">{side.name}</span>
+      </span>
+    </span>
+  );
+}
+
 function BracketSide({ side, decided }: { side: DashboardBracketSide; decided: boolean }): React.ReactElement {
-  const lost = decided && !side.winner;
+  const lost = (decided && !side.winner) || side.tbd;
   return (
     <span className={cn("flex h-5 items-center gap-1 text-2xs", lost && "text-muted-foreground")}>
-      {side.photos !== undefined ? (
+      {side.tbd ? null : side.photos !== undefined ? (
         // A fixed slot, seeded or not, so the names of a column line up.
         <Mono aria-hidden className="w-4 shrink-0 text-center text-2xs text-muted-foreground">
           {side.seed ?? ""}

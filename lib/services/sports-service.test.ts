@@ -910,30 +910,69 @@ describe("swissRecords", () => {
 });
 
 describe("footballCard", () => {
-  it("draws the knockout from the quarter-finals on, a two-legged tie by its aggregate", () => {
-    const league = getFootballLeague("uefa-champions-league");
-    const [a, b] = league.teams;
+  const base = { sportId: "football", label: "Football", emoji: "⚽" } as const;
+  const league = getFootballLeague("uefa-champions-league");
+  const [a, b] = league.teams;
+  const drawn = (id: string, winnerTeamId?: string) => ({ id, homeTeamId: a.id, awayTeamId: b.id, winnerTeamId });
+  const open = (id: string) => ({ id, homeTeamId: null, awayTeamId: null });
+
+  it("draws the round being played and the two after it, their slots TBD, a two-legged tie by its aggregate", () => {
     const knockout: BracketRound[] = [
-      // Eight ties: left to the league's own page.
       {
         id: "round-of-16",
         label: "Round of 16",
-        matches: Array.from({ length: 8 }, (_, i) => ({ id: `r${i}`, homeTeamId: a.id, awayTeamId: b.id })),
-      },
-      {
-        id: "quarter-final",
-        label: "Quarter-finals",
         matches: [
-          { id: "q1", homeTeamId: a.id, awayTeamId: b.id, homeScore: 1, awayScore: 1, aggregateHome: 3, aggregateAway: 2, winnerTeamId: a.id },
+          { ...drawn("r0", a.id), homeScore: 1, awayScore: 1, aggregateHome: 3, aggregateAway: 2 },
+          ...Array.from({ length: 7 }, (_, i) => drawn(`r${i + 1}`)),
         ],
       },
+      { id: "quarter-final", label: "Quarter-finals", matches: [{ id: "q0", homeTeamId: a.id, awayTeamId: null }, open("q1"), open("q2"), open("q3")] },
+      { id: "semi-final", label: "Semi-finals", matches: [open("s0"), open("s1")] },
+      { id: "final", label: "Final", matches: [open("f")] },
     ];
-    const card = __testing.footballCard({ sportId: "football", label: "Football", emoji: "⚽" }, { ...league, knockout });
-    expect(card.bracket?.label).toBe(`${league.league.name} knockout`);
-    expect(card.bracket?.rounds.map((r) => r.label)).toEqual(["Quarter-finals"]);
-    expect(card.bracket?.rounds[0].ties[0]).toMatchObject({ home: { score: 3, winner: true }, away: { score: 2 } });
-    // No knockout drawn: the table alone.
-    expect(__testing.footballCard({ sportId: "football", label: "Football", emoji: "⚽" }, { ...league, knockout: [] }).bracket).toBeUndefined();
+    const bracket = __testing.footballCard(base, { ...league, knockout }).bracket!;
+    expect(bracket.label).toBe(`${league.league.name} knockout`);
+    expect(bracket.rounds.map((r) => `${r.label} ${r.ties.length}`)).toEqual([
+      "Round of 16 8",
+      "Quarter-finals 4",
+      "Semi-finals 2",
+    ]);
+    expect(bracket.rounds[0].ties[0]).toMatchObject({ home: { score: 3, winner: true }, away: { score: 2 } });
+    // A slot waiting for a winner, beside the side already through.
+    expect(bracket.rounds[1].ties[0]).toMatchObject({ home: { code: a.code }, away: { code: "TBD", tbd: true } });
+  });
+
+  it("leaves a preliminary round out and starts at the round it feeds", () => {
+    // MLS: two wild-card games feed one slot each of an eight-tie Round One.
+    const knockout: BracketRound[] = [
+      { id: "round-1", label: "Wild card", matches: [drawn("w0"), drawn("w1")] },
+      { id: "round-of-16", label: "Round One", matches: [...Array.from({ length: 6 }, (_, i) => drawn(`r${i}`)), { id: "r6", homeTeamId: a.id, awayTeamId: null }, { id: "r7", homeTeamId: a.id, awayTeamId: null }] },
+      { id: "quarter-final", label: "Conference semi-finals", matches: [open("q0"), open("q1"), open("q2"), open("q3")] },
+      { id: "semi-final", label: "Conference finals", matches: [open("s0"), open("s1")] },
+      { id: "final", label: "MLS Cup", matches: [open("f")] },
+    ];
+    const bracket = __testing.footballCard(base, { ...league, knockout }).bracket!;
+    expect(bracket.rounds.map((r) => r.label)).toEqual(["Round One", "Conference semi-finals", "Conference finals"]);
+
+    // ESPN's stand-in club for the wild card's winner is nobody yet, not a side with a crest.
+    const standIn = { ...a, id: "tbd-away", name: "TBD Away", shortName: "TBD Away", code: "TBD" };
+    const withStandIn = knockout.map((r) =>
+      r.id === "round-of-16" ? { ...r, matches: [{ id: "r0", homeTeamId: a.id, awayTeamId: "tbd-away" }, ...r.matches.slice(1)] } : r
+    );
+    const tie = __testing.footballCard(base, { ...league, teams: [...league.teams, standIn], knockout: withStandIn }).bracket!.rounds[0].ties[0];
+    expect(tie.away).toMatchObject({ code: "TBD", tbd: true });
+    expect(tie.home.tbd).toBeUndefined();
+  });
+
+  it("skips a round too big for a card, and draws nothing with nobody drawn", () => {
+    const sixteen: BracketRound = { id: "round-of-32", label: "Round of 32", matches: Array.from({ length: 16 }, (_, i) => drawn(`t${i}`)) };
+    const later: BracketRound[] = [
+      { id: "round-of-16", label: "Round of 16", matches: Array.from({ length: 8 }, (_, i) => open(`r${i}`)) },
+      { id: "quarter-final", label: "Quarter-finals", matches: [open("q0"), open("q1"), open("q2"), open("q3")] },
+    ];
+    // The round of 32 is being played; the columns that fit have nobody in them yet.
+    expect(__testing.footballCard(base, { ...league, knockout: [sixteen, ...later] }).bracket).toBeUndefined();
+    expect(__testing.footballCard(base, { ...league, knockout: [] }).bracket).toBeUndefined();
   });
 });
 
@@ -999,26 +1038,26 @@ describe("leadOrChampion", () => {
     });
   });
 
-  it("draws the bracket while the postseason is played, from the round a card has room for", () => {
+  it("draws the bracket while the postseason is played, from the round on", () => {
     const clock = { timeZone: "UTC", now: Date.parse("2026-10-10T12:00:00Z") };
     const drawn = (id: string, winnerTeamId?: string) => ({ id, homeTeamId: "tb", awayTeamId: "mil", winnerTeamId });
     const undrawn = (id: string) => ({ id, homeTeamId: null, awayTeamId: null });
-    // Eight first-round ties and nothing drawn after them: no bracket yet.
-    const first: BracketRound[] = [
-      { id: "round-of-16", label: "First round", matches: Array.from({ length: 8 }, (_, i) => drawn(`r${i}`)) },
-      { id: "quarter-final", label: "Division Series", matches: [undrawn("d1"), undrawn("d2")] },
-    ];
-    expect(__testing.leadOrChampion([game], first, teams, clock).bracket).toBeUndefined();
-    // The last eight drawn: the bracket, beside the games still listed.
     const eight: BracketRound[] = [
-      first[0],
+      { id: "round-of-16", label: "First round", matches: Array.from({ length: 8 }, (_, i) => drawn(`r${i}`, "mil")) },
       { id: "quarter-final", label: "Division Series", matches: [drawn("d1", "mil"), drawn("d2"), drawn("d3"), drawn("d4")] },
       { id: "semi-final", label: "League Championship Series", matches: [undrawn("l1"), undrawn("l2")] },
+      { id: "final", label: "World Series", matches: [undrawn("ws")] },
     ];
     const lead = __testing.leadOrChampion([game], eight, teams, clock);
+    // Beside the games still listed; the first round is over, so it starts at the one on.
     expect(lead.featured).toBeDefined();
     expect(lead.event).toBeUndefined();
-    expect(lead.bracket?.rounds.map((r) => `${r.label} ${r.ties.length}`)).toEqual(["Division Series 4"]);
+    expect(lead.bracket?.rounds.map((r) => `${r.label} ${r.ties.length}`)).toEqual([
+      "Division Series 4",
+      "League Championship Series 2",
+      "World Series 1",
+    ]);
+    expect(lead.bracket?.rounds[2].ties[0]).toMatchObject({ home: { tbd: true }, away: { tbd: true }, decided: false });
   });
 
   it("says Just finished for two weeks after the final", () => {

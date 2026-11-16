@@ -29,6 +29,7 @@ import { topSeeds } from "@/lib/sports/racquet";
 import type {
   BracketRound,
   DashboardBracket,
+  DashboardBracketSide,
   DashboardCompetitions,
   DashboardMatch,
   DashboardSide,
@@ -657,6 +658,12 @@ const BRACKET_ROUNDS = 3;
  */
 const BRACKET_TIES = 4;
 const fitsCard = (round: { ties: unknown[] }): boolean => round.ties.length > 0 && round.ties.length <= BRACKET_TIES;
+/**
+ * A round of teams may have eight: past four, the card draws each tie on one
+ * line ("ORL 1–0 CIN"), which eight of take the height four two-line ties do.
+ * Players and pairs keep to four — their names do not fit a line.
+ */
+const BRACKET_TIES_ONE_LINE = 8;
 
 /**
  * An event's knockouts for its card: the last rounds, each tie with both
@@ -673,37 +680,40 @@ function teamBracket(
   playoffs: BracketRound[] | undefined,
   teams: Map<string, Team>
 ): DashboardBracket | undefined {
-  const rounds = (playoffs ?? [])
+  const nobody: DashboardBracketSide = { name: "To be decided", code: "TBD", score: null, winner: false, tbd: true };
+  // A feed's own stand-in for a slot ("TBD Away", ESPN's for the winner of
+  // MLS's wild card) is nobody yet either, not a club with a crest.
+  const entrant = (id: string | null, score: number | null | undefined, winner: boolean): DashboardBracketSide => {
+    const team = id ? teams.get(id) : undefined;
+    if (!id || /^tbd\b/i.test(team?.shortName ?? team?.name ?? "")) return nobody;
+    return side(team, id, score ?? null, winner);
+  };
+  const all = (playoffs ?? [])
     .map((round) => ({
       label: round.label,
-      ties: round.matches.flatMap((m) =>
-        m.homeTeamId && m.awayTeamId && m.side !== "lower"
-          ? [
-              {
-                id: m.id,
-                // A two-legged tie is read by its aggregate.
-                home: side(
-                  teams.get(m.homeTeamId),
-                  m.homeTeamId,
-                  m.aggregateHome ?? m.homeScore ?? null,
-                  m.winnerTeamId === m.homeTeamId
-                ),
-                away: side(
-                  teams.get(m.awayTeamId),
-                  m.awayTeamId,
-                  m.aggregateAway ?? m.awayScore ?? null,
-                  m.winnerTeamId === m.awayTeamId
-                ),
-                decided: Boolean(m.winnerTeamId),
-                playedAt: m.date,
-              },
-            ]
-          : []
-      ),
+      ties: round.matches
+        .filter((m) => m.side !== "lower")
+        .map((m) => ({
+          id: m.id,
+          // A two-legged tie is read by its aggregate.
+          home: entrant(m.homeTeamId, m.aggregateHome ?? m.homeScore, Boolean(m.homeTeamId) && m.winnerTeamId === m.homeTeamId),
+          away: entrant(m.awayTeamId, m.aggregateAway ?? m.awayScore, Boolean(m.awayTeamId) && m.winnerTeamId === m.awayTeamId),
+          decided: Boolean(m.winnerTeamId),
+          playedAt: m.date,
+        })),
     }))
-    .filter(fitsCard)
-    .slice(-BRACKET_ROUNDS);
-  return rounds.length > 0 ? { label, short: "Bracket", rounds } : undefined;
+    .filter((round) => round.ties.length > 0)
+    // A preliminary round — fewer ties than the round it feeds (MLS's wild
+    // card) — is no column of the bracket: alone, it read as the whole of it.
+    .filter((round, i, list) => i === list.length - 1 || round.ties.length >= list[i + 1].ties.length);
+  // From the round being played: it and the two after it, their sides "TBD"
+  // until they are known. Once all is decided, the last three.
+  const playing = all.findIndex((round) => round.ties.some((t) => !t.decided));
+  let start = Math.max(0, Math.min(playing === -1 ? all.length : playing, all.length - BRACKET_ROUNDS));
+  while (start < all.length && all[start].ties.length > BRACKET_TIES_ONE_LINE) start++;
+  const rounds = all.slice(start, start + BRACKET_ROUNDS);
+  const drawn = rounds.some((round) => round.ties.some((t) => !t.home.tbd || !t.away.tbd));
+  return drawn ? { label, short: "Bracket", rounds } : undefined;
 }
 
 /**

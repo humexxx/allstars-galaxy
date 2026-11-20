@@ -187,6 +187,39 @@ describe("fetchWeekendResults", () => {
     });
   });
 
+  it("reads OpenF1's 404 for a session with no order yet as empty, and still fails on another status", async () => {
+    const notFound = (): Response =>
+      new Response(JSON.stringify({ detail: "No results found." }), { status: 404 });
+    let resultStatus = 404;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        if (url.includes("/sessions?")) {
+          return Promise.resolve(
+            json([
+              { session_key: 11413, session_name: "Practice 1", date_start: "2026-11-20T00:30:00+00:00", date_end: "2026-11-20T01:30:00+00:00", meeting_key: 1300 },
+              { session_key: 11412, session_name: "Practice 2", date_start: "2026-11-19T20:00:00+00:00", date_end: "2026-11-19T21:00:00+00:00", meeting_key: 1300 },
+            ])
+          );
+        }
+        if (url.includes("/drivers?")) return Promise.resolve(json([...DRIVERS.values()]));
+        if (url.includes("session_key=11412")) return Promise.resolve(json(FP2));
+        return Promise.resolve(resultStatus === 404 ? notFound() : new Response("", { status: resultStatus }));
+      })
+    );
+    const read = (): Promise<unknown> =>
+      fetchWeekendResults(2026, 22, "2026-11-19T20:00:00Z", "2026-11-22T04:00:00Z", Date.parse("2026-11-20T02:00:00Z"));
+
+    await expect(read()).resolves.toEqual({
+      season: 2026,
+      round: 22,
+      sessions: [{ kind: "fp2", rows: sessionRows("fp2", FP2, DRIVERS) }],
+    });
+
+    resultStatus = 500;
+    await expect(read()).rejects.toThrow("OpenF1 500");
+  });
+
   it("makes one call before the first session: there is nothing to read yet", async () => {
     const spy = vi.fn(() =>
       Promise.resolve(

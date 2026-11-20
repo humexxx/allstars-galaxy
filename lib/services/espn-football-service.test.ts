@@ -153,7 +153,6 @@ describe("leagueDataFrom", () => {
   it("draws the bracket only from a whole play-off span", () => {
     const feeds = { days: MLS_POSTSEASON, standings: null, teams: null };
     expect(leagueDataFrom(MLS, { ...feeds, earlier: [] }, "2025-12-10").knockout).toHaveLength(5);
-    expect(leagueDataFrom(MLS, { ...feeds, earlier: null }, "2025-12-10").knockout).toBeUndefined();
     expect(leagueDataFrom(MLS, { ...feeds, earlier: [] }, "2026-03-01").knockout).toBeUndefined();
   });
 
@@ -296,6 +295,41 @@ describe("getEspnFootballLeague", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("fetch is disabled in unit tests"))));
+  });
+
+  /** The scores bar answering with MLS's 2025 play-offs, and `earlier` for the span before the days listed. */
+  const stubMls = (earlier: () => Response): void => {
+    const board = (events: FootballEvent[]): Response =>
+      new Response(JSON.stringify({ sports: [{ leagues: [{ events }] }] }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.includes("dates=20251015-20251028")) return earlier();
+        if (url.includes("/scoreboard/header")) return board(MLS_POSTSEASON);
+        return new Response("{}", { status: 404 });
+      })
+    );
+  };
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("draws the bracket from the play-offs' earlier days", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2025-12-10T12:00:00Z"));
+    stubMls(() => new Response(JSON.stringify({ sports: [{ leagues: [{ events: MLS_POSTSEASON }] }] })));
+    const data = await getEspnFootballLeague("mls");
+    expect(data.knockout).toHaveLength(5);
+  });
+
+  it("throws when the play-offs' earlier days fail, so the last good bracket is kept", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2025-12-10T12:00:00Z"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    stubMls(() => new Response("{}", { status: 502 }));
+    expect(await getEspnFootballLeague("mls")).toBe(getFootballLeague("mls"));
+    expect(warn).toHaveBeenCalledWith("espn football league unavailable, using fallback:", expect.any(Error));
   });
 
   it("falls back to the league's own fixture when ESPN does not answer", async () => {

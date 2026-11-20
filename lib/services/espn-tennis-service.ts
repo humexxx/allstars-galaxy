@@ -582,7 +582,8 @@ async function fetchCalendarFromApi(year: number): Promise<CalendarSeed[]> {
     const seeds = calendarFrom(calendar, SLUG);
     if (seeds.length > 0) return seeds;
   }
-  return [];
+  // Returned, an empty answer would be cached for a day over the last good calendar.
+  throw new Error(`espn tennis calendar: no sections for ${year} or ${year - 1}`);
 }
 
 const getTennisCalendar = cachedFeed<[number], CalendarSeed[]>(

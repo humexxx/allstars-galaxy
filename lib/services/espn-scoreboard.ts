@@ -279,7 +279,8 @@ export type SeriesRound = {
   bestOf: 1 | 3 | 5 | 7;
 };
 
-const FINISHED: ReadonlySet<MatchStatus> = new Set<MatchStatus>(["ft", "aet", "pen"]);
+/** A game that is over, a draw decided in extra time or on penalties included. */
+export const FINISHED: ReadonlySet<MatchStatus> = new Set<MatchStatus>(["ft", "aet", "pen"]);
 
 /**
  * Games into series. No feed names the series, but a pair of teams meets at

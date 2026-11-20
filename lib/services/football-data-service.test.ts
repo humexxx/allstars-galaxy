@@ -264,3 +264,14 @@ describe("getFootballLeagueData", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
+
+describe("mapMatchStatus", () => {
+  it("reads extra time and a shoot-out as live, an awarded match as final, a suspended one as postponed", () => {
+    const { mapMatchStatus } = __testing;
+    expect(mapMatchStatus("EXTRA_TIME")).toBe("live");
+    expect(mapMatchStatus("PENALTY_SHOOTOUT")).toBe("live");
+    expect(mapMatchStatus("AWARDED")).toBe("ft");
+    expect(mapMatchStatus("SUSPENDED")).toBe("postponed");
+    expect(mapMatchStatus("TIMED")).toBe("scheduled");
+  });
+});

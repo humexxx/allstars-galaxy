@@ -5,9 +5,12 @@ import { applyMonthlyInterest, LAST_INTEREST_RUN_KEY } from "@/lib/services/inte
 import { createDailySnapshots } from "@/lib/services/snapshot-service";
 import { refreshF1News } from "@/lib/services/rapidapi-f1-news-service";
 
-// Interest, the portfolio snapshots and an upstream fetch run back to back; the platform default would cut that off. (Hobby caps a
-// function at 60 s.)
+// Interest, the portfolio snapshots and an upstream fetch run back to back.
+// 300 s is the most a Hobby function gets (under Fluid compute, Vercel's
+// default); vercel.json sets no duration of its own.
 export const maxDuration = 300;
+
+const LAST_F1_NEWS_RUN_KEY = "last_f1_news_run";
 
 type InterestRun = { applied: boolean; result: { processed: number; closed: number } | null };
 type SnapshotRun = Awaited<ReturnType<typeof createDailySnapshots>>;
@@ -61,20 +64,28 @@ async function processDailySnapshots(today: Date): Promise<SnapshotRun> {
 
 
 /**
- * Pull the day's F1 news.
+ * Pull the day's F1 news, once a UTC day.
  *
  * This used to be a Cloud Function in the humex-champions Firebase project on
  * its own 08:00 UTC schedule. It lives here now so one app owns the RapidAPI
  * quota and the archive.
+ *
+ * The quota is 40 requests a month, so a manual re-run or a double fire must
+ * not spend another. Only a success is stamped on `last_f1_news_run`; a
+ * failure goes to its own key, as interest's does, so it is retried the same
+ * day rather than read as the day's run.
  */
 async function processF1News(today: Date): Promise<F1NewsRun> {
+  const day = today.toISOString().slice(0, 10);
+  const lastRun = await getAppStateValue(LAST_F1_NEWS_RUN_KEY);
+  if (lastRun?.slice(0, 10) === day) return { fetched: 0, stored: 0, skipped: true };
   try {
     const result = await refreshF1News();
-    await setAppState("last_f1_news_run", today.toISOString());
+    await setAppState(LAST_F1_NEWS_RUN_KEY, today.toISOString());
     return result;
   } catch (error) {
     console.error("Failed to refresh F1 news:", error);
-    await setAppState("last_f1_news_run", today.toISOString(), messageOf(error));
+    await setAppState("last_f1_news_error", today.toISOString(), messageOf(error));
     throw error;
   }
 }

@@ -21,6 +21,7 @@ import {
 } from "@/types/sports";
 
 import {
+  FINISHED,
   fetchHeader,
   fetchHeaderDays,
   headerMatch,
@@ -438,8 +439,6 @@ type KnockoutGame = {
 /** One pairing of a round: a single game, a series, or a tie's two legs. */
 type Contest = { round: number; half: 0 | 1 | null; teamIds: [string, string]; games: KnockoutGame[] };
 
-const FINISHED: ReadonlySet<MatchStatus> = new Set<MatchStatus>(["ft", "aet", "pen"]);
-
 /**
  * Games into pairings: a pair of clubs meets once a round, so the round and
  * the pair are its key. A postponed game comes back as one of its own, and a
@@ -719,11 +718,8 @@ type Feeds = {
   days: FootballEvent[];
   standings: FootballStandings | null;
   teams: EspnTeams | null;
-  /**
-   * The play-offs' earlier days, before the days listed; null when they did
-   * not answer, which leaves the bracket out rather than half drawn.
-   */
-  earlier: FootballEvent[] | null;
+  /** The play-offs' earlier days, before the days listed. */
+  earlier: FootballEvent[];
 };
 
 /**
@@ -760,7 +756,7 @@ function leagueDataFrom(league: EspnFootballLeague, feeds: Feeds, today: string)
 
   const span = activeSpan(league, today);
   let knockout: BracketRound[] = [];
-  if (span && feeds.earlier) {
+  if (span) {
     const seeds = new Map(table.groups.flatMap((g) => g.standings.map((s) => [s.teamId, s.position] as const)));
     const { games, teams } = knockoutGamesFrom([...feeds.earlier, ...feeds.days], league, span);
     teams.forEach(add);
@@ -804,13 +800,16 @@ async function fetchEspnFootball(id: EspnFootballLeagueId): Promise<FootballLeag
     Promise.all(earlier.map((s) => fetchHeader(scores, s.from, s.to))).then((spans) => spans.flat()),
   ]);
   if (days.status === "rejected") throw days.reason;
+  // Stored without them, the league would have no bracket until the next
+  // refresh; thrown, the last good one is kept.
+  if (before.status === "rejected") throw before.reason;
   return leagueDataFrom(
     league,
     {
       days: days.value,
       standings: settledOrNull(standings),
       teams: settledOrNull(teams),
-      earlier: settledOrNull(before),
+      earlier: before.value,
     },
     today
   );

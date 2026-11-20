@@ -13,6 +13,7 @@ type Row = Record<string, unknown>;
 const OWNER = "00000000-0000-4000-8000-0000000000aa";
 const ADA = "00000000-0000-4000-8000-0000000000a1";
 const SPY = "00000000-0000-4000-8000-0000000000a2";
+const BTC = "00000000-0000-4000-8000-0000000000a3";
 const NOW = new Date("2026-10-20T15:00:00Z");
 
 const dialect = new PgDialect();
@@ -30,6 +31,7 @@ const claims: Row[] = [];
 const ASSETS: Row[] = [
   { id: ADA, symbol: "ADA", source: "massive", externalId: "X:ADAUSD" },
   { id: SPY, symbol: "SPY", source: "massive", externalId: "SPY" },
+  { id: BTC, symbol: "BTC", source: "coingecko", externalId: "bitcoin" },
 ];
 
 function chain(rows: (where: SQL | undefined) => Row[]): unknown {
@@ -84,8 +86,9 @@ vi.mock("./price-providers/massive", () => ({
 }));
 vi.mock("./price-providers/coingecko", () => ({ fetchCoinGeckoPrices: vi.fn() }));
 
+import { fetchCoinGeckoPrices } from "./price-providers/coingecko";
 import { fetchMassivePrices } from "./price-providers/massive";
-import { priceCronSchedule, refreshHeldPrices } from "./price-service";
+import { priceCronSchedule, refreshHeldPrices, refreshPrices } from "./price-service";
 
 beforeEach(() => {
   held = [
@@ -150,6 +153,24 @@ describe("refreshHeldPrices", () => {
     held = [];
     expect(await refreshHeldPrices(OWNER, NOW)).toEqual({ status: "nothing-held" });
     expect(claims).toHaveLength(0);
+  });
+});
+
+describe("refreshPrices", () => {
+  it("stores each provider's quotes as they arrive, so a later failure keeps them", async () => {
+    quotes = [];
+    vi.mocked(fetchCoinGeckoPrices).mockRejectedValueOnce(new Error("function timed out"));
+
+    await expect(refreshPrices({ assetIds: [SPY, BTC] })).rejects.toThrow("function timed out");
+
+    expect(insertedQuotes).toEqual([{ assetId: SPY, price: "0.25000000" }]);
+  });
+
+  it("hands Massive what is left of the run's budget", async () => {
+    quotes = [];
+    await refreshPrices({ assetIds: [SPY], massiveCalls: 2 });
+
+    expect(vi.mocked(fetchMassivePrices).mock.calls[0][2]).toBe(2);
   });
 });
 

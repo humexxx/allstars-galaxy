@@ -8,14 +8,16 @@ import { z } from "zod"
  * Skipped when `SKIP_ENV_VALIDATION=1` so build steps that don't need the
  * runtime env (e.g. `next build` in CI before secrets are wired) can still
  * succeed.
+ *
+ * Secrets (`CRON_SECRET`, `VERCEL_API_TOKEN`) are not in here: this runs when
+ * `@/db` is imported, so a short or empty secret took every page down. Each
+ * one is read where it is used, per request.
  */
 const envSchema = z.object({
   NEXT_PUBLIC_BASE_URL: z.string().url().optional(),
   DATABASE_URL: z.string().url(),
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: z.string().min(1),
-  CRON_SECRET: z.string().min(16).optional(),
-  VERCEL_API_TOKEN: z.string().min(1).optional(),
 })
 
 export type Env = z.infer<typeof envSchema>
@@ -28,8 +30,6 @@ function loadEnv(): Env {
       NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY:
         process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY,
-      CRON_SECRET: process.env.CRON_SECRET,
-      VERCEL_API_TOKEN: process.env.VERCEL_API_TOKEN,
     } as Env
   }
 
@@ -39,8 +39,6 @@ function loadEnv(): Env {
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY:
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY,
-    CRON_SECRET: process.env.CRON_SECRET,
-    VERCEL_API_TOKEN: process.env.VERCEL_API_TOKEN,
   })
 
   if (!parsed.success) {

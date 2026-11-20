@@ -1,7 +1,7 @@
 # Portfolio
 
 > **Status:** Active (page redesigned to mirror plan-editor layout)
-> **Last reviewed:** 2026-11-10
+> **Last reviewed:** 2026-11-20
 
 ## Overview
 Tracks the user's real portfolio: transactions (buys/withdrawals), historical
@@ -341,3 +341,4 @@ Removed as dead in the 2026-09-29 pass: `types/api.ts`, `types/snapshot.ts`, `li
 - `app/portal/portfolio/loading.tsx` and `app/portal/admin/users/loading.tsx` stream skeletons for the heavy data fetches; `app/portal/portfolio/error.tsx` is the module error boundary.
 - The KPI grid renders `StatCard` from `components/ui/stat-card.tsx` (shared house primitive: `Eyebrow` label + `Mono` value + tone-colored sublabel).
 - The **Dev Tools drawer** (`components/dev-tools/`, mounted in `app/portal/layout.tsx`) is a portal-wide foundation: any page can call `useRegisterDevTool({ id, kind: "toggle" | "action" | "custom", ... })` and the helper shows up in the right-side `Sheet`. The floating wrench trigger only renders in `process.env.NODE_ENV === "development"` — registrations made by pages mounted in production are silently ignored. Context is split (`useDevToolsCommands` for stable register/unregister, `useDevToolsState` for the changing helpers/open) so consumer effects don't re-fire on every registration.
+- **Pricing audit** (2026-11-20). Contribution backfill tracks priced rows per (transaction, asset), so a split buy whose second lookup failed is retried; it fetches each asset's history once across all owners within Massive's 5/minute budget, runs before the quote refresh in the prices cron, and reports non-Massive assets as "historical pricing unsupported". Providers use `upstreamSignal()` and each provider's quotes are saved as they arrive; a malformed CoinGecko body is an error result. Every prices run writes `last_price_run`. The daily snapshot looks for any `system_cron` row that day, not just the latest snapshot.

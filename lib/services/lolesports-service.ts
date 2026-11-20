@@ -21,7 +21,7 @@ import type {
   SwissStage,
   Team,
 } from "@/types/sports";
-import { cachedFeed, upstreamSignal } from "./upstream";
+import { cachedFeed, rateLimiter, upstreamSignal } from "./upstream";
 
 // Lolesports' public-but-unofficial endpoint. The x-api-key value is the same
 // one their own site (lolesports.com) ships in its frontend — it's a
@@ -29,6 +29,10 @@ import { cachedFeed, upstreamSignal } from "./upstream";
 const LOLESPORTS_BASE_URL = "https://esports-api.lolesports.com/persisted/gw";
 const LOLESPORTS_API_KEY = "0TvQnueqKa5mxJntVWt0w4LpLfEkrV1Ta8rQBb9Z";
 const REVALIDATE_SECONDS = 300;
+
+// A cold read is the leagues, seven leagues' tournaments, then a standings
+// and a schedule call (or two) each: twenty-odd calls, queued, not burst.
+const lolesportsSlot = rateLimiter(10, 1_000);
 
 type TargetLeague = { slug: string; region: LolRegion; international?: boolean };
 
@@ -161,13 +165,20 @@ type LolesportsSchedulePage = {
   events: LolesportsEvent[];
 };
 
-async function fetchLolesports<T>(path: string): Promise<T> {
+/**
+ * `signal` is the read's, not the call's: one ceiling for the whole read.
+ * `notFound`, when given, is the answer to a 404, which is how Lolesports
+ * says a tournament has no standings yet; every other failure throws.
+ */
+async function fetchLolesports<T>(path: string, signal: AbortSignal, notFound?: T): Promise<T> {
   const url = `${LOLESPORTS_BASE_URL}${path}${path.includes("?") ? "&" : "?"}hl=en-US`;
+  await lolesportsSlot();
   const res = await fetch(url, {
-    signal: upstreamSignal(),
+    signal,
     headers: { "x-api-key": LOLESPORTS_API_KEY },
     next: { revalidate: REVALIDATE_SECONDS },
   });
+  if (res.status === 404 && notFound !== undefined) return notFound;
   if (!res.ok) {
     throw new Error(`Lolesports ${res.status} on ${path}`);
   }
@@ -281,10 +292,14 @@ function isCurrentEvent(
   return !regionalStarts.some((start) => start > tournament.endDate && start <= today);
 }
 
-async function getLeagueTournaments(leagueId: string, today: string): Promise<LeagueTournaments> {
+async function getLeagueTournaments(
+  leagueId: string,
+  today: string,
+  signal: AbortSignal,
+): Promise<LeagueTournaments> {
   const data = await fetchLolesports<{
     data: { leagues: Array<{ tournaments: LolesportsTournament[] }> };
-  }>(`/getTournamentsForLeague?leagueId=${leagueId}`);
+  }>(`/getTournamentsForLeague?leagueId=${leagueId}`, signal);
   const tournaments = data.data.leagues[0]?.tournaments ?? [];
   const current = pickActiveTournament(tournaments, today);
   return {
@@ -775,7 +790,7 @@ function fitSwissShape(
   };
 }
 
-async function getStandingsAndPlayoffs(tournamentId: string): Promise<{
+async function getStandingsAndPlayoffs(tournamentId: string, signal: AbortSignal): Promise<{
   teams: Team[];
   standings: LolStanding[];
   playoffSections: PlayoffSection[];
@@ -784,7 +799,7 @@ async function getStandingsAndPlayoffs(tournamentId: string): Promise<{
 }> {
   const data = await fetchLolesports<{
     data: { standings: LolesportsStandingsEntry[] };
-  }>(`/getStandings?tournamentId=${tournamentId}`);
+  }>(`/getStandings?tournamentId=${tournamentId}`, signal, { data: { standings: [] } });
 
   const teamsMap = new Map<string, Team>();
   const rows: LolStanding[] = [];
@@ -892,11 +907,13 @@ function withinTournament(
 
 async function fetchSchedulePage(
   leagueId: string,
+  signal: AbortSignal,
   pageToken?: string,
 ): Promise<LolesportsSchedulePage> {
   const page = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "";
   const data = await fetchLolesports<{ data: { schedule: LolesportsSchedulePage } }>(
     `/getSchedule?leagueId=${leagueId}${page}`,
+    signal,
   );
   return data.data.schedule;
 }
@@ -908,22 +925,20 @@ async function fetchSchedulePage(
 async function getTournamentEvents(
   leagueId: string,
   tournament: LolesportsTournament | null,
+  signal: AbortSignal,
 ): Promise<LolesportsEvent[]> {
-  const scheduled = await findInSchedule(leagueId, tournament);
+  const scheduled = await findInSchedule(leagueId, tournament, signal);
   if (scheduled.length > 0 || !tournament) return scheduled;
   // Lolesports lists only the matches with a VOD here (four of LPL's split 3
   // 2026, none of its final), so it is the last resort, not the source.
-  return getCompletedEvents(tournament.id).catch((err: unknown) => {
-    console.warn(`Lolesports completed events failed for ${tournament.slug}:`, err);
-    return [];
-  });
+  return getCompletedEvents(tournament.id, signal);
 }
 
 /** Every completed event of a tournament. They come without a type or state. */
-async function getCompletedEvents(tournamentId: string): Promise<LolesportsEvent[]> {
+async function getCompletedEvents(tournamentId: string, signal: AbortSignal): Promise<LolesportsEvent[]> {
   const data = await fetchLolesports<{
     data: { schedule: { events: Omit<LolesportsEvent, "type" | "state">[] } };
-  }>(`/getCompletedEvents?tournamentId=${tournamentId}`);
+  }>(`/getCompletedEvents?tournamentId=${tournamentId}`, signal);
   return data.data.schedule.events.map((e) => ({ ...e, type: "match", state: "completed" }));
 }
 
@@ -938,8 +953,9 @@ async function getCompletedEvents(tournamentId: string): Promise<LolesportsEvent
 async function findInSchedule(
   leagueId: string,
   tournament: LolesportsTournament | null,
+  signal: AbortSignal,
 ): Promise<LolesportsEvent[]> {
-  let page = await fetchSchedulePage(leagueId);
+  let page = await fetchSchedulePage(leagueId, signal);
   for (let read = 1; ; read++) {
     const events = page.events.filter((e) => withinTournament(e.startTime, tournament));
     if (events.length > 0 || !tournament || read >= SCHEDULE_PAGES) return events;
@@ -952,27 +968,23 @@ async function findInSchedule(
     if (!earliest || earliest.slice(0, 10) <= tournament.endDate || !page.pages?.older) {
       return events;
     }
-    // An older page that fails ends the search, not the split: the completed
-    // events stand in, and the standings and bracket stand regardless.
-    const older = await fetchSchedulePage(leagueId, page.pages.older).catch((err: unknown) => {
-      console.warn(`Lolesports older schedule page failed for ${leagueId}:`, err);
-      return null;
-    });
-    if (!older) return events;
-    page = older;
+    // A failed page throws: answered without it, the split would be kept
+    // for the cache's window with none of its matches.
+    page = await fetchSchedulePage(leagueId, signal, page.pages.older);
   }
 }
 
 async function getSchedule(
   leagueId: string,
   tournament: LolesportsTournament | null,
+  signal: AbortSignal,
 ): Promise<{
   matches: LolMatch[];
   extraTeams: Team[];
   blockByMatchId: Map<string, string>;
   scheduleByMatchId: Map<string, ScheduledMatch>;
 }> {
-  const events = await getTournamentEvents(leagueId, tournament);
+  const events = await getTournamentEvents(leagueId, tournament, signal);
 
   const teamsMap = new Map<string, Team>();
   const matches: LolMatch[] = [];
@@ -1059,6 +1071,7 @@ async function fetchSplit(
   league: LolesportsLeague,
   tournament: LolesportsTournament | null,
   season: LolesportsTournament[],
+  signal: AbortSignal,
 ): Promise<LolSplit> {
   const noStandings = {
     teams: [] as Team[],
@@ -1068,10 +1081,10 @@ async function fetchSplit(
     swissMatches: [] as LolesportsStandingsMatch[],
   };
   const [standingsRes, scheduleRes] = await Promise.all([
-    tournament
-      ? getStandingsAndPlayoffs(tournament.id).catch(() => noStandings)
-      : Promise.resolve(noStandings),
-    getSchedule(league.id, tournament),
+    // Thrown, not defaulted: a split without its table would be cached as if
+    // it had none.
+    tournament ? getStandingsAndPlayoffs(tournament.id, signal) : Promise.resolve(noStandings),
+    getSchedule(league.id, tournament, signal),
   ]);
   // Built here rather than with the standings: the rounds are named by the
   // schedule's blocks.
@@ -1154,9 +1167,11 @@ function orderSplits(fetched: FetchedSplit[], today = todayIso()): LolSplit[] {
 
 async function fetchLolDataFromApi(): Promise<LolData> {
   const today = todayIso();
+  const signal = upstreamSignal();
   // One leagues list for every target; it was being fetched once per region.
   const leagues = await fetchLolesports<{ data: { leagues: LolesportsLeague[] } }>(
     "/getLeagues",
+    signal,
   );
   const targets = TARGET_LEAGUES.flatMap((target) => {
     const league = leagues.data.leagues.find((l) => l.slug.toLowerCase() === target.slug);
@@ -1164,19 +1179,15 @@ async function fetchLolDataFromApi(): Promise<LolData> {
   });
   // Every league's tournaments before any split: whether an international
   // event is still the one to show depends on when the regional ones start.
-  const listed = (
-    await Promise.all(
-      targets.map(({ target, league }) =>
-        getLeagueTournaments(league.id, today).then(
-          (tournaments) => ({ target, league, ...tournaments }),
-          (err: unknown) => {
-            console.warn(`Lolesports fetch failed for ${target.slug}:`, err);
-            return null;
-          },
-        ),
-      ),
-    )
-  ).filter((l) => l !== null);
+  // A league that fails fails the read, so the last full answer is kept
+  // rather than one without that region.
+  const listed = await Promise.all(
+    targets.map(async ({ target, league }) => ({
+      target,
+      league,
+      ...(await getLeagueTournaments(league.id, today, signal)),
+    })),
+  );
   const regionalStarts = listed.flatMap((l) =>
     !l.target.international && l.current ? [l.current.startDate] : [],
   );
@@ -1188,16 +1199,11 @@ async function fetchLolDataFromApi(): Promise<LolData> {
       const isCurrent = target.international && isCurrentEvent(current, regionalStarts, today);
       const thisSeason = current !== null && current.startDate.slice(0, 4) === today.slice(0, 4);
       if (target.international && !isCurrent && !thisSeason) return null;
-      try {
-        return {
-          split: await fetchSplit(target, league, current, season),
-          tournament: current,
-          ...(target.international && !isCurrent ? { over: true } : {}),
-        };
-      } catch (err) {
-        console.warn(`Lolesports fetch failed for ${target.slug}:`, err);
-        return null;
-      }
+      return {
+        split: await fetchSplit(target, league, current, season, signal),
+        tournament: current,
+        ...(target.international && !isCurrent ? { over: true } : {}),
+      };
     }),
   );
   const live = fetched.filter(
@@ -1226,13 +1232,14 @@ async function fetchLolDataFromApi(): Promise<LolData> {
 async function fetchLeagueSplit(region: LolRegion, tournamentId: string): Promise<LolSplit | null> {
   const target = TARGET_LEAGUES.find((t) => t.region === region && !t.international);
   if (!target) return null;
-  const leagues = await fetchLolesports<{ data: { leagues: LolesportsLeague[] } }>("/getLeagues");
+  const signal = upstreamSignal();
+  const leagues = await fetchLolesports<{ data: { leagues: LolesportsLeague[] } }>("/getLeagues", signal);
   const league = leagues.data.leagues.find((l) => l.slug.toLowerCase() === target.slug);
   if (!league) return null;
-  const { season } = await getLeagueTournaments(league.id, todayIso());
+  const { season } = await getLeagueTournaments(league.id, todayIso(), signal);
   const tournament = season.find((t) => t.id === tournamentId);
   if (!tournament) return null;
-  return fetchSplit(target, league, tournament, season);
+  return fetchSplit(target, league, tournament, season, signal);
 }
 
 export const getLolSplit = cachedFeed(

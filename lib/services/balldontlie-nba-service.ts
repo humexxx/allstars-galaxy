@@ -15,17 +15,19 @@ import type {
   NbaStanding,
   Team,
 } from "@/types/sports";
+import {
+  fetchHeader,
+  shiftDay,
+  type HeaderCompetitor,
+  type HeaderEvent,
+  type HeaderLeague,
+} from "./espn-scoreboard";
+import { fetchEspnJson } from "./espn-site";
 import { cachedFeed, upstreamSignal } from "./upstream";
 
 const BASE_URL = "https://api.balldontlie.io/v1";
 const ESPN_STANDINGS_URL = "https://site.api.espn.com/apis/v2/sports/basketball/nba/standings";
-/**
- * The feed behind espn.com's scores bar. The site API's own `/scoreboard`
- * answers any team sport's date range with a 400 (seen October 2026), and one
- * day or one month of it cannot hold a postseason; this one takes the range,
- * so the whole bracket is a single request.
- */
-const ESPN_SCOREBOARD_URL = "https://site.web.api.espn.com/apis/v2/scoreboard/header";
+const ESPN_NBA: HeaderLeague = { sport: "basketball", league: "nba" };
 const REVALIDATE_SECONDS = 300;
 /**
  * The free tier allows five requests a minute, shared by everyone looking at
@@ -88,7 +90,7 @@ type BdlGame = {
  * it flips on Oct 1, the day ESPN's own season starts.
  */
 function currentSeason(today: Date): number {
-  return today.getMonth() >= 9 ? today.getFullYear() : today.getFullYear() - 1;
+  return today.getUTCMonth() >= 9 ? today.getUTCFullYear() : today.getUTCFullYear() - 1;
 }
 
 function seasonLabel(season: number): string {
@@ -101,7 +103,7 @@ function iso(date: Date): string {
 
 function shift(from: Date, days: number): Date {
   const d = new Date(from);
-  d.setDate(d.getDate() + days);
+  d.setUTCDate(d.getUTCDate() + days);
   return d;
 }
 
@@ -121,8 +123,8 @@ function shift(from: Date, days: number): Date {
  * the five a minute, which froze the cards on games already played.
  */
 function gameWindow(today: Date): { start: string; end: string } {
-  const month = today.getMonth();
-  const day = today.getDate();
+  const month = today.getUTCMonth();
+  const day = today.getUTCDate();
   const offSeason =
     (month === 5 && day >= 15) || month === 6 || month === 7 || month === 8 || (month === 9 && day < 20);
   if (!offSeason) {
@@ -132,7 +134,7 @@ function gameWindow(today: Date): { start: string; end: string } {
     };
   }
   return {
-    start: `${today.getFullYear()}-06-01`,
+    start: `${today.getUTCFullYear()}-06-01`,
     end: iso(shift(today, OFF_SEASON_AHEAD_DAYS)),
   };
 }
@@ -211,7 +213,9 @@ function matchFrom(game: BdlGame): Match {
     awayTeamId: game.visitor_team.abbreviation,
     homeScore: played ? game.home_team_score : null,
     awayScore: played ? game.visitor_team_score : null,
-    kickoff: game.datetime ?? `${game.date}T00:00:00Z`,
+    // No time yet: noon UTC is the same calendar day from UTC-11 to UTC+11,
+    // where midnight printed as the day before across the Americas.
+    kickoff: game.datetime ?? `${game.date}T12:00:00Z`,
     status: statusFrom(game),
     stageLabel: game.postseason ? "Playoffs" : undefined,
   };
@@ -431,43 +435,28 @@ function standingsFrom(json: EspnStandings): { standings: NbaStanding[]; teams: 
  * exhibition records out of it.
  */
 async function fetchStandings(season: number): Promise<EspnStandings> {
-  const res = await fetch(`${ESPN_STANDINGS_URL}?season=${season + 1}&seasontype=2`, {
-    signal: upstreamSignal(),
-  });
-  if (!res.ok) throw new Error(`espn nba standings ${res.status}`);
-  return (await res.json()) as EspnStandings;
+  return fetchEspnJson<EspnStandings>(
+    "espn nba standings",
+    `${ESPN_STANDINGS_URL}?season=${season + 1}&seasontype=2`
+  );
 }
 
-type EspnHeaderCompetitor = {
-  homeAway?: "home" | "away";
-  abbreviation?: string;
-  displayName?: string;
-  name?: string;
-  winner?: boolean;
-  /** "112"; there from tip-off. */
-  score?: string;
+/** The scores bar's side, with what only the NBA's postseason carries. */
+type EspnHeaderCompetitor = HeaderCompetitor & {
   /** This team's series record once the game is over, "3-1". */
   seriesRecord?: string;
   recordStats?: { playoffSeed?: { value?: number } };
 };
 
-type EspnHeaderEvent = {
-  id?: string;
-  date?: string;
-  /** "1" preseason, "2" regular season, "3" postseason, "5" play-in. */
-  seasonType?: string | number;
-  /** "East 1st Round - Game 1", "West Semifinals - Game 4", "NBA Finals - Game 7". */
-  note?: string;
-  fullStatus?: { type?: { name?: string; state?: "pre" | "in" | "post" } };
-  competitors?: EspnHeaderCompetitor[];
-  /** The national channels, "Peacock/NBC"; "" when there are none. */
-  broadcast?: string | null;
-  broadcasts?: Array<{ name?: string; type?: string }>;
-};
+/**
+ * `seasonType` "5" is the play-in; `note` reads "East 1st Round - Game 1",
+ * "West Semifinals - Game 4", "NBA Finals - Game 7".
+ */
+type EspnHeaderEvent = Omit<HeaderEvent, "competitors"> & { competitors?: EspnHeaderCompetitor[] };
 
-type EspnScoreboardHeader = {
-  sports?: Array<{ leagues?: Array<{ events?: EspnHeaderEvent[] }> }>;
-};
+async function fetchNbaHeader(from: string, to: string): Promise<EspnHeaderEvent[]> {
+  return fetchHeader(ESPN_NBA, from, to);
+}
 
 type NbaPlayoffs = { rounds: BracketRound[]; teams: Team[] };
 
@@ -476,16 +465,14 @@ const POSTSEASON = "3";
 const WINS_TO_ADVANCE = 4;
 /**
  * The postseason's dates, wider than any finals: the regular season's last
- * nights and the play-in come back too and are dropped by season type. Even
- * then one page holds it all — ~110 postseason games at most.
+ * nights and the play-in come back too and are dropped by season type. Two
+ * requests, as the scores bar takes 62 days at most; ~110 postseason games
+ * in all keeps each well under its ~215-game ceiling.
  */
-const PLAYOFF_DATES = { from: "0410", to: "0731" };
-/** Enough for a postseason or a preseason; ESPN answers 500 or more with a 502. */
-const HEADER_LIMIT = 300;
-
-function headerEvents(json: EspnScoreboardHeader): EspnHeaderEvent[] {
-  return (json.sports ?? []).flatMap((s) => s.leagues ?? []).flatMap((l) => l.events ?? []);
-}
+const PLAYOFF_SPANS = [
+  { from: "04-10", to: "06-10" },
+  { from: "06-11", to: "07-31" },
+] as const;
 
 /** A side of ESPN's scoreboard as a team, by balldontlie's abbreviation. */
 function headerTeam(c: EspnHeaderCompetitor | undefined, code: string): Team {
@@ -526,19 +513,20 @@ const FIRST_ROUND_SLOT: Record<number, number> = { 1: 0, 4: 1, 3: 2, 2: 3 };
  */
 function playoffYear(today: Date, page: BdlGame[], season: number): number | null {
   if (page.some((g) => g.season === season && g.postseason)) return season + 1;
-  const month = today.getMonth();
-  const inWindow = (month === 3 && today.getDate() >= 10) || month === 4 || month === 5;
+  const month = today.getUTCMonth();
+  const inWindow = (month === 3 && today.getUTCDate() >= 10) || month === 4 || month === 5;
   return inWindow ? season + 1 : null;
 }
 
-async function fetchPlayoffs(year: number): Promise<EspnScoreboardHeader> {
-  const dates = `${year}${PLAYOFF_DATES.from}-${year}${PLAYOFF_DATES.to}`;
-  const res = await fetch(
-    `${ESPN_SCOREBOARD_URL}?sport=basketball&league=nba&dates=${dates}&limit=${HEADER_LIMIT}`,
-    { signal: upstreamSignal() }
+/**
+ * Every span or none: a bracket missing a span's games would count its series
+ * short, and be cached over the last whole one.
+ */
+async function fetchPlayoffs(year: number): Promise<EspnHeaderEvent[]> {
+  const spans = await Promise.all(
+    PLAYOFF_SPANS.map((s) => fetchNbaHeader(`${year}-${s.from}`, `${year}-${s.to}`))
   );
-  if (!res.ok) throw new Error(`espn nba scoreboard ${res.status}`);
-  return (await res.json()) as EspnScoreboardHeader;
+  return spans.flat();
 }
 
 type NbaPreseason = { games: Match[]; teams: Team[] };
@@ -550,14 +538,8 @@ const NO_PRESEASON: NbaPreseason = { games: [], teams: [] };
  * tomorrow in UTC). balldontlie's free tier has none of it. Never more than a
  * few weeks: ESPN answers a span much over five months with nothing at all.
  */
-async function fetchPreseason(season: number, through: Date): Promise<EspnScoreboardHeader> {
-  const dates = `${season}1001-${iso(through).replace(/-/g, "")}`;
-  const res = await fetch(
-    `${ESPN_SCOREBOARD_URL}?sport=basketball&league=nba&dates=${dates}&limit=${HEADER_LIMIT}`,
-    { signal: upstreamSignal() }
-  );
-  if (!res.ok) throw new Error(`espn nba preseason ${res.status}`);
-  return (await res.json()) as EspnScoreboardHeader;
+async function fetchPreseason(season: number, through: Date): Promise<EspnHeaderEvent[]> {
+  return fetchNbaHeader(`${season}-10-01`, iso(through));
 }
 
 function preseasonStatus(type: { name?: string; state?: string } | undefined): MatchStatus {
@@ -578,10 +560,10 @@ function headerScore(c: EspnHeaderCompetitor | undefined): number | null {
  * "tomorrow" reaches it — is dropped by season type. A side that is not an
  * NBA team (the London Lions) has no logo to guess and keeps a monogram.
  */
-function preseasonFrom(json: EspnScoreboardHeader): NbaPreseason {
+function preseasonFrom(events: EspnHeaderEvent[]): NbaPreseason {
   const games: Match[] = [];
   const teams = new Map<string, Team>();
-  for (const event of headerEvents(json)) {
+  for (const event of events) {
     if (String(event.seasonType) !== PRESEASON || !event.id || !event.date) continue;
     const home = event.competitors?.find((c) => c.homeAway === "home");
     const away = event.competitors?.find((c) => c.homeAway === "away");
@@ -829,10 +811,10 @@ function tieFrom(id: string, slot: Slot, upper: Tie | undefined, lower: Tie | un
  * there from the start, TBD until their teams are. No postseason game, no
  * rounds. The play-in is a season type of its own and never part of it.
  */
-function playoffsFrom(json: EspnScoreboardHeader): NbaPlayoffs {
+function playoffsFrom(events: EspnHeaderEvent[]): NbaPlayoffs {
   const games: PlayoffGame[] = [];
   const teams = new Map<string, Team>();
-  for (const event of headerEvents(json)) {
+  for (const event of events) {
     if (String(event.seasonType) !== POSTSEASON || !event.date) continue;
     const stage = stageOf(event.note);
     if (!stage) continue;
@@ -880,8 +862,8 @@ type NbaChannels = {
 /** Yesterday (a late tip-off is tomorrow in UTC) through the week of fixtures listed. */
 const CHANNEL_DAYS = { behind: 1, ahead: FIXTURE_DAYS + 1 };
 /**
- * balldontlie's tip-off is a bare date when it has no time yet ("T00:00Z"),
- * up to a day off ESPN's; a playoff pair plays again two nights later.
+ * balldontlie's tip-off is a bare date at noon UTC when it has no time yet,
+ * up to half a day off ESPN's; a playoff pair plays again two nights later.
  */
 const CHANNEL_MATCH_MS = 36 * 3_600_000;
 
@@ -889,21 +871,13 @@ const CHANNEL_MATCH_MS = 36 * 3_600_000;
  * The national channels of the games in the days around `from`, from the
  * scores bar's feed: balldontlie has none. One request for the whole range.
  */
-async function fetchChannels(from: string): Promise<EspnScoreboardHeader> {
-  const days = CHANNEL_DAYS.behind + CHANNEL_DAYS.ahead;
-  const end = iso(new Date(Date.parse(`${from}T00:00:00Z`) + days * DAY_MS));
-  const dates = `${from.replace(/-/g, "")}-${end.replace(/-/g, "")}`;
-  const res = await fetch(
-    `${ESPN_SCOREBOARD_URL}?sport=basketball&league=nba&dates=${dates}&limit=${HEADER_LIMIT}`,
-    { signal: upstreamSignal() }
-  );
-  if (!res.ok) throw new Error(`espn nba channels ${res.status}`);
-  return (await res.json()) as EspnScoreboardHeader;
+async function fetchChannels(from: string): Promise<EspnHeaderEvent[]> {
+  return fetchNbaHeader(from, shiftDay(from, CHANNEL_DAYS.behind + CHANNEL_DAYS.ahead));
 }
 
-function channelsFrom(json: EspnScoreboardHeader): NbaChannels[] {
+function channelsFrom(events: EspnHeaderEvent[]): NbaChannels[] {
   const channels: NbaChannels[] = [];
-  for (const event of headerEvents(json)) {
+  for (const event of events) {
     const broadcasts = headerBroadcasts(event);
     const home = playoffTeamId(event.competitors?.find((c) => c.homeAway === "home"));
     const away = playoffTeamId(event.competitors?.find((c) => c.homeAway === "away"));
@@ -930,8 +904,8 @@ function withChannels(games: Match[], channels: NbaChannels[]): Match[] {
 }
 
 /**
- * balldontlie's games and ESPN's table for the season shown: the part of the
- * feed with one cache entry. The bracket and the preseason are joined in by
+ * balldontlie's games for the season shown: the part of the feed with one
+ * cache entry. The table, the bracket and the preseason are joined in by
  * `getNbaData`, each from a cache of its own.
  */
 type NbaFeed = {
@@ -939,7 +913,6 @@ type NbaFeed = {
   /** The season's games, untrimmed: the preseason is merged in before trimming. */
   games: Match[];
   teams: Team[];
-  standings: NbaStanding[];
   champion?: NbaChampion;
   tipOff?: string;
   /** The year whose bracket to read, or null when there cannot be one. */
@@ -961,44 +934,38 @@ async function fetchNbaFromApi(today: Date): Promise<NbaFeed> {
   const tipOff = tipOffFrom(own, season, start);
   const crowned = tipOff ? championFrom(page, season - 1) : undefined;
 
-  // The table is an extra, not the feed: if ESPN is down the games still
-  // refresh and the table drops away rather than being invented.
-  const table = await fetchStandings(season)
-    .then(standingsFrom)
-    .catch((error) => {
-      console.warn("espn nba standings unavailable:", error);
-      return { standings: [] as NbaStanding[], teams: [] as Team[] };
-    });
-
   const teams = new Map<string, Team>();
   for (const game of own) {
     for (const t of [game.home_team, game.visitor_team]) teams.set(t.abbreviation, teamFrom(t));
   }
   if (crowned) teams.set(crowned.team.abbreviation, teamFrom(crowned.team));
-  for (const team of table.teams) if (!teams.has(team.id)) teams.set(team.id, team);
 
   return {
     season,
     games: own.map(matchFrom),
     teams: [...teams.values()],
-    standings: table.standings,
     ...(crowned ? { champion: crowned.champion } : {}),
     ...(tipOff ? { tipOff } : {}),
     playoffYear: playoffYear(today, page, season),
   };
 }
 
+type NbaTable = { standings: NbaStanding[]; teams: Team[] };
+
 /** The feed with its extras joined in, trimmed to what the view lists. */
-function nbaDataFrom(feed: NbaFeed, bracket: NbaPlayoffs, preseason: NbaPreseason): NbaData {
+function nbaDataFrom(feed: NbaFeed, table: NbaTable, bracket: NbaPlayoffs, preseason: NbaPreseason): NbaData {
   const games = recentAndNext([...feed.games, ...preseason.games]);
+  const feedTeams = new Map<string, Team>(feed.teams.map((t) => [t.id, t]));
+  for (const team of table.teams) if (!feedTeams.has(team.id)) feedTeams.set(team.id, team);
+  const teams = [...feedTeams.values()];
   const known = new Map<string, Team>(preseason.teams.map((t) => [t.id, t]));
-  for (const team of feed.teams) known.set(team.id, team);
+  for (const team of teams) known.set(team.id, team);
   const byTeam = new Map<string, Team>();
   for (const id of [...games.flatMap((g) => [g.homeTeamId, g.awayTeamId]), feed.champion?.teamId]) {
     const team = id ? known.get(id) : undefined;
     if (team && !byTeam.has(team.id)) byTeam.set(team.id, team);
   }
-  for (const team of [...feed.teams.filter((t) => feed.standings.some((s) => s.teamId === t.id)), ...bracket.teams]) {
+  for (const team of [...teams.filter((t) => table.standings.some((s) => s.teamId === t.id)), ...bracket.teams]) {
     if (!byTeam.has(team.id)) byTeam.set(team.id, team);
   }
 
@@ -1006,7 +973,7 @@ function nbaDataFrom(feed: NbaFeed, bracket: NbaPlayoffs, preseason: NbaPreseaso
     season: seasonLabel(feed.season),
     teams: [...byTeam.values()],
     games,
-    standings: feed.standings,
+    standings: table.standings,
     playoffs: bracket.rounds,
     ...(feed.champion ? { champion: feed.champion } : {}),
     ...(feed.tipOff ? { tipOff: feed.tipOff } : {}),
@@ -1014,6 +981,20 @@ function nbaDataFrom(feed: NbaFeed, bracket: NbaPlayoffs, preseason: NbaPreseaso
 }
 
 const NO_PLAYOFFS: NbaPlayoffs = { rounds: [], teams: [] };
+const NO_TABLE: NbaTable = { standings: [], teams: [] };
+
+/**
+ * The table, keyed by its season. Caught inside the games' feed, one failed
+ * ESPN call was cached as an empty table for five minutes; here a failed
+ * refresh keeps the last good one, and with none the table drops away.
+ */
+const getNbaStandings = cachedFeed(
+  "ESPN NBA standings",
+  async (season: number): Promise<NbaTable> => standingsFrom(await fetchStandings(season)),
+  (): NbaTable => NO_TABLE,
+  ["nba-standings"],
+  { revalidate: REVALIDATE_SECONDS, tags: ["sports:nba"] }
+);
 
 /**
  * The bracket in a cache entry of its own, keyed by its year. Caught inside
@@ -1066,7 +1047,7 @@ const getNbaFeed = cachedFeed(
  * Live NBA games, falling back to the mock fixture when there is no last good
  * answer to serve.
  *
- * The bracket and the preseason are read out here, never inside the feed's
+ * The table, the bracket and the preseason are read out here, never inside the feed's
  * cached function: Next bypasses the read of an `unstable_cache` nested in
  * another, so their own entries would never serve and a failed call would be
  * stored with the games, empty, for five minutes. The preseason costs a
@@ -1083,12 +1064,13 @@ export async function getNbaData(): Promise<NbaData> {
   const soon = feed.games.some(
     (g) => g.status !== "ft" && Date.parse(g.kickoff) - today.getTime() < CHANNEL_DAYS.ahead * DAY_MS
   );
-  const [bracket, preseason, channels] = await Promise.all([
+  const [table, bracket, preseason, channels] = await Promise.all([
+    getNbaStandings(feed.season),
     feed.playoffYear === null ? Promise.resolve(NO_PLAYOFFS) : getNbaPlayoffs(feed.playoffYear),
     feed.tipOff ? getNbaPreseason(feed.season) : Promise.resolve(NO_PRESEASON),
     soon ? getNbaChannels(from) : Promise.resolve([]),
   ]);
-  const data = nbaDataFrom(feed, bracket, preseason);
+  const data = nbaDataFrom(feed, table, bracket, preseason);
   return { ...data, games: withChannels(data.games, channels) };
 }
 
@@ -1098,6 +1080,7 @@ export const __testing = {
   seasonLabel,
   recentAndNext,
   statusFrom,
+  matchFrom,
   gameWindow,
   standingsFrom,
   teamFrom,

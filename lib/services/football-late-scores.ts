@@ -45,19 +45,23 @@ function sameClub(team: Team | undefined, espn: { displayName?: string; name?: s
   return [...words(team.name), ...words(team.shortName)].some((w) => theirs.has(w));
 }
 
-/** The ESPN game a football-data one is: the one kicking off with it, by its clubs when two do. */
+/**
+ * The ESPN game a football-data one is: kicking off with it, with both clubs
+ * matching. One club was not enough — a Saturday's 3pm has Manchester United
+ * and Newcastle United at once, and "United" gave one game the other's score.
+ */
 function counterpart(match: Match, events: HeaderEvent[], teams: Map<string, Team>): { event: HeaderEvent; swapped: boolean } | null {
   const at = Date.parse(match.kickoff);
   const home = teams.get(match.homeTeamId);
   const away = teams.get(match.awayTeamId);
-  const near = events.filter((e) => e.date && Math.abs(Date.parse(e.date) - at) <= KICKOFF_SLACK_MS);
-  for (const event of near) {
+  for (const event of events) {
+    if (!event.date || Math.abs(Date.parse(event.date) - at) > KICKOFF_SLACK_MS) continue;
     const mapped = headerMatch(event);
     if (!mapped) continue;
-    if (sameClub(home, mapped.home) || sameClub(away, mapped.away)) return { event, swapped: false };
-    if (sameClub(home, mapped.away) || sameClub(away, mapped.home)) return { event, swapped: true };
+    if (sameClub(home, mapped.home) && sameClub(away, mapped.away)) return { event, swapped: false };
+    if (sameClub(home, mapped.away) && sameClub(away, mapped.home)) return { event, swapped: true };
   }
-  return near.length === 1 ? { event: near[0], swapped: false } : null;
+  return null;
 }
 
 function patched(match: Match, event: HeaderEvent, swapped: boolean): Match {

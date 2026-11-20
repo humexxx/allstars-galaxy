@@ -24,7 +24,6 @@
  */
 import "server-only";
 
-import { env } from "@/lib/env";
 import type { AppListing, AppProvider } from "@/types/apps";
 import { upstreamSignal } from "./upstream";
 
@@ -61,7 +60,8 @@ const VERCEL_API_BASE = "https://api.vercel.com";
 const PROVIDER: AppProvider = "vercel";
 
 export async function listVercelProjects(): Promise<AppListing[]> {
-  const token = env.VERCEL_API_TOKEN;
+  // Per call, never at import: see lib/env.ts.
+  const token = process.env.VERCEL_API_TOKEN;
   if (!token) return [];
 
   try {

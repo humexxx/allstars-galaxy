@@ -1,8 +1,8 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { canUseAssistant } from "@/lib/ai/assistant/access";
+import { assistantClient } from "@/lib/ai/assistant/converse";
 import { streamAssistantTurn } from "@/lib/ai/assistant/respond";
 import { aiModel } from "@/lib/ai/models";
 import { converse } from "@/lib/plans/assistant/converse";
@@ -64,8 +64,7 @@ export async function POST(request: Request): Promise<Response> {
     tag: "plans-assistant",
     run: (send) =>
       converse({
-        // Reads ANTHROPIC_API_KEY now, per request, never at import.
-        client: new Anthropic(),
+        client: assistantClient(),
         model,
         context,
         history,

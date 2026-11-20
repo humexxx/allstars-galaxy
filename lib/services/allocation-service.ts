@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
@@ -16,7 +16,12 @@ import {
   unitsFor,
   type Allocation,
 } from "@/lib/finance/allocation";
-import { closeOnOrBefore, fetchDailyCloses } from "./price-providers/massive";
+import {
+  closeOnOrBefore,
+  fetchDailyCloses,
+  MASSIVE_CALLS_PER_RUN,
+  type HistoricalBar,
+} from "./price-providers/massive";
 
 export type MethodAllocationRow = {
   assetId: string;
@@ -53,13 +58,17 @@ export type BackfillResult = {
   errors: string[];
 };
 
+/** A backfill plus the Massive requests it spent, for a run that shares the budget. */
+export type BackfillRun = BackfillResult & { massiveCalls: number };
+
 /**
- * Price every settled contribution that has no allocation rows yet.
+ * Price every settled contribution to `ownerUserId`'s methods that is missing
+ * allocation rows.
  *
  * Runs against history, not live prices: each contribution is valued at its
  * own date, so the resulting position is what the money would really have
- * bought. Already-priced contributions are never touched — the whole point of
- * storing `priceAtPurchase` is that it stops being a question.
+ * bought. Already-priced rows are never touched — the whole point of storing
+ * `priceAtPurchase` is that it stops being a question.
  *
  * Rejected and pending transactions are excluded: no money moved, so nothing
  * was bought.
@@ -72,11 +81,39 @@ export async function backfillTransactionAllocations(
     .from(investmentMethods)
     .where(eq(investmentMethods.ownerUserId, ownerUserId));
 
-  if (owned.length === 0) return { priced: 0, skipped: 0, errors: [] };
-  const methodIds = owned.map((m) => m.id);
+  const { priced, skipped, errors } = await backfillMethods(owned.map((m) => m.id));
+  return { priced, skipped, errors };
+}
 
-  // One query for every owned method's policy, grouped in memory — a query
-  // per method made this O(methods) round-trips on every backfill.
+/**
+ * Price outstanding contributions for every method owner.
+ *
+ * The price cron runs this so a contribution approved between runs does not
+ * sit unpriced and silently missing from the margin until somebody presses a
+ * button. Every owner's methods go through one pass, so each asset's history
+ * is fetched once rather than once per owner holding it.
+ */
+export async function backfillAllOwners(): Promise<BackfillRun> {
+  const owned = await db
+    .select({ id: investmentMethods.id })
+    .from(investmentMethods)
+    .where(isNotNull(investmentMethods.ownerUserId));
+
+  return backfillMethods(owned.map((m) => m.id));
+}
+
+type PricingJob = {
+  transactionId: string;
+  day: string;
+  direction: "buy" | "withdrawal";
+  parts: { assetId: string; amount: number }[];
+};
+
+async function backfillMethods(methodIds: string[]): Promise<BackfillRun> {
+  if (methodIds.length === 0) return { priced: 0, skipped: 0, errors: [], massiveCalls: 0 };
+
+  // One query for every method's policy, grouped in memory — a query per
+  // method made this O(methods) round-trips on every backfill.
   const policyRows = await db
     .select({
       methodId: methodAllocations.methodId,
@@ -116,31 +153,92 @@ export async function backfillTransactionAllocations(
       )
     );
 
-  const alreadyPriced = new Set(
-    (
-      await db
-        .select({ transactionId: transactionAllocations.transactionId })
-        .from(transactionAllocations)
-    ).map((r) => r.transactionId)
-  );
-
-  const todo = pending.filter((t) => !alreadyPriced.has(t.id));
-  if (todo.length === 0) {
-    return { priced: 0, skipped: pending.length, errors: [] };
+  // Keyed per (transaction, asset): a split contribution whose second asset's
+  // lookup failed has one row, and keying on the transaction alone counted it
+  // done, so that half of the money was never priced.
+  const existing = new Map<string, Map<string, string>>();
+  const existingRows = await db
+    .select({
+      transactionId: transactionAllocations.transactionId,
+      assetId: transactionAllocations.assetId,
+      amount: transactionAllocations.amount,
+    })
+    .from(transactionAllocations);
+  for (const r of existingRows) {
+    const byAsset = existing.get(r.transactionId) ?? new Map<string, string>();
+    byAsset.set(r.assetId, r.amount);
+    existing.set(r.transactionId, byAsset);
   }
 
-  // One history request per asset covering the full span of contributions,
-  // rather than one per contribution — that is what keeps a backfill of any
-  // size inside the 5 req/min free tier.
-  const assetIds = new Set<string>();
-  for (const t of todo) {
-    for (const a of policies.get(t.methodId) ?? []) assetIds.add(a.assetId);
-  }
-  if (assetIds.size === 0) {
-    return { priced: 0, skipped: todo.length, errors: ["no allocation configured"] };
+  const errors: string[] = [];
+  let skipped = 0;
+  const jobs: PricingJob[] = [];
+
+  for (const t of pending) {
+    const priced = existing.get(t.id);
+    // Whole once its rows carry all the money that moved, under whatever
+    // policy priced them — a later policy edit must not reopen it.
+    if (priced && coversTotal(priced, t)) continue;
+    const policy = policies.get(t.methodId) ?? [];
+    if (policy.length === 0) {
+      if (!priced) skipped++;
+      continue;
+    }
+    // splitContribution hands the last slice the remainder, so a policy that
+    // does not reach 100% would silently overweight its last asset — forever,
+    // since the allocation rows are immutable.
+    if (!isCompleteAllocation(policy)) {
+      if (!priced) {
+        skipped++;
+        errors.push(`method ${t.methodId} allocation policy does not total 100%`);
+      }
+      continue;
+    }
+
+    const direction = t.type === "withdrawal" ? "withdrawal" : "buy";
+    const parts = splitContribution(parseFloat(t.total), policy).map((p) => ({
+      assetId: p.assetId,
+      amount: direction === "withdrawal" ? -p.amount : p.amount,
+    }));
+
+    let missing = parts;
+    if (priced) {
+      // Completing a partly-priced contribution is only safe while the policy
+      // still splits it the way the rows already stored did. After a policy
+      // edit the missing slice would be computed from different percentages
+      // and the parts would no longer add up to the money that moved.
+      const consistent = [...priced].every(([assetId, amount]) =>
+        parts.some((p) => p.assetId === assetId && p.amount.toFixed(2) === parseFloat(amount).toFixed(2))
+      );
+      if (!consistent) {
+        skipped++;
+        errors.push(`transaction ${t.id} is partly priced under a different allocation policy`);
+        continue;
+      }
+      missing = parts.filter((p) => !priced.has(p.assetId));
+    }
+    if (missing.length === 0) continue;
+
+    jobs.push({
+      transactionId: t.id,
+      day: new Date(t.date).toISOString().slice(0, 10),
+      direction,
+      parts: missing,
+    });
   }
 
-  const dates = todo.map((t) => new Date(t.date).toISOString().slice(0, 10)).sort();
+  if (jobs.length === 0) {
+    const nothingConfigured = pending.length > 0 && policyRows.length === 0;
+    return {
+      priced: 0,
+      skipped: skipped > 0 ? skipped : pending.length,
+      errors: nothingConfigured ? ["no allocation configured", ...errors] : errors,
+      massiveCalls: 0,
+    };
+  }
+
+  const assetIds = new Set(jobs.flatMap((j) => j.parts.map((p) => p.assetId)));
+  const dates = jobs.map((j) => j.day).sort();
   const from = shiftDays(dates[0], -7); // cushion for weekends before the first buy
   const to = dates[dates.length - 1];
 
@@ -148,55 +246,52 @@ export async function backfillTransactionAllocations(
     .select()
     .from(priceAssets)
     .where(inArray(priceAssets.id, [...assetIds]));
+  const symbols = new Map(assets.map((a) => [a.id, a.symbol]));
 
-  const history = new Map<string, Awaited<ReturnType<typeof fetchDailyCloses>>["bars"]>();
-  const errors: string[] = [];
+  // One history request per asset covering the full span of contributions,
+  // rather than one per contribution, capped at the run's Massive budget.
+  const history = new Map<string, HistoricalBar[]>();
+  let massiveCalls = 0;
 
   for (const asset of assets) {
+    // Only Massive serves history here. Asking it for a CoinGecko id
+    // ("bitcoin") spent a request on a ticker that cannot exist.
+    if (asset.source !== "massive") {
+      errors.push(`${asset.symbol}: historical pricing unsupported for source ${asset.source}`);
+      continue;
+    }
     if (!asset.externalId) {
       errors.push(`${asset.symbol} has no provider id`);
       continue;
     }
+    if (massiveCalls >= MASSIVE_CALLS_PER_RUN) {
+      errors.push(`${asset.symbol}: rate limit, history deferred to the next run`);
+      continue;
+    }
+    massiveCalls++;
     const { bars, error } = await fetchDailyCloses(asset.externalId, from, to);
     if (error) errors.push(`${asset.symbol}: ${error}`);
     history.set(asset.id, bars);
   }
 
   const rows: (typeof transactionAllocations.$inferInsert)[] = [];
-  let skipped = 0;
 
-  for (const t of todo) {
-    const policy = policies.get(t.methodId) ?? [];
-    if (policy.length === 0) {
-      skipped++;
-      continue;
-    }
-    // splitContribution hands the last slice the remainder, so a policy that
-    // does not reach 100% would silently overweight its last asset — forever,
-    // since the allocation rows are immutable.
-    if (!isCompleteAllocation(policy)) {
-      skipped++;
-      errors.push(`method ${t.methodId} allocation policy does not total 100%`);
-      continue;
-    }
-
-    const day = new Date(t.date).toISOString().slice(0, 10);
-    const amount = parseFloat(t.total);
-    const direction = t.type === "withdrawal" ? "withdrawal" : "buy";
-
-    for (const part of splitContribution(amount, policy)) {
-      const bar = closeOnOrBefore(history.get(part.assetId) ?? [], day);
+  for (const job of jobs) {
+    for (const part of job.parts) {
+      const bars = history.get(part.assetId);
+      const bar = bars ? closeOnOrBefore(bars, job.day) : null;
       if (!bar) {
-        errors.push(`no price for asset on ${day}`);
+        // The asset-level reason is already in `errors` when there was no read.
+        if (bars) errors.push(`no price for ${symbols.get(part.assetId) ?? "asset"} on ${job.day}`);
         skipped++;
         continue;
       }
       rows.push({
-        transactionId: t.id,
+        transactionId: job.transactionId,
         assetId: part.assetId,
-        amount: (direction === "withdrawal" ? -part.amount : part.amount).toFixed(2),
+        amount: part.amount.toFixed(2),
         priceAtPurchase: bar.close.toFixed(8),
-        quantity: unitsFor(part.amount, bar.close, direction).toFixed(8),
+        quantity: unitsFor(Math.abs(part.amount), bar.close, job.direction).toFixed(8),
         pricedOn: new Date(`${bar.day}T00:00:00.000Z`),
       });
     }
@@ -206,32 +301,7 @@ export async function backfillTransactionAllocations(
     await db.insert(transactionAllocations).values(rows).onConflictDoNothing();
   }
 
-  return { priced: rows.length, skipped, errors };
-}
-
-/**
- * Price outstanding contributions for every method owner.
- *
- * The daily cron runs this after refreshing prices: a contribution approved
- * between runs would otherwise sit unpriced and silently missing from the
- * margin until somebody noticed and pressed a button.
- */
-export async function backfillAllOwners(): Promise<BackfillResult> {
-  const owners = await db
-    .selectDistinct({ ownerUserId: investmentMethods.ownerUserId })
-    .from(investmentMethods);
-
-  const totals: BackfillResult = { priced: 0, skipped: 0, errors: [] };
-
-  for (const { ownerUserId } of owners) {
-    if (!ownerUserId) continue;
-    const r = await backfillTransactionAllocations(ownerUserId);
-    totals.priced += r.priced;
-    totals.skipped += r.skipped;
-    totals.errors.push(...r.errors);
-  }
-
-  return totals;
+  return { priced: rows.length, skipped, errors, massiveCalls };
 }
 
 export type DerivedHoldingRow = {
@@ -273,6 +343,16 @@ export async function getDerivedHoldings(methodIds: string[]): Promise<DerivedHo
         inArray(transactions.status, ["approved", "closed"])
       )
     );
+}
+
+function coversTotal(
+  priced: Map<string, string>,
+  t: { type: string; total: string }
+): boolean {
+  const signed = parseFloat(t.total) * (t.type === "withdrawal" ? -1 : 1);
+  let sum = 0;
+  for (const amount of priced.values()) sum += parseFloat(amount);
+  return Math.abs(sum - signed) < 0.005;
 }
 
 function shiftDays(day: string, delta: number): string {

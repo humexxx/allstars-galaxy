@@ -8,6 +8,24 @@ import type { AiModel, AiTokenUsage } from "@/lib/ai/models";
 /** Model calls one message may make: reads, an action, a retry and an answer fit easily. */
 const MAX_CALLS = 8;
 
+/** Every assistant route's `maxDuration` (a literal in each route, as Next requires). */
+const ROUTE_MAX_DURATION_MS = 120_000;
+/** No new model call this close to the end: it could not finish before the platform kills the function. */
+const NEW_CALL_MARGIN_MS = 20_000;
+/** A call still running this close to the end is cut, so its tokens are booked before the kill. */
+const HARD_STOP_MARGIN_MS = 5_000;
+/** How long one request may go without the API answering. */
+const CALL_TIMEOUT_MS = 60_000;
+
+/**
+ * The client every assistant route talks to Claude through. The SDK's defaults
+ * — a 10-minute timeout and two retries — outlast the route several times over.
+ * Reads ANTHROPIC_API_KEY now, per request, never at import.
+ */
+export function assistantClient(): Anthropic {
+  return new Anthropic({ timeout: CALL_TIMEOUT_MS, maxRetries: 1 });
+}
+
 type Block = Anthropic.Beta.BetaContentBlock;
 
 /** A conversation as the API stores it; the browser keeps it and sends it back. */
@@ -64,8 +82,16 @@ export async function converse({
   signal?: AbortSignal;
 }): Promise<void> {
   let parseRetries = 0;
+  const startedAt = Date.now();
+  const hardStop = AbortSignal.timeout(ROUTE_MAX_DURATION_MS - HARD_STOP_MARGIN_MS);
+  const callSignal = signal ? AbortSignal.any([signal, hardStop]) : hardStop;
+  const outOfTime = "\n\nI ran out of time there. Ask me to carry on.";
 
   for (let call = 0; call < MAX_CALLS; call++) {
+    if (call > 0 && Date.now() - startedAt >= ROUTE_MAX_DURATION_MS - NEW_CALL_MARGIN_MS) {
+      send({ type: "text", text: outOfTime });
+      return;
+    }
     const stream = client.beta.messages.stream(
       {
         model: model.id,
@@ -81,7 +107,7 @@ export async function converse({
         tools,
         messages: [...history, ...added],
       },
-      { signal }
+      { signal: callSignal }
     );
     stream.on("text", (text) => send({ type: "text", text }));
     stream.on("contentBlock", (block) => {
@@ -96,6 +122,17 @@ export async function converse({
       message = await stream.finalMessage();
       parseRetries = 0;
     } catch (err) {
+      // Tokens streamed before a failure or an abort are billed all the same.
+      const partial = stream.currentMessage;
+      if (partial) {
+        await record(partial.usage, partial.model).catch((recordErr: unknown) =>
+          console.error(`[${tag}] usage not recorded:`, recordErr)
+        );
+      }
+      if (hardStop.aborted && !signal?.aborted) {
+        send({ type: "text", text: outOfTime });
+        return;
+      }
       // Only a tool input too broken to parse is worth asking again; the
       // turn was never appended, so the retry starts from the same history.
       if (err instanceof Anthropic.APIError || signal?.aborted || parseRetries++ >= 2) throw err;

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { upstreamSignal } from "../upstream";
 import { isUsablePrice, type PriceableAsset, type ProviderResult } from "./types";
 
 /**
@@ -20,15 +21,15 @@ import { isUsablePrice, type PriceableAsset, type ProviderResult } from "./types
  * constraint and it shapes everything below.
  */
 const DEFAULT_BASE_URL = "https://api.massive.com";
-const TIMEOUT_MS = 15_000;
 
 /**
  * Requests per run. The free tier allows 5 per minute and a cron invocation
  * has to finish inside the function timeout, so we spend the budget rather
  * than sleeping through several minutes: one call sweeps ALL crypto, leaving
- * four for individually-quoted tickers.
+ * the rest for individually-quoted tickers. Shared by everything one cron run
+ * asks Massive for — the backfill's history reads come out of the same five.
  */
-const MAX_TICKER_CALLS = 4;
+export const MASSIVE_CALLS_PER_RUN = 5;
 
 /** Massive prefixes crypto tickers `X:` and index tickers `I:`. */
 function isCrypto(ticker: string): boolean {
@@ -45,13 +46,13 @@ function baseUrl(): string {
 async function get<T = AggResponse>(
   path: string,
   apiKey: string,
-  timeoutMs: number = TIMEOUT_MS
+  signal: AbortSignal = upstreamSignal()
 ): Promise<T | null> {
   // The key goes in the header, never the query string: query params leak
   // into logs, proxies and error reports. Massive accepts `?apiKey=` too —
   // don't.
   const res = await fetch(`${baseUrl()}${path}`, {
-    signal: AbortSignal.timeout(timeoutMs),
+    signal,
     headers: { accept: "application/json", authorization: `Bearer ${apiKey}` },
     cache: "no-store",
   });
@@ -78,16 +79,17 @@ const TICKERS_PAGE = 1000;
  * the matches ran past that page.
  *
  * One request against the 5-a-minute tier the daily price run shares. Null
- * without a key; throws when Massive refuses or does not answer.
+ * without a key; throws when Massive refuses or does not answer. Pass one
+ * `signal` to several calls to hold them all to a single deadline.
  */
 export async function findMassiveTickers(
   by: { search: string } | { ticker: string },
-  timeoutMs: number = TIMEOUT_MS
+  signal: AbortSignal = upstreamSignal()
 ): Promise<{ tickers: MassiveTicker[]; more: boolean } | null> {
   const apiKey = process.env.MASSIVE_API_KEY;
   if (!apiKey) return null;
   const params = new URLSearchParams({ ...by, active: "true", limit: String(TICKERS_PAGE) });
-  const body = await get<TickersResponse>(`/v3/reference/tickers?${params}`, apiKey, timeoutMs);
+  const body = await get<TickersResponse>(`/v3/reference/tickers?${params}`, apiKey, signal);
   const tickers: MassiveTicker[] = [];
   for (const r of body?.results ?? []) {
     if (r.ticker) tickers.push({ ticker: r.ticker, name: r.name ?? null, market: r.market ?? null });
@@ -229,11 +231,13 @@ export function closeOnOrBefore(
  * `assets` must arrive stalest-first: when there are more individually-quoted
  * tickers than the per-run budget allows, the ones left over are the ones with
  * the freshest price, and they get picked up on the next run. Nothing is
- * dropped silently — the overflow is reported in `skipped`.
+ * dropped silently — the overflow is reported in `skipped`. `maxCalls` is what
+ * is left of this run's request budget.
  */
 export async function fetchMassivePrices(
   assets: PriceableAsset[],
-  now: Date = new Date()
+  now: Date = new Date(),
+  maxCalls: number = MASSIVE_CALLS_PER_RUN
 ): Promise<ProviderResult> {
   const apiKey = process.env.MASSIVE_API_KEY;
   if (!apiKey) {
@@ -246,6 +250,14 @@ export async function fetchMassivePrices(
 
   const prices = new Map<string, number>();
   const errors: string[] = [];
+
+  if (maxCalls <= 0) {
+    return {
+      prices,
+      skipped: assets.length,
+      errors: assets.length > 0 ? [deferredMessage(assets.length)] : [],
+    };
+  }
 
   const crypto = assets.filter((a) => isCrypto(a.externalId));
   const rest = assets.filter((a) => !isCrypto(a.externalId));
@@ -270,7 +282,7 @@ export async function fetchMassivePrices(
     }
   }
 
-  const budget = crypto.length > 0 ? MAX_TICKER_CALLS : MAX_TICKER_CALLS + 1;
+  const budget = crypto.length > 0 ? maxCalls - 1 : maxCalls;
   const toQuote = rest.slice(0, budget);
   const overflow = rest.length - toQuote.length;
 
@@ -280,11 +292,11 @@ export async function fetchMassivePrices(
     if (error) errors.push(error);
   }
 
-  if (overflow > 0) {
-    errors.push(
-      `rate limit: ${overflow} asset(s) deferred to the next run (5 req/min free tier)`
-    );
-  }
+  if (overflow > 0) errors.push(deferredMessage(overflow));
 
   return { prices, skipped: overflow, errors };
+}
+
+function deferredMessage(count: number): string {
+  return `rate limit: ${count} asset(s) deferred to the next run (5 req/min free tier)`;
 }

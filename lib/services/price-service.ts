@@ -42,9 +42,12 @@ const MANUAL = "manual";
  * Append-only on purpose: a bad fetch leaves a traceable row instead of
  * overwriting the last good price, and the margin can be replayed for any past
  * date because no history is ever destroyed.
+ *
+ * `massiveCalls` is what is left of the run's Massive budget when something
+ * else in the same run (the backfill) already spent part of it.
  */
 export async function refreshPrices(
-  options: { assetIds?: string[] } = {}
+  options: { assetIds?: string[]; massiveCalls?: number } = {}
 ): Promise<PriceFetchResult> {
   if (options.assetIds?.length === 0) return { fetched: 0, skipped: 0, errors: [] };
   const automatic = ne(priceAssets.source, MANUAL);
@@ -80,31 +83,33 @@ export async function refreshPrices(
   }
 
   const errors: string[] = [];
-  const prices = new Map<string, number>();
+  let fetched = 0;
 
+  // Each provider's quotes are stored as soon as they arrive: held until the
+  // last provider answered, a slow one running the function out of time lost
+  // every quote already fetched.
   for (const [source, list] of bySource) {
     const result =
       source === "massive"
-        ? await fetchMassivePrices(list)
+        ? await fetchMassivePrices(list, new Date(), options.massiveCalls)
         : source === "coingecko"
           ? await fetchCoinGeckoPrices(list)
           : { prices: new Map<string, number>(), skipped: list.length, errors: [`unknown source "${source}"`] };
 
-    for (const [id, price] of result.prices) prices.set(id, price);
     skipped += result.skipped;
     errors.push(...result.errors);
+
+    const rows = [...result.prices].map(([assetId, price]) => ({
+      assetId,
+      price: price.toFixed(8),
+    }));
+    if (rows.length > 0) {
+      await db.insert(priceQuotes).values(rows);
+      fetched += rows.length;
+    }
   }
 
-  const rows = [...prices].map(([assetId, price]) => ({
-    assetId,
-    price: price.toFixed(8),
-  }));
-
-  if (rows.length > 0) {
-    await db.insert(priceQuotes).values(rows);
-  }
-
-  return { fetched: rows.length, skipped, errors };
+  return { fetched, skipped, errors };
 }
 
 /**

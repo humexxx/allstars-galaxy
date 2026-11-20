@@ -1,7 +1,7 @@
 # Settings
 
 > **Status:** Active
-> **Last reviewed:** 2026-11-10
+> **Last reviewed:** 2026-11-20
 
 ## Overview
 Personal portal preferences. Appearance holds the decorative module mascot (a
@@ -66,4 +66,4 @@ Road Paths, playing the sport on screen on Sports, reading a map on Travel.
   turns it into reminder stages (30, 20 and 10 days out, then daily, then
   daily once expired), each named after the expiry date so a new key starts
   over, and each shown once per browser (`localStorage`).
-
+- Assistants (2026-11-20): one `assistantClient()` (60s timeout, one retry) for all four; no model call starts within 20s of the routes' 120s limit, and tokens of a cut or failed stream are recorded. A travel undo receipt restores only while the row still carries the `updatedAt` the Apply left.

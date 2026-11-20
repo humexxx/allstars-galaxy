@@ -2,15 +2,16 @@ import "server-only";
 
 import { db } from "@/db";
 import { portfolios, portfolioSnapshots, transactions } from "@/db/schema";
-import { eq, and, sql, lte, gt, desc, inArray } from "drizzle-orm";
+import { eq, and, sql, lte, lt, gt, gte, desc, inArray } from "drizzle-orm";
 import type { SnapshotSource } from "@/schemas/snapshot";
 
 /**
  * Create daily snapshots for all portfolios.
- * Optimized as a batch: 3 queries total regardless of portfolio count.
+ * Optimized as a batch: 4 queries total regardless of portfolio count.
  *   1. SUM(currentValue) per portfolio for approved buy transactions.
  *   2. Latest snapshot value per portfolio (to decide whether to write a zero row).
- *   3. Single bulk INSERT for all eligible portfolios.
+ *   3. Today's cron rows, so a retry writes none twice.
+ *   4. Single bulk INSERT for all eligible portfolios.
  */
 export async function createDailySnapshots(): Promise<{
   date: Date;
@@ -49,7 +50,6 @@ export async function createDailySnapshots(): Promise<{
       portfolioId: portfolioSnapshots.portfolioId,
       totalValue: portfolioSnapshots.totalValue,
       date: portfolioSnapshots.date,
-      source: portfolioSnapshots.source,
     })
     .from(portfolioSnapshots)
     // `inArray` emits `IN ($1, $2, …)`. The previous raw
@@ -64,15 +64,23 @@ export async function createDailySnapshots(): Promise<{
     latestSnapshots.map((s) => [s.portfolioId, parseFloat(s.totalValue)])
   );
   // Portfolios the cron already snapshotted today (UTC). A retried or doubled
-  // run wrote two rows for one day, and the chart drew both.
-  const todayKey = today.toISOString().slice(0, 10);
-  const doneToday = new Set(
-    latestSnapshots
-      .filter(
-        (s) => s.source === "system_cron" && s.date.toISOString().slice(0, 10) === todayKey
+  // run wrote two rows for one day, and the chart drew both. Any cron row of
+  // the day counts, not only the newest snapshot: a manual or approval
+  // snapshot taken after the run hid it, and the retry wrote a second one.
+  const dayStart = new Date(`${today.toISOString().slice(0, 10)}T00:00:00.000Z`);
+  const nextDay = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+  const cronRowsToday = await db
+    .select({ portfolioId: portfolioSnapshots.portfolioId })
+    .from(portfolioSnapshots)
+    .where(
+      and(
+        inArray(portfolioSnapshots.portfolioId, portfolioIds),
+        eq(portfolioSnapshots.source, "system_cron"),
+        gte(portfolioSnapshots.date, dayStart),
+        lt(portfolioSnapshots.date, nextDay)
       )
-      .map((s) => s.portfolioId)
-  );
+    );
+  const doneToday = new Set(cronRowsToday.map((s) => s.portfolioId));
 
   // 3. Decide which rows to insert.
   const rowsToInsert = balances

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { upstreamSignal } from "../upstream";
 import { isUsablePrice, type PriceableAsset, type ProviderResult } from "./types";
 
 /**
@@ -10,7 +11,6 @@ import { isUsablePrice, type PriceableAsset, type ProviderResult } from "./types
  * so it costs a single call however many assets point at it.
  */
 const BASE_URL = "https://api.coingecko.com/api/v3";
-const TIMEOUT_MS = 15_000;
 
 export async function fetchCoinGeckoPrices(
   assets: PriceableAsset[]
@@ -22,17 +22,17 @@ export async function fetchCoinGeckoPrices(
   const ids = assets.map((a) => a.externalId).join(",");
   const url = `${BASE_URL}/simple/price?ids=${encodeURIComponent(ids)}&vs_currencies=usd`;
 
-  let payload: Record<string, { usd?: number }>;
+  let payload: unknown;
   try {
     const res = await fetch(url, {
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: upstreamSignal(),
       headers: { accept: "application/json" },
       cache: "no-store",
     });
     if (!res.ok) {
       return { prices: new Map(), skipped: assets.length, errors: [`coingecko ${res.status}`] };
     }
-    payload = (await res.json()) as Record<string, { usd?: number }>;
+    payload = await res.json();
   } catch (e) {
     // A provider outage must not take the cron down — the last known price
     // stays valid and the next run retries.
@@ -43,11 +43,18 @@ export async function fetchCoinGeckoPrices(
     };
   }
 
+  // A 200 can still carry `null` or an error object; reading through it threw
+  // past the caller and took the other provider's quotes with it.
+  if (!isRecord(payload)) {
+    return { prices: new Map(), skipped: assets.length, errors: ["coingecko returned no prices"] };
+  }
+
   const prices = new Map<string, number>();
   const errors: string[] = [];
 
   for (const asset of assets) {
-    const usd = payload[asset.externalId]?.usd;
+    const entry = payload[asset.externalId];
+    const usd = isRecord(entry) ? entry.usd : undefined;
     if (!isUsablePrice(usd)) {
       errors.push(`no price for ${asset.symbol}`);
       continue;
@@ -56,4 +63,8 @@ export async function fetchCoinGeckoPrices(
   }
 
   return { prices, skipped: 0, errors };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

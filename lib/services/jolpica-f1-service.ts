@@ -28,18 +28,20 @@ const DAY_SECONDS = 24 * 60 * 60;
  */
 const SETTLING_MS = 48 * 60 * 60 * 1000;
 
+// The provider's rows are typed as they may arrive, not as they usually do:
+// one entry missing a field must cost that entry, not the F1 page.
 type JolpicaDriver = {
   driverId: string;
   code?: string;
-  givenName: string;
-  familyName: string;
+  givenName?: string;
+  familyName?: string;
   /** Missing for a driver new to the grid (Rafael Câmara, Nov 2026). */
   nationality?: string;
 };
 
 type JolpicaConstructor = {
   constructorId: string;
-  name: string;
+  name?: string;
   nationality?: string;
 };
 
@@ -47,15 +49,15 @@ type JolpicaDriverStanding = {
   position: string;
   points: string;
   wins: string;
-  Driver: JolpicaDriver;
-  Constructors: JolpicaConstructor[];
+  Driver?: JolpicaDriver;
+  Constructors?: JolpicaConstructor[];
 };
 
 type JolpicaConstructorStanding = {
   position: string;
   points: string;
   wins: string;
-  Constructor: JolpicaConstructor;
+  Constructor?: JolpicaConstructor;
 };
 
 type JolpicaResult = {
@@ -69,13 +71,13 @@ type JolpicaResult = {
   /** The winner's race time, everybody else's gap. */
   Time?: { millis?: string; time: string };
   FastestLap?: { rank?: string; lap?: string; Time?: { time: string } };
-  Driver: JolpicaDriver;
-  Constructor: JolpicaConstructor;
+  Driver?: JolpicaDriver;
+  Constructor?: JolpicaConstructor;
 };
 
 type JolpicaQualifyingResult = {
   position: string;
-  Driver: JolpicaDriver;
+  Driver?: JolpicaDriver;
   Q1?: string;
   Q2?: string;
   Q3?: string;
@@ -89,12 +91,12 @@ type JolpicaRace = {
   raceName: string;
   date: string;
   time?: string;
-  Circuit: {
-    circuitId: string;
-    circuitName: string;
-    Location: {
-      locality: string;
-      country: string;
+  Circuit?: {
+    circuitId?: string;
+    circuitName?: string;
+    Location?: {
+      locality?: string;
+      country?: string;
     };
   };
   FirstPractice?: JolpicaSession;
@@ -276,8 +278,8 @@ function codeForNationality(n: string | undefined): string {
   return NATIONALITY_CODE[n] ?? n.slice(0, 3).toUpperCase();
 }
 
-function flagForCountry(c: string): string {
-  return COUNTRY_FLAG[c] ?? "🏁";
+function flagForCountry(c: string | undefined): string {
+  return (c && COUNTRY_FLAG[c]) ?? "🏁";
 }
 
 function colorForConstructor(name: string): string {
@@ -289,7 +291,8 @@ function colorForConstructor(name: string): string {
   return "#666";
 }
 
-function shortConstructor(name: string): string {
+function shortConstructor(name: string | undefined): string {
+  if (!name) return "—";
   return name
     .replace(/\s*F1\s*Team\s*$/i, "")
     .replace(/\s*Racing\s*$/i, " Racing")
@@ -297,14 +300,15 @@ function shortConstructor(name: string): string {
     .trim();
 }
 
-function driverShortName(driver: JolpicaDriver): string {
-  const given = driver.givenName;
-  const initial = given ? `${given[0]}. ` : "";
-  return `${initial}${driver.familyName}`;
+function driverShortName(driver: JolpicaDriver | undefined): string {
+  const given = driver?.givenName;
+  const family = driver?.familyName ?? "";
+  if (!family) return given ?? "—";
+  return given ? `${given[0]}. ${family}` : family;
 }
 
-function driverCode(driver: JolpicaDriver): string {
-  return driver.code ?? driver.familyName.slice(0, 3).toUpperCase();
+function driverCode(driver: JolpicaDriver | undefined): string {
+  return driver?.code ?? (driver?.familyName?.slice(0, 3).toUpperCase() || "—");
 }
 
 // A little over a second: requests started a second apart can still arrive
@@ -423,7 +427,7 @@ function mapClassification(results: JolpicaResult[]): F1ClassificationRow[] {
       position: UNPLACED[text] ?? text,
       code: driverCode(r.Driver),
       name: driverShortName(r.Driver),
-      team: shortConstructor(r.Constructor.name),
+      team: shortConstructor(r.Constructor?.name),
       grid: toInt(r.grid),
       laps: toInt(r.laps),
       result: resultText(r, leaderLaps),
@@ -481,7 +485,7 @@ function sprintWinnersByRound(races: JolpicaRace[]): Map<string, { code: string;
     if (row) {
       winners.set(race.round, {
         code: driverCode(row.Driver),
-        team: shortConstructor(row.Constructor.name),
+        team: shortConstructor(row.Constructor?.name),
       });
     }
   }
@@ -534,8 +538,8 @@ function portraitLookup(portraits: F1DriverPortrait[]): PortraitLookup {
 
   return (driver) =>
     byCode(driver.code?.toUpperCase()) ??
-    byName(nameKey(`${driver.givenName} ${driver.familyName}`)) ??
-    bySurname(surnameKey(driver.familyName));
+    byName(nameKey(`${driver.givenName ?? ""} ${driver.familyName ?? ""}`)) ??
+    bySurname(surnameKey(driver.familyName ?? ""));
 }
 
 function mapDrivers(
@@ -545,16 +549,16 @@ function mapDrivers(
 ): F1Driver[] {
   return standings.map((row) => {
     const code = driverCode(row.Driver);
-    const team = row.Constructors[0]?.name ?? "—";
-    const portrait = portraitOf(row.Driver);
+    const portrait = row.Driver ? portraitOf(row.Driver) : undefined;
+    const name = [row.Driver?.givenName, row.Driver?.familyName].filter(Boolean).join(" ");
     return {
       position: parseInt(row.position, 10),
       code,
-      name: `${row.Driver.givenName} ${row.Driver.familyName}`,
+      name: name || code,
       shortName: driverShortName(row.Driver),
-      team: shortConstructor(team),
-      nationality: codeForNationality(row.Driver.nationality),
-      flagEmoji: flagForNationality(row.Driver.nationality),
+      team: shortConstructor(row.Constructors?.[0]?.name),
+      nationality: codeForNationality(row.Driver?.nationality),
+      flagEmoji: flagForNationality(row.Driver?.nationality),
       points: parseFloat(row.points),
       wins: parseInt(row.wins, 10),
       podiums: podiumCounts.get(code) ?? 0,
@@ -569,7 +573,7 @@ function mapConstructors(
   podiumCounts: Map<string, number>,
 ): F1Constructor[] {
   return standings.map((row) => {
-    const name = row.Constructor.name;
+    const name = row.Constructor?.name ?? "—";
     return {
       position: parseInt(row.position, 10),
       name,
@@ -610,11 +614,11 @@ function mapRaces(
       id: `r-${race.round}`,
       round: parseInt(race.round, 10),
       name: race.raceName,
-      circuit: race.Circuit.circuitName,
-      circuitId: race.Circuit.circuitId,
-      location: race.Circuit.Location.locality,
-      country: race.Circuit.Location.country,
-      flagEmoji: flagForCountry(race.Circuit.Location.country),
+      circuit: race.Circuit?.circuitName ?? race.raceName,
+      circuitId: race.Circuit?.circuitId ?? "",
+      location: race.Circuit?.Location?.locality ?? "",
+      country: race.Circuit?.Location?.country ?? "",
+      flagEmoji: flagForCountry(race.Circuit?.Location?.country),
       date: race.date,
       startsAt: instant(race.date, race.time),
       sprint: race.Sprint !== undefined,
@@ -628,7 +632,7 @@ function mapRaces(
       winner: first
         ? {
             code: driverCode(first.Driver),
-            team: shortConstructor(first.Constructor.name),
+            team: shortConstructor(first.Constructor?.name),
             time: first.Time?.time,
             laps: leaderLaps,
             grid: toInt(first.grid),
@@ -679,10 +683,12 @@ function tallyPodiums(racesWithResults: JolpicaRace[]): {
     if (!race.Results) continue;
     resultsByRound.set(race.round, race.Results);
     for (const result of race.Results.slice(0, 3)) {
-      const dCode = driverCode(result.Driver);
-      driverPodiums.set(dCode, (driverPodiums.get(dCode) ?? 0) + 1);
-      const cName = result.Constructor.name;
-      constructorPodiums.set(cName, (constructorPodiums.get(cName) ?? 0) + 1);
+      if (result.Driver) {
+        const dCode = driverCode(result.Driver);
+        driverPodiums.set(dCode, (driverPodiums.get(dCode) ?? 0) + 1);
+      }
+      const cName = result.Constructor?.name;
+      if (cName) constructorPodiums.set(cName, (constructorPodiums.get(cName) ?? 0) + 1);
     }
   }
 
@@ -873,12 +879,13 @@ async function fetchSeasonWinners(season: number): Promise<Record<string, F1Past
   // later race.
   for (const race of res.MRData.RaceTable.Races) {
     const winner = race.Results?.[0];
-    if (winner) {
-      winners[race.Circuit.circuitId] = {
+    const circuitId = race.Circuit?.circuitId;
+    if (winner && circuitId) {
+      winners[circuitId] = {
         season,
         code: driverCode(winner.Driver),
         name: driverShortName(winner.Driver),
-        team: shortConstructor(winner.Constructor.name),
+        team: shortConstructor(winner.Constructor?.name),
       };
     }
   }

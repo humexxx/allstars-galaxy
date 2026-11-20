@@ -138,8 +138,10 @@ async function fetchDraw(
 }
 
 /**
- * A finished stop's Final, or null when its page reads but holds none (a
- * stop called off before it). Throws only when the page cannot be read.
+ * A finished stop's Final, or null when its draw reads but holds no Final (a
+ * stop called off before it). Throws when the page cannot be read, and on a
+ * page with no heats at all, which for a stop that is over is a failed read
+ * (see `fetchDraw`), not a result to keep for a week.
  */
 async function fetchFinal(
   season: number,

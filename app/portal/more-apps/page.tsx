@@ -5,7 +5,7 @@ import { PortalPageContainer } from "@/components/portal/page-container";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireAdminOrRedirect } from "@/lib/services/auth-server";
 import { MoreAppsList } from "@/components/more-apps/more-apps-list";
-import { getScreenshotUrl } from "@/lib/services/screenshot-service";
+import { getScreenshotUrls } from "@/lib/services/screenshot-service";
 import { listVercelProjects } from "@/lib/services/vercel-service";
 import type { AppListing } from "@/types/apps";
 import { MANUAL_APPS, VERCEL_EXCLUDE, VERCEL_OVERRIDES } from "./apps-data";
@@ -43,17 +43,10 @@ export default async function MoreAppsPage() {
 
   const apps = await buildAppList();
 
-  // Resolve screenshots in parallel. Falls back to gradient placeholder
-  // if microlink fails or the app has no URL.
-  const screenshots = await Promise.all(
-    apps.map((app) =>
-      app.screenshot
-        ? Promise.resolve(app.screenshot)
-        : app.url
-          ? getScreenshotUrl(app.url)
-          : Promise.resolve(null)
-    )
-  );
+  // Falls back to the gradient placeholder when microlink has nothing or
+  // the app has no URL.
+  const fetched = await getScreenshotUrls(apps.map((app) => (app.screenshot ? null : app.url)));
+  const screenshots = apps.map((app, i) => app.screenshot ?? fetched[i]);
 
   return (
     <PortalPageContainer>

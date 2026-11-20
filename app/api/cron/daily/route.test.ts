@@ -19,6 +19,7 @@ vi.mock("@/lib/services/rapidapi-f1-news-service", () => ({
 
 import { getAppStateValue, setAppState } from "@/lib/services/app-state-service";
 import { applyMonthlyInterest } from "@/lib/services/interest-service";
+import { refreshF1News } from "@/lib/services/rapidapi-f1-news-service";
 
 import { GET } from "./route";
 
@@ -124,5 +125,50 @@ describe("GET /api/cron/daily — monthly interest", () => {
       OCT_1.toISOString(),
       "lock timeout"
     );
+  });
+});
+
+describe("GET /api/cron/daily — F1 news", () => {
+  const stored = (values: Record<string, string | null>): void => {
+    vi.mocked(getAppStateValue).mockImplementation(async (key) => values[key] ?? null);
+  };
+
+  beforeEach(() => {
+    vi.mocked(applyMonthlyInterest).mockResolvedValue({ applied: false, month: "2026-10" });
+  });
+
+  it("spends no RapidAPI request when today's refresh already ran", async () => {
+    vi.setSystemTime(OCT_16);
+    stored({ last_interest_run: "2026-10-01T06:00:00.000Z", last_f1_news_run: "2026-10-16T00:00:04.000Z" });
+
+    const body = await run();
+
+    expect(refreshF1News).not.toHaveBeenCalled();
+    expect(body.f1News).toEqual({ fetched: 0, stored: 0, skipped: true });
+    expect(body.failedOperations).toEqual([]);
+  });
+
+  it("refreshes on a new UTC day, and stamps the run only once it succeeded", async () => {
+    vi.setSystemTime(OCT_16);
+    stored({ last_interest_run: "2026-10-01T06:00:00.000Z", last_f1_news_run: "2026-10-15T00:00:04.000Z" });
+    vi.mocked(refreshF1News).mockResolvedValueOnce({ fetched: 25, stored: 3 });
+
+    const body = await run();
+
+    expect(refreshF1News).toHaveBeenCalledTimes(1);
+    expect(body.f1News).toEqual({ fetched: 25, stored: 3 });
+    expect(setAppState).toHaveBeenCalledWith("last_f1_news_run", OCT_16.toISOString());
+  });
+
+  it("records a failure under its own key, so a re-run the same day tries again", async () => {
+    vi.setSystemTime(OCT_16);
+    stored({ last_interest_run: "2026-10-01T06:00:00.000Z", last_f1_news_run: "2026-10-15T00:00:04.000Z" });
+    vi.mocked(refreshF1News).mockRejectedValueOnce(new Error("rapidapi f1 503 on /news"));
+
+    const body = await run();
+
+    expect(body.failedOperations).toEqual(["f1_news"]);
+    expect(setAppState).toHaveBeenCalledWith("last_f1_news_error", OCT_16.toISOString(), "rapidapi f1 503 on /news");
+    expect(vi.mocked(setAppState).mock.calls.some(([key]) => key === "last_f1_news_run")).toBe(false);
   });
 });

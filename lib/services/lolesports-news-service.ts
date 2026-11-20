@@ -97,6 +97,9 @@ async function fetchNews(): Promise<NewsStory[]> {
   const stories = articlesIn(await res.text())
     .map(storyFrom)
     .filter((s): s is NewsStory => s !== null);
+  // A page that answers but parses to nothing has changed shape: thrown, so
+  // the last good list is kept instead of an empty one for the hour.
+  if (stories.length === 0) throw new Error("lolesports news: no articles parsed");
   return stories.sort((a, b) => b.at.localeCompare(a.at)).slice(0, LIMIT);
 }
 
@@ -106,5 +109,5 @@ export const getLolNews = cachedFeed("lolesports news", fetchNews, (): NewsStory
   tags: ["sports:news"],
 });
 
-/** Pure parsers, exported for their tests. */
-export const __testing = { articlesIn, storyFrom };
+/** The parsers and the uncached read, exported for their tests. */
+export const __testing = { articlesIn, storyFrom, fetchNews };

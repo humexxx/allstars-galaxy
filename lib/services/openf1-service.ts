@@ -143,15 +143,20 @@ function sessionRows(
   });
 }
 
-async function fetchOpenF1<T>(path: string): Promise<T> {
-  const signal = upstreamSignal();
+/**
+ * One list endpoint. OpenF1 answers a query with no rows as a 404 ("No results
+ * found."), e.g. a session that has just finished and has no order in yet:
+ * that is an empty list, not a failure.
+ */
+async function fetchOpenF1<T>(path: string, signal: AbortSignal): Promise<T[]> {
   await openF1Slot();
   const res = await fetch(`${BASE_URL}${path}`, {
     signal,
     next: { revalidate: REVALIDATE_SECONDS },
   });
+  if (res.status === 404) return [];
   if (!res.ok) throw new Error(`OpenF1 ${res.status} on ${path}`);
-  return (await res.json()) as T;
+  return (await res.json()) as T[];
 }
 
 /**
@@ -169,9 +174,13 @@ async function fetchWeekendResults(
   // Half a day either side: the timetable is the calendar's, not OpenF1's.
   const start = new Date(Date.parse(from) - 43_200_000).toISOString();
   const end = new Date(Date.parse(to) + 43_200_000).toISOString();
+  // One ceiling for the whole read: the calls run in turn, and one each let
+  // the chain hold the page for the sum of them.
+  const signal = upstreamSignal();
   const sessions = (
-    await fetchOpenF1<OpenF1Session[]>(
-      `/sessions?year=${season}&date_start%3E=${start}&date_start%3C=${end}`
+    await fetchOpenF1<OpenF1Session>(
+      `/sessions?year=${season}&date_start%3E=${start}&date_start%3C=${end}`,
+      signal
     )
   )
     .filter((s) => SESSION_KINDS[s.session_name] && Date.parse(s.date_end ?? s.date_start) <= now)
@@ -179,13 +188,16 @@ async function fetchWeekendResults(
   if (sessions.length === 0) return { season, round, sessions: [] };
 
   const drivers = new Map<number, OpenF1Driver>();
-  for (const driver of await fetchOpenF1<OpenF1Driver[]>(`/drivers?meeting_key=${sessions[0].meeting_key}`)) {
+  for (const driver of await fetchOpenF1<OpenF1Driver>(`/drivers?meeting_key=${sessions[0].meeting_key}`, signal)) {
     drivers.set(driver.driver_number, { ...drivers.get(driver.driver_number), ...driver });
   }
 
   const results: F1SessionResult[] = [];
   for (const session of sessions) {
-    const rows = await fetchOpenF1<OpenF1Result[]>(`/session_result?session_key=${session.session_key}`);
+    const rows = await fetchOpenF1<OpenF1Result>(
+      `/session_result?session_key=${session.session_key}`,
+      signal
+    );
     // A finished session with nothing in yet is skipped, not shown empty.
     if (rows.length === 0) continue;
     const kind = SESSION_KINDS[session.session_name];

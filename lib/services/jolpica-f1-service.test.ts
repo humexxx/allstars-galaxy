@@ -43,7 +43,7 @@ describe("mergePodiumSteps", () => {
     // round 17 is exactly what used to come back blank.
     const merged = mergePodiumSteps(steps as never);
     expect(merged.map((r) => r.round)).toEqual(["1", "17"]);
-    expect(merged[1].Results!.map((r) => r.Driver.code)).toEqual(["VER", "NOR", "ANT"]);
+    expect(merged[1].Results!.map((r) => r.Driver?.code)).toEqual(["VER", "NOR", "ANT"]);
   });
 
   it("orders by position whatever order the calls come back in", () => {
@@ -77,6 +77,31 @@ describe("mapRaces", () => {
   it("keeps Jolpica's circuit key, which finds the track's outline", () => {
     const [singapore] = mapRaces([race("17", [])] as never, new Map());
     expect(singapore).toMatchObject({ circuitId: "marina_bay", circuit: "Marina Bay" });
+  });
+});
+
+describe("a provider entry missing a field", () => {
+  // One bad row used to throw out of getF1Data, which no cache catches: the
+  // page and the dashboard card went blank for want of one constructor.
+  it("costs that entry its detail, not the season", () => {
+    const noCircuit: Partial<ReturnType<typeof race>> = race("18", []);
+    delete noCircuit.Circuit;
+    const [bare] = mapRaces([noCircuit] as never, new Map());
+    expect(bare).toMatchObject({ name: "Race 18", circuit: "Race 18", circuitId: "", location: "", flagEmoji: "🏁" });
+
+    const podium = [{ ...race("1", [["1", "RUS", "Mercedes"], ["2", "ANT", "Mercedes"], ["3", "LEC", "Ferrari"]]) }];
+    delete (podium[0].Results[0] as { Constructor?: unknown }).Constructor;
+    delete (podium[0].Results[2] as { Driver?: unknown }).Driver;
+    const { driverPodiums, constructorPodiums, resultsByRound } = tallyPodiums(podium as never);
+    expect([...driverPodiums.keys()]).toEqual(["RUS", "ANT"]);
+    expect([...constructorPodiums.entries()]).toEqual([["Mercedes", 1], ["Ferrari", 1]]);
+    const [first] = mapRaces([race("1", [])] as never, resultsByRound);
+    expect(first.podium).toEqual(["RUS", "ANT", "—"]);
+
+    const [driver] = mapDrivers([{ position: "1", points: "10", wins: "0" }] as never, new Map());
+    expect(driver).toMatchObject({ code: "—", name: "—", team: "—" });
+    const [team] = mapConstructors([{ position: "1", points: "10", wins: "0" }] as never, new Map());
+    expect(team).toMatchObject({ name: "—", shortName: "—" });
   });
 });
 

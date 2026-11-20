@@ -17,6 +17,12 @@ const deleteChain = {
   where: vi.fn(),
 };
 
+// The feeds' rate limiters wait on the clock, which some tests here freeze.
+vi.mock("./upstream", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./upstream")>()),
+  rateLimiter: () => async (): Promise<void> => {},
+}));
+
 vi.mock("@/db", () => ({
   db: {
     select: vi.fn(),

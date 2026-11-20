@@ -127,7 +127,10 @@ type FdMatch = {
     | "TIMED"
     | "IN_PLAY"
     | "PAUSED"
+    | "EXTRA_TIME"
+    | "PENALTY_SHOOTOUT"
     | "FINISHED"
+    | "AWARDED"
     | "POSTPONED"
     | "CANCELLED"
     | "SUSPENDED";
@@ -289,12 +292,18 @@ function teamFromFd(team: FdTeam | null | undefined): Team | null {
   };
 }
 
+/** Played to its end, or settled at the desk (a forfeit is AWARDED, its score the ruling's). */
+const isOver = (status: FdMatch["status"]): boolean => status === "FINISHED" || status === "AWARDED";
+
 function mapMatchStatus(s: FdMatch["status"], score?: FdScore): MatchStatus {
   switch (s) {
     case "IN_PLAY":
     case "PAUSED":
-    case "SUSPENDED":
+    case "EXTRA_TIME":
+    case "PENALTY_SHOOTOUT":
       return "live";
+    case "AWARDED":
+      return "ft";
     case "FINISHED":
       // Cup matches decided after 90' carry score.duration — surface AET/PEN
       // instead of a plain FT (a level fullTime score with "FT" reads as an
@@ -302,7 +311,9 @@ function mapMatchStatus(s: FdMatch["status"], score?: FdScore): MatchStatus {
       if (score?.duration === "PENALTY_SHOOTOUT") return "pen";
       if (score?.duration === "EXTRA_TIME") return "aet";
       return "ft";
+    // A suspended match stops and may not resume today: ESPN's feed calls it postponed too.
     case "POSTPONED":
+    case "SUSPENDED":
       return "postponed";
     case "CANCELLED":
       return "cancelled";
@@ -324,7 +335,8 @@ type Goals = {
  * 3–4 on penalties, arrives as 4–5. `regularTime + extraTime` is the score the
  * match actually finished on.
  */
-function goalsOf(score: FdScore): Goals {
+function goalsOf(score: FdScore | undefined): Goals {
+  if (!score?.fullTime) return { home: null, away: null };
   const { home, away } = score.fullTime;
   const pens = score.penalties;
   if (score.duration !== "PENALTY_SHOOTOUT" || pens?.home == null || pens.away == null) {
@@ -552,7 +564,7 @@ function buildRoundFromStage(
       // football-data names whoever leads as `winner` while the match is
       // still being played, which would crown a champion mid-final.
       const winner =
-        leg1.status === "FINISHED" ? (leg1.score as FdScoreWithWinner).winner : null;
+        isOver(leg1.status) ? (leg1.score as FdScoreWithWinner).winner : null;
       matches.push({
         id: `m-${leg1.id}`,
         homeTeamId: homeId,
@@ -577,7 +589,7 @@ function buildRoundFromStage(
     // `?? 0` while leg 2 is merely scheduled fabricated an aggregate (null
     // goals counted as 0) and bolded a "winner" mid-tie.
     const bothLegsFinished =
-      leg1.status === "FINISHED" && leg2.status === "FINISHED";
+      isOver(leg1.status) && isOver(leg2.status);
     const aggHome = bothLegsFinished
       ? (l1.home ?? 0) + (leg2HomeGoals ?? 0)
       : null;
@@ -706,7 +718,7 @@ function buildGroupStandings(
       if (!teamsMap.has(away.id)) teamsMap.set(away.id, away);
       const homeRow = rowFor(home);
       const awayRow = rowFor(away);
-      if (m.status !== "FINISHED") continue;
+      if (!isOver(m.status)) continue;
       const { home: hg, away: ag } = goalsOf(m.score);
       if (hg === null || ag === null) continue;
       homeRow.played += 1;
@@ -901,6 +913,7 @@ export const getFootballLeagueData = cachedFeed(
 /** The mappers and the request budget, exported for their tests. */
 export const __testing = {
   goalsOf,
+  mapMatchStatus,
   mapMatches,
   buildKnockoutBracket,
   noteBudget,

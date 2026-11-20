@@ -430,12 +430,23 @@ const DRAW_RESERVE = 3;
 const RETRY_AFTER_MAX_MS = 3_000;
 const starts: number[] = [];
 
+function startsThisMinute(now: number): number {
+  while (starts.length > 0 && now - starts[0] >= MINUTE_MS) starts.shift();
+  return starts.length;
+}
+
 function takeSlot(reserve: number): boolean {
   const now = Date.now();
-  while (starts.length > 0 && now - starts[0] >= MINUTE_MS) starts.shift();
-  if (starts.length >= MINUTE_LIMIT - reserve) return false;
+  if (startsThisMinute(now) >= MINUTE_LIMIT - reserve) return false;
   starts.push(now);
   return true;
+}
+
+/** A request that goes out whatever the count: it still spends the minute. */
+function recordStart(): void {
+  const now = Date.now();
+  startsThisMinute(now);
+  starts.push(now);
 }
 
 /** A 429 says the minute is spent, whatever this instance counted: the rest of it is. */
@@ -447,7 +458,8 @@ function spendMinute(): void {
 async function fetchPadel<T>(path: string, { essential = false } = {}): Promise<T> {
   const token = process.env.PADEL_API_KEY;
   if (!token) throw new Error("PADEL_API_KEY not configured");
-  if (!takeSlot(essential ? 0 : DRAW_RESERVE) && !essential) {
+  if (essential) recordStart();
+  else if (!takeSlot(DRAW_RESERVE)) {
     throw new Error(`padel-api: no request left this minute for ${path}`);
   }
   const request = (): Promise<Response> =>
@@ -458,6 +470,7 @@ async function fetchPadel<T>(path: string, { essential = false } = {}): Promise<
     const wait = Number(res.headers.get("retry-after")) * 1000;
     if (essential && wait > 0 && wait <= RETRY_AFTER_MAX_MS) {
       await new Promise((resolve) => setTimeout(resolve, wait));
+      recordStart();
       res = await request();
     }
   }
@@ -505,11 +518,10 @@ async function fetchPadelDraw(id: number): Promise<RacquetDraw> {
   const men = mainDraw(first.data, "men");
   const settled = men.length === 0 || roundIsSet(men, FIRST_BRACKET_ROUND);
   if (pages <= 1 || settled) return drawFrom(`padelapi-${id}`, first.data, "men");
-  // The first page holds the round of 16 to the final: a later page that
-  // fails (or does not fit the minute) leaves the earlier rounds short, not
-  // the whole draw missing.
-  const rest = await Promise.allSettled(Array.from({ length: pages - 1 }, (_, i) => page(i + 2)));
-  const more = rest.flatMap((r) => (r.status === "fulfilled" ? r.value.data : []));
+  // A later page that fails (or does not fit the minute) fails the read: a
+  // draw short of its first rounds would be cached over the last whole one.
+  const rest = await Promise.all(Array.from({ length: pages - 1 }, (_, i) => page(i + 2)));
+  const more = rest.flatMap((r) => r.data);
   return drawFrom(`padelapi-${id}`, [...first.data, ...more], "men");
 }
 
@@ -729,4 +741,5 @@ export const __testing = {
   resetMinute: (): void => {
     starts.length = 0;
   },
+  startsThisMinute: (): number => startsThisMinute(Date.now()),
 };

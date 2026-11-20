@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isCronAuthorized } from "@/lib/cron-auth";
 
-import { refreshPrices } from "@/lib/services/price-service";
 import { backfillAllOwners } from "@/lib/services/allocation-service";
+import { setAppState } from "@/lib/services/app-state-service";
+import { MASSIVE_CALLS_PER_RUN } from "@/lib/services/price-providers/massive";
+import { refreshPrices } from "@/lib/services/price-service";
 
 /**
  * Daily price refresh for the assets backing investment methods.
@@ -21,29 +23,58 @@ import { backfillAllOwners } from "@/lib/services/allocation-service";
 // with many individually-quoted tickers is slow rather than heavy.
 export const maxDuration = 60;
 
+const LAST_PRICE_RUN_KEY = "last_price_run";
+/**
+ * The backfill's share of Massive's five calls. A contribution Massive can
+ * never price (a delisted ticker, a day before its history) is asked about
+ * again every run, so an uncapped backfill could starve the quotes for good.
+ */
+const BACKFILL_CALLS = 2;
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : "Unknown error";
+}
+
 export async function GET(request: NextRequest): Promise<NextResponse> {
   if (!isCronAuthorized(request.headers.get("authorization"))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const at = new Date().toISOString();
   try {
-    const result = await refreshPrices();
-
-    // Then price any contribution approved since the last run. Doing it here
-    // and not only on demand is what stops a new investor's money being
-    // silently absent from the margin until somebody presses a button.
-    const backfill = await backfillAllOwners();
+    // The backfill goes first, within its share, and the refresh gets what
+    // is left of Massive's five requests a minute: an unpriced contribution
+    // is money missing from the margin, while a missed quote keeps the last
+    // known price. Most days the backfill has nothing to do and spends
+    // nothing. Its failure must not cost the day's quotes.
+    let backfill: { priced: number; skipped: number; errors: string[] } = { priced: 0, skipped: 0, errors: [] };
+    let spent = 0;
+    try {
+      const { massiveCalls, ...done } = await backfillAllOwners(BACKFILL_CALLS);
+      backfill = done;
+      spent = massiveCalls;
+    } catch (error) {
+      console.error("Price backfill error:", error);
+      backfill.errors.push(`backfill failed: ${messageOf(error)}`);
+      spent = BACKFILL_CALLS;
+    }
+    const result = await refreshPrices({
+      massiveCalls: Math.max(0, MASSIVE_CALLS_PER_RUN - spent),
+    });
 
     // Partial failures are reported, not thrown: one unpriced asset must not
     // discard the quotes that did land.
-    return NextResponse.json({
-      ok: true,
-      ...result,
-      backfill,
-      at: new Date().toISOString(),
-    });
+    const problems = [...backfill.errors, ...result.errors];
+    await setAppState(LAST_PRICE_RUN_KEY, at, problems.length > 0 ? problems.join("; ") : null);
+
+    return NextResponse.json({ ok: true, ...result, backfill, at });
   } catch (error) {
     console.error("Price cron error:", error);
+    try {
+      await setAppState(LAST_PRICE_RUN_KEY, at, messageOf(error));
+    } catch (logError) {
+      console.error("Failed to record the price run:", logError);
+    }
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

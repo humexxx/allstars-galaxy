@@ -13,6 +13,7 @@ const {
   seasonLabel,
   recentAndNext,
   statusFrom,
+  matchFrom,
   gameWindow,
   standingsFrom,
   teamFrom,
@@ -42,6 +43,13 @@ const game = (date: string, final = false) => ({
     visitor_team_score: 0,
 });
 
+type HeaderEvent = Parameters<typeof playoffsFrom>[0][number];
+
+/** A scores-bar answer's events, as `fetchHeader` hands them over. */
+const eventsOf = (json: unknown): HeaderEvent[] =>
+  (json as { sports?: Array<{ leagues?: Array<{ events?: HeaderEvent[] }> }> }).sports?.[0]?.leagues?.[0]
+    ?.events ?? [];
+
 type PageGame = (typeof gamesOct18.data)[number];
 
 /**
@@ -56,6 +64,19 @@ const pageOct21: PageGame[] = pageOct18.map((g) =>
     ? { ...g, status: "Final", status_state: "final", home_team_score: 110, visitor_team_score: 104 }
     : g
 );
+
+describe("matchFrom", () => {
+  it("puts a game with no time yet at noon UTC, its own day in every zone of the Americas", () => {
+    const team = { id: 1, full_name: "", name: "", abbreviation: "BOS", conference: "East" };
+    const untimed = { ...game("2026-10-20"), datetime: null, home_team: team, visitor_team: { ...team, abbreviation: "NYK" } };
+    const { kickoff } = matchFrom(untimed);
+    expect(kickoff).toBe("2026-10-20T12:00:00Z");
+    const day = (timeZone: string): string => new Date(kickoff).toLocaleDateString("en-CA", { timeZone });
+    expect([day("America/Los_Angeles"), day("Pacific/Honolulu"), day("Asia/Tokyo")]).toEqual([
+      "2026-10-20", "2026-10-20", "2026-10-20",
+    ]);
+  });
+});
 
 describe("currentSeason", () => {
   it("names a season by the year it starts in", () => {
@@ -431,11 +452,8 @@ describe("playoffYear", () => {
 });
 
 describe("preseasonFrom", () => {
-  type Header = Parameters<typeof preseasonFrom>[0];
-  const header = preseason2026 as Header;
-  const events = header.sports?.[0]?.leagues?.[0]?.events ?? [];
-  const only = (list: typeof events): Header => ({ sports: [{ leagues: [{ events: list }] }] });
-  const { games, teams } = preseasonFrom(header);
+  const events = eventsOf(preseason2026);
+  const { games, teams } = preseasonFrom(events);
 
   it("lists ESPN's preseason as finished games, labelled as such", () => {
     expect(games).toHaveLength(12);
@@ -474,7 +492,7 @@ describe("preseasonFrom", () => {
 
   it("drops the regular season when tomorrow reaches the opener", () => {
     const opener = { ...events[0], id: "401", seasonType: "2" };
-    expect(preseasonFrom(only([opener])).games).toEqual([]);
+    expect(preseasonFrom([opener]).games).toEqual([]);
   });
 
   it("scores a game in progress and leaves a fixture blank", () => {
@@ -491,7 +509,7 @@ describe("preseasonFrom", () => {
       id: "403",
       fullStatus: { type: { name: "STATUS_CANCELED", state: "post" as const } },
     };
-    const { games: mapped } = preseasonFrom(only([live, ahead, canceled]));
+    const { games: mapped } = preseasonFrom([live, ahead, canceled]);
     expect(mapped.map((g) => [g.status, g.homeScore, g.awayScore])).toEqual([
       ["live", 105, 129],
       ["scheduled", null, null],
@@ -518,42 +536,32 @@ describe("channelsFrom and withChannels", () => {
   });
 
   it("keys ESPN's games by balldontlie's codes, and skips one with no national channel", () => {
-    const channels = channelsFrom({
-      sports: [
-        {
-          leagues: [
-            {
-              events: [
-                {
-                  date: "2026-10-28T23:00Z",
-                  broadcast: "ESPN",
-                  competitors: [
-                    { homeAway: "home", abbreviation: "IND" },
-                    { homeAway: "away", abbreviation: "PHI" },
-                  ],
-                },
-                {
-                  date: "2026-10-29T00:30Z",
-                  broadcast: "",
-                  competitors: [
-                    { homeAway: "home", abbreviation: "SA" },
-                    { homeAway: "away", abbreviation: "NY" },
-                  ],
-                },
-                {
-                  date: "2026-10-29T02:00Z",
-                  broadcast: "NBA TV",
-                  competitors: [
-                    { homeAway: "home", abbreviation: "UTAH" },
-                    { homeAway: "away", abbreviation: "WSH" },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      ],
-    });
+    const channels = channelsFrom([
+      {
+        date: "2026-10-28T23:00Z",
+        broadcast: "ESPN",
+        competitors: [
+          { homeAway: "home", abbreviation: "IND" },
+          { homeAway: "away", abbreviation: "PHI" },
+        ],
+      },
+      {
+        date: "2026-10-29T00:30Z",
+        broadcast: "",
+        competitors: [
+          { homeAway: "home", abbreviation: "SA" },
+          { homeAway: "away", abbreviation: "NY" },
+        ],
+      },
+      {
+        date: "2026-10-29T02:00Z",
+        broadcast: "NBA TV",
+        competitors: [
+          { homeAway: "home", abbreviation: "UTAH" },
+          { homeAway: "away", abbreviation: "WSH" },
+        ],
+      },
+    ]);
     expect(channels).toEqual([
       on("IND", "PHI", "2026-10-28T23:00Z", ["ESPN"]),
       on("UTA", "WAS", "2026-10-29T02:00Z", ["NBA TV"]),
@@ -564,7 +572,7 @@ describe("channelsFrom and withChannels", () => {
     // A playoff pair two nights apart; the second game has no time yet.
     const games = [
       fixture("1", "OKC", "DEN", "2027-05-05T01:30:00Z"),
-      fixture("2", "OKC", "DEN", "2027-05-07T00:00:00Z"),
+      fixture("2", "OKC", "DEN", "2027-05-07T12:00:00Z"),
     ];
     const channels = [
       on("OKC", "DEN", "2027-05-05T01:30:00Z", ["ESPN"]),
@@ -583,15 +591,10 @@ describe("channelsFrom and withChannels", () => {
   });
 });
 
-type ScoreboardHeader = Parameters<typeof playoffsFrom>[0];
-
 // ESPN's 2025–26 postseason as the scoreboard header sent it, trimmed to what
 // the mapper reads, with the play-in and the regular season's last night.
-const fixtureEvents = (postseason2026 as ScoreboardHeader).sports?.[0]?.leagues?.[0]?.events ?? [];
-type HeaderEvent = (typeof fixtureEvents)[number];
+const fixtureEvents = eventsOf(postseason2026);
 type HeaderCompetitor = NonNullable<HeaderEvent["competitors"]>[number];
-
-const board = (events: HeaderEvent[]): ScoreboardHeader => ({ sports: [{ leagues: [{ events }] }] });
 
 const withCompetitors = (
   event: HeaderEvent,
@@ -619,7 +622,7 @@ const line = (m: BracketMatch): string => {
 const lines = (round: BracketRound): string[] => round.matches.map(line);
 
 describe("playoffsFrom", () => {
-  const { rounds, teams } = playoffsFrom(board(fixtureEvents));
+  const { rounds, teams } = playoffsFrom(fixtureEvents);
 
   it("draws the 2025–26 postseason as four rounds of series", () => {
     expect(rounds.map((r) => [r.id, r.label, r.matches.length])).toEqual([
@@ -693,11 +696,11 @@ describe("playoffsFrom", () => {
 
   it("counts the wins itself when ESPN leaves the series record out", () => {
     const bare = fixtureEvents.map((e) => withCompetitors(e, (c) => ({ ...c, seriesRecord: undefined })));
-    expect(playoffsFrom(board(bare)).rounds.map(lines)).toEqual(rounds.map(lines));
+    expect(playoffsFrom(bare).rounds.map(lines)).toEqual(rounds.map(lines));
   });
 
   it("dates a series still going by its next game, and draws the rest of the tree TBD", () => {
-    const { rounds: early } = playoffsFrom(board(firstRoundAt("2026-04-28T00:00:00Z")));
+    const { rounds: early } = playoffsFrom(firstRoundAt("2026-04-28T00:00:00Z"));
     expect(lines(early[0])).toEqual([
       "DET 1–2 ORL", "CLE 2–2 TOR", "NYK 2–2 ATL", "BOS 3–1 PHI", "OKC 3–0 PHX", "LAL 3–1 HOU", "DEN 1–3 MIN", "SAS 3–1 POR",
     ]);
@@ -716,7 +719,7 @@ describe("playoffsFrom", () => {
   it("writes a first-round winner into the next round before ESPN draws it", () => {
     // Oklahoma City swept Phoenix and San Antonio beat Portland in five while
     // the other six were still going.
-    const { rounds: later } = playoffsFrom(board(firstRoundAt("2026-04-29T12:00:00Z")));
+    const { rounds: later } = playoffsFrom(firstRoundAt("2026-04-29T12:00:00Z"));
     expect(later[0].matches[4]).toMatchObject({
       winnerTeamId: "OKC",
       homeScore: 4,
@@ -732,7 +735,7 @@ describe("playoffsFrom", () => {
     const unseeded = firstRoundAt("2026-04-29T12:00:00Z").map((e) =>
       withCompetitors(e, (c) => ({ ...c, recordStats: undefined }))
     );
-    const { rounds: guessed } = playoffsFrom(board(unseeded));
+    const { rounds: guessed } = playoffsFrom(unseeded);
     expect(guessed[0].matches.map((m) => m.winnerTeamId).filter(Boolean)).toEqual(["OKC", "SAS"]);
     expect(lines(guessed[1])).toEqual(["TBD v TBD", "TBD v TBD", "TBD v TBD", "TBD v TBD"]);
   });
@@ -747,7 +750,7 @@ describe("playoffsFrom", () => {
           : c
       )
     );
-    const { rounds: drawn, teams: known } = playoffsFrom(board(waiting));
+    const { rounds: drawn, teams: known } = playoffsFrom(waiting);
     expect(lines(drawn[0])).toEqual([
       "DET v TBD", "CLE v TOR", "NYK v ATL", "BOS v PHI", "OKC v TBD", "LAL v HOU", "DEN v MIN", "SAS v POR",
     ]);
@@ -756,11 +759,11 @@ describe("playoffsFrom", () => {
   });
 
   it("has no rounds before the postseason, the play-in included", () => {
-    expect(playoffsFrom(board(fixtureEvents.filter((e) => e.seasonType !== "3")))).toEqual({
+    expect(playoffsFrom(fixtureEvents.filter((e) => e.seasonType !== "3"))).toEqual({
       rounds: [],
       teams: [],
     });
-    expect(playoffsFrom({})).toEqual({ rounds: [], teams: [] });
+    expect(playoffsFrom([])).toEqual({ rounds: [], teams: [] });
   });
 });
 
@@ -768,7 +771,7 @@ describe("getNbaData through the year", () => {
   const STANDINGS = (season: number): string =>
     `https://site.api.espn.com/apis/v2/sports/basketball/nba/standings?season=${season}&seasontype=2`;
   const HEADER = (dates: string): string =>
-    `https://site.web.api.espn.com/apis/v2/scoreboard/header?sport=basketball&league=nba&dates=${dates}&limit=300`;
+    `https://site.web.api.espn.com/apis/v2/scoreboard/header?sport=basketball&league=nba&dates=${dates}&limit=200`;
 
   const bdlTeam = (abbreviation: string) => ({
     id: 1,
@@ -904,8 +907,10 @@ describe("getNbaData through the year", () => {
     const calls = stubFeeds({ games: pageOct18, header: () => json(postseason2026) });
     const data = await getNbaData();
 
-    expect(calls()).toHaveLength(2);
-    expect(calls()).toEqual(expect.arrayContaining([STANDINGS(2026), HEADER("20260410-20260731")]));
+    expect(calls()).toHaveLength(3);
+    expect(calls()).toEqual(
+      expect.arrayContaining([STANDINGS(2026), HEADER("20260410-20260610"), HEADER("20260611-20260731")])
+    );
     expect(data.season).toBe("2025–26");
     expect(fixtures(data)).toEqual(["NYK@SAS", "NYK@SAS", "SAS@NYK", "SAS@NYK", "NYK@SAS"]);
     expect(data.games.every((g) => g.stageLabel === "Playoffs")).toBe(true);
@@ -922,8 +927,10 @@ describe("getNbaData through the year", () => {
     });
     const data = await getNbaData();
 
-    expect(calls()).toHaveLength(2);
-    expect(calls()).toEqual(expect.arrayContaining([STANDINGS(2027), HEADER("20270410-20270731")]));
+    expect(calls()).toHaveLength(3);
+    expect(calls()).toEqual(
+      expect.arrayContaining([STANDINGS(2027), HEADER("20270410-20270610"), HEADER("20270611-20270731")])
+    );
     expect(data.season).toBe("2026–27");
     expect(data.games).toHaveLength(1);
     expect(data.tipOff).toBeUndefined();
@@ -1024,15 +1031,31 @@ describe("getNbaData through the year", () => {
     expect(data.playoffs).toEqual([]);
   });
 
-  it("reads the whole bracket in one request while there is a postseason", async () => {
+  it("reads the whole bracket in two requests, the scores bar's 62 days apiece", async () => {
     vi.setSystemTime(new Date(2026, 4, 20, 12));
     const calls = stubFeeds({ games: [bdlGame("2026-05-19", true)], header: () => json(postseason2026) });
     const data = await getNbaData();
 
-    expect(calls().filter((url) => url.includes("/scoreboard"))).toEqual([HEADER("20260410-20260731")]);
+    expect(calls().filter((url) => url.includes("/scoreboard"))).toEqual([
+      HEADER("20260410-20260610"),
+      HEADER("20260611-20260731"),
+    ]);
     expect(data.playoffs?.map((r) => r.matches.length)).toEqual([8, 4, 2, 1]);
     // The table came back empty, and every team in the bracket still resolves.
     expect(data.teams.find((t) => t.id === "SAS")?.logoUrl).toBe(logo("sa"));
+  });
+
+  it("keeps the games and serves the table's fallback outside the cache when ESPN's standings fail", async () => {
+    vi.setSystemTime(new Date(2026, 9, 21, 12));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    stubFeeds({ games: pageOct21, standings: () => json({}, 503), header: () => json(preseason2026) });
+    const data = await getNbaData();
+
+    expect(data).not.toBe(NBA_DATA);
+    expect(data.games).toHaveLength(10);
+    expect(data.standings).toEqual([]);
+    // Thrown by the table's own cached read, not caught inside the games' feed.
+    expect(warn).toHaveBeenCalledWith("ESPN NBA standings unavailable, using fallback:", expect.any(Error));
   });
 
   it("keeps the games when the bracket's request fails", async () => {

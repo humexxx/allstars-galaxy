@@ -40,8 +40,17 @@ export function describePage(path: string, favorites: SportId[]): string {
     const [sport, id] = detail;
     if (sport === "f1") return `${at}: the page of F1 round ${id}.`;
     if (sport === "padel" || sport === "tennis") {
-      return `${at}: the page of the ${sport} tournament with id ${decodeURIComponent(id)}.`;
+      return `${at}: the page of the ${sport} tournament with id ${decodedOr(id)}.`;
     }
   }
   return `${at}.`;
+}
+
+/** The path comes from the browser: a malformed escape ("%E0") threw and made the request a 500. */
+function decodedOr(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
 }

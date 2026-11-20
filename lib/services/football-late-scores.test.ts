@@ -170,4 +170,18 @@ describe("withLateScores", () => {
     await withLateScores("mls", [fixture("1", "ath", "get", "2026-10-25T13:00:00Z")], TEAMS, NOW);
     expect(fetchMock).not.toHaveBeenCalled();
   });
+  it("takes nothing from a game that shares only one club's word, even alone at that kickoff", async () => {
+    espnAnswers([
+      event(
+        "e1",
+        "2026-10-25T13:00Z",
+        { name: "Real Sociedad", abbreviation: "RSO", score: "3" },
+        { name: "Sevilla", abbreviation: "SEV", score: "1" },
+        FINAL
+      ),
+    ]);
+    const behind = fixture("1", "rma", "osa", "2026-10-25T13:00:00Z");
+    const [same] = await withLateScores("la-liga", [behind], TEAMS, NOW);
+    expect(same).toBe(behind);
+  });
 });

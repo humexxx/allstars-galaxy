@@ -92,16 +92,29 @@ type TripSnapshot = {
   contributions: (typeof tripContributions.$inferSelect)[];
 };
 
-/** The inverse of one applied change, run newest first by `undoTravelChanges`. */
+/**
+ * The inverse of one applied change, run newest first by `undoTravelChanges`.
+ *
+ * A restore carries what the Apply left the row as (`appliedAt`, or the
+ * `applied` fields where the table has no `updatedAt`), and is refused once
+ * the row has moved on: the receipt lives a day, and replaying it silently
+ * overwrote every edit made since.
+ */
 type UndoOp =
   | { kind: "delete_trip"; tripId: string }
-  | { kind: "restore_trip"; trip: TripRow }
+  | { kind: "restore_trip"; trip: TripRow; appliedAt?: string }
   | { kind: "reinsert_trip"; snapshot: TripSnapshot }
   | { kind: "delete_item"; tripId: string; itemId: string }
-  | { kind: "restore_item"; item: ItemRow; payers: MemberLinkRow[]; attendees: AttendeeRow[] }
+  | {
+      kind: "restore_item";
+      item: ItemRow;
+      payers: MemberLinkRow[];
+      attendees: AttendeeRow[];
+      appliedAt?: string;
+    }
   | { kind: "reinsert_item"; snapshot: ItemSnapshot }
   | { kind: "delete_member"; tripId: string; memberId: string }
-  | { kind: "restore_member"; member: MemberRow }
+  | { kind: "restore_member"; member: MemberRow; applied?: MemberFields }
   | {
       kind: "reinsert_member";
       member: MemberRow;
@@ -114,8 +127,11 @@ type UndoOp =
   | { kind: "delete_photo"; tripId: string; photoId: string }
   | { kind: "reinsert_photo"; photo: PhotoRow }
   | { kind: "delete_payment"; tripId: string; paymentId: string }
-  | { kind: "restore_payment"; payment: ContributionRow }
+  | { kind: "restore_payment"; payment: ContributionRow; applied?: PaymentFields }
   | { kind: "reinsert_payment"; payment: ContributionRow };
+
+type MemberFields = Pick<MemberRow, "name" | "email" | "sharePercent">;
+type PaymentFields = Pick<ContributionRow, "amount" | "note" | "paidOn">;
 
 type RunResult = { lines: TravelChangeLine[]; undo: UndoOp[] };
 
@@ -337,7 +353,7 @@ async function runChanges(tx: Tx, userId: string, set: TravelChangeSetData): Pro
           .set({ ...tripRowValues(data), updatedAt: new Date() })
           .where(and(eq(trips.id, current.id), eq(trips.userId, userId)))
           .returning();
-        undo.push({ kind: "restore_trip", trip: current });
+        undo.push({ kind: "restore_trip", trip: current, appliedAt: trip.updatedAt.toISOString() });
         lines.push({
           action: "change",
           subject: "trip",
@@ -421,7 +437,13 @@ async function runChanges(tx: Tx, userId: string, set: TravelChangeSetData): Pro
           .returning();
         await setItemMembers(tripItemPayers, tx, trip.id, item.id, data.payerIds ?? []);
         await setItemMembers(tripItemAttendees, tx, trip.id, item.id, data.attendeeIds ?? []);
-        undo.push({ kind: "restore_item", item: current, payers, attendees });
+        undo.push({
+          kind: "restore_item",
+          item: current,
+          payers,
+          attendees,
+          appliedAt: item.updatedAt.toISOString(),
+        });
         lines.push({
           action: "change",
           subject: "item",
@@ -511,7 +533,11 @@ async function runChanges(tx: Tx, userId: string, set: TravelChangeSetData): Pro
           })
           .where(and(eq(tripMembers.id, current.id), eq(tripMembers.tripId, trip.id)))
           .returning();
-        undo.push({ kind: "restore_member", member: current });
+        undo.push({
+          kind: "restore_member",
+          member: current,
+          applied: { name: member.name, email: member.email, sharePercent: member.sharePercent },
+        });
         lines.push({
           action: "change",
           subject: "member",
@@ -656,7 +682,11 @@ async function runChanges(tx: Tx, userId: string, set: TravelChangeSetData): Pro
           .set({ amount: data.amount, note: data.note ?? null, paidOn: data.paidOn ?? current.paidOn })
           .where(and(eq(tripContributions.id, current.id), eq(tripContributions.tripId, trip.id)))
           .returning();
-        undo.push({ kind: "restore_payment", payment: current });
+        undo.push({
+          kind: "restore_payment",
+          payment: current,
+          applied: { amount: payment.amount, note: payment.note, paidOn: payment.paidOn },
+        });
         lines.push({
           action: "change",
           subject: "payment",
@@ -730,6 +760,7 @@ async function runUndo(tx: Tx, userId: string, op: UndoOp): Promise<void> {
 
     case "restore_trip": {
       const before = revive(op.trip);
+      if (!op.appliedAt) throw changedSince(`"${op.trip.title}"`);
       const [row] = await tx
         .update(trips)
         .set({
@@ -743,9 +774,21 @@ async function runUndo(tx: Tx, userId: string, op: UndoOp): Promise<void> {
           color: before.color,
           updatedAt: before.updatedAt,
         })
-        .where(and(eq(trips.id, before.id), eq(trips.userId, userId)))
+        .where(
+          and(
+            eq(trips.id, before.id),
+            eq(trips.userId, userId),
+            eq(trips.updatedAt, new Date(op.appliedAt))
+          )
+        )
         .returning({ id: trips.id });
-      if (!row) throw new TravelChangeError(`"${op.trip.title}" no longer exists`);
+      if (!row) {
+        const [still] = await tx
+          .select({ id: trips.id })
+          .from(trips)
+          .where(and(eq(trips.id, before.id), eq(trips.userId, userId)));
+        throw still ? changedSince(`"${op.trip.title}"`) : new TravelChangeError(`"${op.trip.title}" no longer exists`);
+      }
       return;
     }
 
@@ -779,6 +822,7 @@ async function runUndo(tx: Tx, userId: string, op: UndoOp): Promise<void> {
 
     case "restore_item": {
       await ownedTrip(tx, userId, op.item.tripId, "Undo");
+      if (!op.appliedAt) throw changedSince(`"${op.item.title}"`);
       const before = revive(op.item);
       const { id, tripId } = before;
       const [row] = await tx
@@ -800,9 +844,21 @@ async function runUndo(tx: Tx, userId: string, op: UndoOp): Promise<void> {
           sortOrder: before.sortOrder,
           updatedAt: before.updatedAt,
         })
-        .where(and(eq(tripItems.id, id), eq(tripItems.tripId, tripId)))
+        .where(
+          and(
+            eq(tripItems.id, id),
+            eq(tripItems.tripId, tripId),
+            eq(tripItems.updatedAt, new Date(op.appliedAt))
+          )
+        )
         .returning({ id: tripItems.id });
-      if (!row) throw new TravelChangeError(`"${op.item.title}" no longer exists`);
+      if (!row) {
+        const [still] = await tx
+          .select({ id: tripItems.id })
+          .from(tripItems)
+          .where(and(eq(tripItems.id, id), eq(tripItems.tripId, tripId)));
+        throw still ? changedSince(`"${op.item.title}"`) : new TravelChangeError(`"${op.item.title}" no longer exists`);
+      }
       await tx.delete(tripItemPayers).where(eq(tripItemPayers.itemId, id));
       await tx.delete(tripItemAttendees).where(eq(tripItemAttendees.itemId, id));
       await insertAll(tx, tripItemPayers, op.payers);
@@ -833,6 +889,12 @@ async function runUndo(tx: Tx, userId: string, op: UndoOp): Promise<void> {
 
     case "restore_member": {
       await ownedTrip(tx, userId, op.member.tripId, "Undo");
+      const [now] = await tx
+        .select({ name: tripMembers.name, email: tripMembers.email, sharePercent: tripMembers.sharePercent })
+        .from(tripMembers)
+        .where(and(eq(tripMembers.id, op.member.id), eq(tripMembers.tripId, op.member.tripId)));
+      if (!now) throw new TravelChangeError(`"${op.member.name}" is no longer on the trip`);
+      if (!op.applied || !sameFields(now, op.applied)) throw changedSince(`"${op.member.name}"`);
       const [row] = await tx
         .update(tripMembers)
         .set({ name: op.member.name, email: op.member.email, sharePercent: op.member.sharePercent })
@@ -887,6 +949,12 @@ async function runUndo(tx: Tx, userId: string, op: UndoOp): Promise<void> {
 
     case "restore_payment": {
       await ownedTrip(tx, userId, op.payment.tripId, "Undo");
+      const [now] = await tx
+        .select({ amount: tripContributions.amount, note: tripContributions.note, paidOn: tripContributions.paidOn })
+        .from(tripContributions)
+        .where(and(eq(tripContributions.id, op.payment.id), eq(tripContributions.tripId, op.payment.tripId)));
+      if (!now) throw new TravelChangeError("That payment is no longer on the trip");
+      if (!op.applied || !sameFields(now, op.applied)) throw changedSince("That payment");
       const [row] = await tx
         .update(tripContributions)
         .set({ amount: op.payment.amount, note: op.payment.note, paidOn: op.payment.paidOn })
@@ -905,6 +973,14 @@ async function runUndo(tx: Tx, userId: string, op: UndoOp): Promise<void> {
 }
 
 // ---------- helpers ----------
+
+function changedSince(subject: string): TravelChangeError {
+  return new TravelChangeError(`${subject} changed after this was applied, so it can no longer be undone`);
+}
+
+function sameFields<T extends Record<string, unknown>>(now: T, applied: T): boolean {
+  return Object.keys(applied).every((k) => (now[k] ?? null) === (applied[k] ?? null));
+}
 
 /** Zod's verdict as a sentence the model can act on. */
 function valid<S extends z.ZodType>(schema: S, input: unknown, where: string): z.output<S> {

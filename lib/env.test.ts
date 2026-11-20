@@ -60,3 +60,25 @@ describe("getBaseUrl", () => {
     ).toBe("https://allstars.example.com");
   });
 });
+
+describe("env", () => {
+  it("does not validate secrets at import, so a short one cannot take every page down", async () => {
+    vi.resetModules();
+    const previous = { ...process.env };
+    delete process.env.SKIP_ENV_VALIDATION;
+    Object.assign(process.env, {
+      DATABASE_URL: "postgresql://u:p@localhost:6543/db",
+      NEXT_PUBLIC_SUPABASE_URL: "https://x.supabase.co",
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: "pk",
+      CRON_SECRET: "short",
+      VERCEL_API_TOKEN: "",
+    });
+    try {
+      const { env } = await import("./env");
+      expect(env).not.toHaveProperty("CRON_SECRET");
+      expect(env).not.toHaveProperty("VERCEL_API_TOKEN");
+    } finally {
+      process.env = previous;
+    }
+  });
+});

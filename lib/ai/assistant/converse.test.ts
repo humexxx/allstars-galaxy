@@ -133,3 +133,69 @@ describe("echoable", () => {
     expect(echoable(content)).toBe(content);
   });
 });
+
+describe("converse's time budget", () => {
+  it("starts no new model call within the route's last 20 seconds", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    const { client, params } = fakeClient([
+      { content: [toolUse("echo", {}, "t1")], stop_reason: "tool_use" },
+      { content: [text("never asked for")], stop_reason: "end_turn" },
+    ]);
+    const events: AssistantBaseEvent[] = [];
+    const runTool = vi.fn(async (tool: AssistantToolUse) => {
+      now.mockReturnValue(1_000_000 + 101_000);
+      return toolOk(tool, "slow");
+    });
+
+    await converse({
+      client,
+      model: aiModel("claude-opus-5-5"),
+      system: "s",
+      tools: TOOLS,
+      runTool,
+      history: [{ role: "user", content: "Hi" }],
+      added: [],
+      send: (e) => events.push(e),
+      record: async () => undefined,
+      tag: "test-assistant",
+    });
+    now.mockRestore();
+
+    expect(params).toHaveLength(1);
+    expect(events.at(-1)).toEqual({ type: "text", text: expect.stringContaining("ran out of time") });
+  });
+
+  it("books the tokens a failed stream already used", async () => {
+    const usage = { input_tokens: 900, output_tokens: 40 };
+    const stream = vi.fn(() => ({
+      on: () => undefined,
+      currentMessage: { usage, model: "claude-opus-5-5" },
+      finalMessage: async () => {
+        throw new APIError();
+      },
+    }));
+    class APIError extends (await import("@anthropic-ai/sdk")).default.APIError {
+      constructor() {
+        super(500, undefined, "boom", new Headers());
+      }
+    }
+    const record = vi.fn(async () => undefined);
+
+    await expect(
+      converse({
+        client: { beta: { messages: { stream } } } as unknown as Pick<Anthropic, "beta">,
+        model: aiModel("claude-opus-5-5"),
+        system: "s",
+        tools: TOOLS,
+        runTool: async (tool) => toolOk(tool, ""),
+        history: [{ role: "user", content: "Hi" }],
+        added: [],
+        send: () => undefined,
+        record,
+        tag: "test-assistant",
+      })
+    ).rejects.toThrow();
+    expect(record).toHaveBeenCalledWith(usage, "claude-opus-5-5");
+  });
+});
+

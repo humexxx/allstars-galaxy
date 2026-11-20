@@ -21,6 +21,7 @@ import {
 } from "@/types/sports";
 
 import {
+  FINISHED,
   fetchHeader,
   fetchHeaderDays,
   headerMatch,
@@ -438,8 +439,6 @@ type KnockoutGame = {
 /** One pairing of a round: a single game, a series, or a tie's two legs. */
 type Contest = { round: number; half: 0 | 1 | null; teamIds: [string, string]; games: KnockoutGame[] };
 
-const FINISHED: ReadonlySet<MatchStatus> = new Set<MatchStatus>(["ft", "aet", "pen"]);
-
 /**
  * Games into pairings: a pair of clubs meets once a round, so the round and
  * the pair are its key. A postponed game comes back as one of its own, and a
@@ -719,10 +718,7 @@ type Feeds = {
   days: FootballEvent[];
   standings: FootballStandings | null;
   teams: EspnTeams | null;
-  /**
-   * The play-offs' earlier days, before the days listed; null when they did
-   * not answer, which leaves the bracket out rather than half drawn.
-   */
+  /** The play-offs' earlier days, before the days listed; null when they did not load. */
   earlier: FootballEvent[] | null;
 };
 
@@ -760,6 +756,8 @@ function leagueDataFrom(league: EspnFootballLeague, feeds: Feeds, today: string)
 
   const span = activeSpan(league, today);
   let knockout: BracketRound[] = [];
+  // Without the earlier days a bracket would be missing its first rounds:
+  // none is drawn until they load, and the rest of the league stays live.
   if (span && feeds.earlier) {
     const seeds = new Map(table.groups.flatMap((g) => g.standings.map((s) => [s.teamId, s.position] as const)));
     const { games, teams } = knockoutGamesFrom([...feeds.earlier, ...feeds.days], league, span);

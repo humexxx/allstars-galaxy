@@ -356,4 +356,65 @@ describe("undoTravelChanges", () => {
     // JSON turned the timestamps into strings; they go back in as dates.
     expect((calls.insert[0].values as { createdAt: unknown }).createdAt).toBeInstanceOf(Date);
   });
+
+  describe("a restore receipt", () => {
+    const APPLIED_AT = new Date("2026-11-20T10:00:00.000Z");
+
+    async function renameReceipt(): Promise<string> {
+      selects.push([], [tripRow()]);
+      updates.push([tripRow({ title: "Orlando again", updatedAt: APPLIED_AT })]);
+      const applied = await applyTravelChanges(USER, {
+        summary: "Rename",
+        changes: [{ op: "update_trip", tripId: TRIP, changes: { title: "Orlando again" } }],
+      });
+      calls.update.length = 0;
+      return applied.undoToken!;
+    }
+
+    it("records, signed, the updatedAt the Apply left the row with", async () => {
+      const token = await renameReceipt();
+      expect(readUndo(token, USER)).toEqual([
+        expect.objectContaining({ kind: "restore_trip", appliedAt: APPLIED_AT.toISOString() }),
+      ]);
+    });
+
+    it("puts the row back while nobody has touched it since", async () => {
+      const token = await renameReceipt();
+      updates.push([{ id: TRIP }]);
+      await undoTravelChanges(USER, token);
+      expect(calls.update[0]).toMatchObject({ table: trips, set: { title: "Orlando" } });
+    });
+
+    it("refuses once the row was edited after the Apply, rather than overwrite the edit", async () => {
+      const token = await renameReceipt();
+      // The conditional update matches nothing; the trip is still there.
+      selects.push([{ id: TRIP }]);
+      await expect(undoTravelChanges(USER, token)).rejects.toThrow(
+        '"Orlando" changed after this was applied, so it can no longer be undone'
+      );
+    });
+
+    it("refuses a receipt signed before it carried that stamp", async () => {
+      const token = signUndo(USER, [{ kind: "restore_trip", trip: tripRow() }])!;
+      await expect(undoTravelChanges(USER, token)).rejects.toThrow(/can no longer be undone/);
+      expect(calls.update).toHaveLength(0);
+    });
+
+    it("compares a payment's fields, since that table has no updatedAt", async () => {
+      const payment = { id: "77777777-7777-4777-8777-777777777777", tripId: TRIP, memberId: MEMBER, amount: "50.00", note: null, paidOn: "2026-11-01", createdAt: new Date() };
+      const token = signUndo(USER, [
+        { kind: "restore_payment", payment, applied: { amount: "80.00", note: null, paidOn: "2026-11-01" } },
+      ])!;
+
+      selects.push([tripRow()], [{ amount: "95.00", note: null, paidOn: "2026-11-01" }]);
+      await expect(undoTravelChanges(USER, token)).rejects.toThrow(/That payment changed after/);
+      expect(calls.update).toHaveLength(0);
+
+      selects.push([tripRow()], [{ amount: "80.00", note: null, paidOn: "2026-11-01" }]);
+      updates.push([{ id: payment.id }]);
+      await undoTravelChanges(USER, token);
+      expect(calls.update[0].set).toMatchObject({ amount: "50.00" });
+    });
+  });
 });
+

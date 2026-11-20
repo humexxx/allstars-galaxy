@@ -103,7 +103,18 @@ export async function refreshF1News(): Promise<{
       },
     });
 
-  return { fetched: articles.length, stored: rows.length };
+  return { fetched: articles.length, stored: unique.length };
+}
+
+function toArticle(row: typeof f1News.$inferSelect): F1NewsArticle {
+  return {
+    id: row.articleId,
+    headline: row.headline,
+    description: row.description,
+    link: row.link,
+    images: row.images ?? [],
+    firstSeenAt: row.firstSeenAt,
+  };
 }
 
 /** One article by the provider's id, for its own page. */
@@ -116,15 +127,7 @@ export const getF1Article = cache(async function getF1Article(
     .from(f1News)
     .where(eq(f1News.articleId, articleId))
     .limit(1);
-  if (!row) return null;
-  return {
-    id: row.articleId,
-    headline: row.headline,
-    description: row.description,
-    link: row.link,
-    images: row.images ?? [],
-    firstSeenAt: row.firstSeenAt,
-  };
+  return row ? toArticle(row) : null;
 });
 
 /** The rest of the wire, for the bottom of an article's page. */
@@ -139,14 +142,7 @@ export async function getOtherF1News(
     .orderBy(desc(f1News.firstSeenAt), desc(f1News.articleId))
     .limit(limit);
 
-  return rows.map((r) => ({
-    id: r.articleId,
-    headline: r.headline,
-    description: r.description,
-    link: r.link,
-    images: r.images ?? [],
-    firstSeenAt: r.firstSeenAt,
-  }));
+  return rows.map(toArticle);
 }
 
 /**
@@ -162,12 +158,5 @@ export async function getF1News(limit = 12): Promise<F1NewsArticle[]> {
     .orderBy(desc(f1News.firstSeenAt), desc(f1News.articleId))
     .limit(limit);
 
-  return rows.map((r) => ({
-    id: r.articleId,
-    headline: r.headline,
-    description: r.description,
-    link: r.link,
-    images: r.images ?? [],
-    firstSeenAt: r.firstSeenAt,
-  }));
+  return rows.map(toArticle);
 }

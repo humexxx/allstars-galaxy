@@ -155,4 +155,26 @@ describe("fetchMassivePrices", () => {
 
     expect(String(fetchMock.mock.calls[0][0])).toContain("https://rest.massive.com/v2/");
   });
+
+  it("spends only what is left of the run's budget", async () => {
+    const indices = Array.from({ length: 3 }, (_, i) => ({ id: `a-${i}`, symbol: `IDX${i}`, externalId: `I:IDX${i}` }));
+    fetchMock.mockImplementation(async (url: string) => {
+      const ticker = decodeURIComponent(String(url).split("/ticker/")[1].split("/")[0]);
+      return prev(ticker, 100);
+    });
+
+    const result = await fetchMassivePrices(indices, NOW, 2);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.skipped).toBe(1);
+  });
+
+  it("asks for nothing once the budget is spent", async () => {
+    const result = await fetchMassivePrices([ADA, SPX], NOW, 0);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.skipped).toBe(2);
+    expect(result.errors.join(" ")).toContain("rate limit");
+  });
 });
+

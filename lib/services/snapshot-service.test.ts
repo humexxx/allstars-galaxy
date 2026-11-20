@@ -216,6 +216,43 @@ describe("createDailySnapshots", () => {
     const ids = rows.map((r) => r.portfolioId).sort();
     expect(ids).toEqual([PORTFOLIO_A, PORTFOLIO_B].sort());
   });
+
+  it("writes no second cron row when a manual snapshot came after today's run", async () => {
+    // The newest snapshot is the manual one, so checking only it missed the
+    // cron row beneath and a retry wrote another.
+    selectQueue = [
+      [
+        { portfolioId: PORTFOLIO_A, totalValue: "500", txCount: 1 },
+        { portfolioId: PORTFOLIO_B, totalValue: "700", txCount: 1 },
+      ],
+      [
+        { portfolioId: PORTFOLIO_A, totalValue: "510.00", date: new Date() },
+        { portfolioId: PORTFOLIO_B, totalValue: "690.00", date: new Date() },
+      ],
+      // Today's system_cron rows.
+      [{ portfolioId: PORTFOLIO_A }],
+    ];
+
+    const result = await createDailySnapshots();
+
+    expect(result.snapshotsCreated).toBe(1);
+    const rows = insertValues.mock.calls[0][0] as Array<{ portfolioId: string }>;
+    expect(rows.map((r) => r.portfolioId)).toEqual([PORTFOLIO_B]);
+  });
+
+  it("asks for any system_cron row inside today's UTC day", async () => {
+    selectQueue = [[{ portfolioId: PORTFOLIO_A, totalValue: "500", txCount: 1 }], [], []];
+
+    await createDailySnapshots();
+
+    const { PgDialect } = await import("drizzle-orm/pg-core");
+    const where = selectChain.where.mock.calls[2][0];
+    const { sql: text, params } = new PgDialect().sqlToQuery(where);
+    expect(text).toContain('"source" =');
+    expect(params).toContain("system_cron");
+    const [start, end] = params.filter((p): p is string => typeof p === "string" && /T00:00:00/.test(p));
+    expect(new Date(end).getTime() - new Date(start).getTime()).toBe(24 * 60 * 60 * 1000);
+  });
 });
 
 // ---------- createApprovalSnapshot / createManualSnapshot ----------

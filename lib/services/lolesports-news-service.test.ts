@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { __testing } from "./lolesports-news-service";
 
-const { articlesIn, storyFrom } = __testing;
+const { articlesIn, storyFrom, fetchNews } = __testing;
 
 /** One `Article` as lolesports.com's news page inlines it, inside a React payload string. */
 const article = {
@@ -53,5 +53,25 @@ describe("storyFrom", () => {
   it("calls a YouTube link a video, and leaves out one with no date", () => {
     expect(storyFrom({ ...article, externalUrl: "https://www.youtube.com/watch?v=x" })?.kind).toBe("video");
     expect(storyFrom({ ...article, publishingDates: null })).toBeNull();
+  });
+});
+
+describe("fetchNews", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const serve = (html: string): void => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(html, { status: 200 })));
+  };
+
+  it("reads the stories off a page that has them", async () => {
+    serve(page(`3:["$","div",null,{"article":${JSON.stringify(article)}}]`));
+    await expect(fetchNews()).resolves.toHaveLength(1);
+  });
+
+  it("throws on a page that answers but parses to nothing, so the last good list is kept", async () => {
+    serve("<html><body>redesigned</body></html>");
+    await expect(fetchNews()).rejects.toThrow("no articles parsed");
   });
 });

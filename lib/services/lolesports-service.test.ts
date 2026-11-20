@@ -2,8 +2,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { LolData, LolRegion, LolSplit } from "@/types/sports";
 
+import { LOL_DATA } from "@/lib/data/sports/lol";
+
 import { fakeLolesports, type FakeLolesportsOptions } from "./__fixtures__/lolesports";
-import { __testing, getLolData } from "./lolesports-service";
+import { __testing, getLolData, getLolSplit } from "./lolesports-service";
+
+// No queue: the limiter is upstream's, and with the date faked its window never passes.
+vi.mock("./upstream", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./upstream")>()),
+  rateLimiter: () => async (): Promise<void> => {},
+}));
 
 const {
   buildLolBracket,
@@ -583,34 +591,74 @@ describe("getLolData across the end of a season", () => {
     expect(scheduleCalls[1]).toContain("pageToken=older-1");
   });
 
-  it("falls back to the tournament's completed events when the older page fails", async () => {
+  // Each of these used to answer without the part that failed, and that
+  // answer was cached for the window as if it were the data. Thrown, the
+  // cache keeps its last good answer; with none, the feed's fallback shows.
+  it("fails the read when an older schedule page fails, rather than keep a split without its matches", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const data = await lolDataOn("2027-01-05T12:00:00Z", { olderPagesFail: true });
 
-    const lec = split(data, "lec");
-    expect(lec.name).toBe("LEC Split 3");
-    expect(lec.matches.map((m) => [m.stageLabel, m.status])).toEqual([
-      ["Finals", "ft"],
-      ["Playoffs", "ft"],
-    ]);
-    // Still named and dated off those events, so the champion still reads.
-    expect(lec.playoffs?.map((r) => r.label)).toEqual(["Playoffs", "Finals"]);
-    expect(lec.champion?.teamId).toBe("g2");
+    expect(data).toBe(LOL_DATA);
     vi.mocked(console.warn).mockRestore();
   });
 
-  it("keeps a split's standings and bracket when its matches cannot be found at all", async () => {
+  it("fails the read when a league's standings fail, rather than keep its split without a table", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    const data = await lolDataOn("2027-01-05T12:00:00Z", {
-      olderPagesFail: true,
-      completedEventsFail: true,
-    });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-20T12:00:00Z"));
+    const fake = fakeLolesports("2026-11-20T12:00:00Z");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: string) =>
+        input.includes("/getStandings") && input.includes("tournamentId=lec")
+          ? Promise.resolve(new Response("{}", { status: 500 }))
+          : fake(input)
+      )
+    );
 
-    // Never next season's matches under last season's name.
-    const lec = split(data, "lec");
-    expect(lec.matches).toEqual([]);
-    expect(lec.standings.length).toBeGreaterThan(0);
-    expect(lec.playoffs?.flatMap((r) => r.matches)).toHaveLength(2);
+    expect(await getLolData()).toBe(LOL_DATA);
+    vi.mocked(console.warn).mockRestore();
+  });
+
+  it("never answers a split moved to with its table missing: a failed standings read fails it", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-20T12:00:00Z"));
+    const fake = fakeLolesports("2026-11-20T12:00:00Z");
+    let standingsFail = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: string) =>
+        standingsFail && input.includes("/getStandings")
+          ? Promise.resolve(new Response("{}", { status: 503 }))
+          : fake(input)
+      )
+    );
+
+    const split = await getLolSplit("lec", "lec_split_3_2026");
+    expect(split?.standings.length).toBeGreaterThan(0);
+
+    standingsFail = true;
+    // The feed's null, never a split with an empty table to keep for a day.
+    expect(await getLolSplit("lec", "lec_split_3_2026")).toBeNull();
+    vi.mocked(console.warn).mockRestore();
+  });
+
+  it("fails a league's read when its tournaments cannot be listed, rather than drop the region", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-20T12:00:00Z"));
+    const fake = fakeLolesports("2026-11-20T12:00:00Z");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: string) =>
+        input.includes("/getTournamentsForLeague?leagueId=lck")
+          ? Promise.resolve(new Response("{}", { status: 500 }))
+          : fake(input)
+      )
+    );
+
+    expect(await getLolData()).toBe(LOL_DATA);
     vi.mocked(console.warn).mockRestore();
   });
 

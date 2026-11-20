@@ -78,13 +78,6 @@ type EspnStandings = {
   children?: Array<{ name?: string; standings?: { entries?: EspnEntry[] } }>;
 };
 
-/**
- * A stat by any of the names it goes under.
- *
- * The two tables disagree: a driver's total is `championshipPts` and a
- * constructor's is `points`. Reading one name gave the constructors a column
- * of zeroes.
- */
 /** Three letters off the team's name, since ESPN has no usable team code. */
 function teamCode(name: string | undefined): string | undefined {
   if (!name) return undefined;
@@ -93,6 +86,13 @@ function teamCode(name: string | undefined): string | undefined {
   return name.slice(0, 3).toUpperCase();
 }
 
+/**
+ * A stat by any of the names it goes under.
+ *
+ * The two tables disagree: a driver's total is `championshipPts` and a
+ * constructor's is `points`. Reading one name gave the constructors a column
+ * of zeroes.
+ */
 function stat(entry: EspnEntry, ...names: string[]): number {
   for (const name of names) {
     const found = entry.stats?.find((s) => s.name === name);

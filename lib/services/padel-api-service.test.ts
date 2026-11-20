@@ -473,6 +473,20 @@ describe("the feed and the draws on demand", () => {
     expect(pages).toHaveBeenCalledTimes(1);
   });
 
+  it("fails a draw read when a later page fails, rather than keep the draw short of its first rounds", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const pages = vi.fn<(url: string) => Promise<Response>>(async (url) =>
+      url.includes("page=1")
+        ? respond({ data: dayOne, meta: { last_page: 3 } })
+        : url.includes("page=3")
+          ? ({ ok: false, status: 500 } as Response)
+          : respond({ data: [] })
+    );
+    vi.stubGlobal("fetch", pages);
+    await expect(fetchPadelDraw(748)).rejects.toThrow("padel-api 500");
+    vi.mocked(console.warn).mockRestore();
+  });
+
   it("asks for no tournament this season's calendar does not list", async () => {
     expect(await getPadelDraw("padelapi-999")).toBeNull();
     expect(drawCalls().some((url) => url.includes("/999/"))).toBe(false);
@@ -502,12 +516,22 @@ describe("the minute's ten requests", () => {
     expect(fetchMock).toHaveBeenCalledTimes(8);
   });
 
+  it("counts an essential request that goes out past the minute's ten", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ok()));
+    for (let i = 0; i < 10; i++) await fetchPadel("/rankings", { essential: true });
+    expect(__testing.startsThisMinute()).toBe(10);
+    await fetchPadel("/rankings", { essential: true });
+    expect(__testing.startsThisMinute()).toBe(11);
+  });
+
   it("takes a 429 as the minute spent, and waits out a short Retry-After for what it needs", async () => {
     const limited = { ok: false, status: 429, headers: new Headers({ "retry-after": "0.01" }) } as Response;
     const fetchMock = vi.fn().mockResolvedValueOnce(limited).mockResolvedValue(ok());
     vi.stubGlobal("fetch", fetchMock);
     await expect(fetchPadel("/rankings", { essential: true })).resolves.toEqual({ data: [] });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    // The minute spent, and the retry counted on top of it.
+    expect(__testing.startsThisMinute()).toBe(11);
     // Nothing is left this minute for a draw.
     await expect(fetchPadel("/tournaments/1/matches")).rejects.toThrow(/no request left/);
   });

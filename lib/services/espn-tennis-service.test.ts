@@ -712,6 +712,13 @@ describe("fetchCalendarFromApi", () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 503 }) as Response));
     await expect(fetchCalendarFromApi(2026)).rejects.toThrow("503");
   });
+
+  it("throws when both seasons answer with no sections, rather than caching an empty calendar", async () => {
+    const fetchMock = vi.fn(async () => respond({ sections: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(fetchCalendarFromApi(2027)).rejects.toThrow("no sections for 2027 or 2026");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("eventFrom", () => {

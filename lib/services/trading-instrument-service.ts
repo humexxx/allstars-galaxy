@@ -4,7 +4,7 @@ import { unstable_cache } from "next/cache";
 
 import { findMassiveTickers } from "@/lib/services/price-providers/massive";
 import { listPriceAssets } from "@/lib/services/price-service";
-import { UPSTREAM_TIMEOUT_MS } from "@/lib/services/upstream";
+import { upstreamSignal } from "@/lib/services/upstream";
 import { instrumentSymbol, rankInstruments, typedSymbol } from "@/lib/trading/instruments";
 import type { TradingInstrument } from "@/types/trading";
 
@@ -22,14 +22,16 @@ type RankedInstrument = TradingInstrument & { ticker: string };
  * answer — no key, a refusal, a timeout — so a failure is never cached.
  */
 async function searchProvider(query: string): Promise<RankedInstrument[]> {
-  const found = await findMassiveTickers({ search: query }, UPSTREAM_TIMEOUT_MS);
+  // One deadline for both reads: two of their own would let a search take twice the budget.
+  const signal = upstreamSignal();
+  const found = await findMassiveTickers({ search: query }, signal);
   if (!found) throw new Error("MASSIVE_API_KEY is not set");
   const typed = typedSymbol(query);
   let tickers = found.tickers;
   // A broad word ("MS", "US") matches more than one page, and the page is in
   // ticker order: the ticker that IS the word may be past its end.
   if (found.more && typed !== "" && !tickers.some((t) => instrumentSymbol(t.ticker) === typed)) {
-    const exact = await findMassiveTickers({ ticker: typed }, UPSTREAM_TIMEOUT_MS).catch(() => null);
+    const exact = await findMassiveTickers({ ticker: typed }, signal).catch(() => null);
     tickers = [...(exact?.tickers ?? []), ...tickers];
   }
   return rankInstruments(query, tickers, KEPT);

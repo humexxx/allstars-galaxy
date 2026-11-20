@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.21.2](https://github.com/humexxx/allstars-galaxy/compare/v0.21.1...v0.21.2) (2026-11-20)
+
+
+### Bug Fixes
+
+* harden the third-party feeds, pricing backfill and assistants after a live audit ([89b58d6](https://github.com/humexxx/allstars-galaxy/commit/89b58d623f8916040d432760c06c4b353c044b47))
+* harden the third-party feeds, pricing backfill and assistants after a live audit ([c6d3c2d](https://github.com/humexxx/allstars-galaxy/commit/c6d3c2d1ee0d860b975a608711a84157db27dfe0))
+* harden the third-party feeds, pricing backfill and assistants after a live audit ([1a3801f](https://github.com/humexxx/allstars-galaxy/commit/1a3801fe3ae60f8b96d3ee96e8323f45129c6224))
+* keep MLS live without its earlier bracket days, cap the backfill, keep good screenshots ([ceaf25a](https://github.com/humexxx/allstars-galaxy/commit/ceaf25aa8aff712ca19fde36c3301af5bbd9f707))
+
 ## [0.21.1](https://github.com/humexxx/allstars-galaxy/compare/v0.21.0...v0.21.1) (2026-11-16)
 
 

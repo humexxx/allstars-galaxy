@@ -718,8 +718,8 @@ type Feeds = {
   days: FootballEvent[];
   standings: FootballStandings | null;
   teams: EspnTeams | null;
-  /** The play-offs' earlier days, before the days listed. */
-  earlier: FootballEvent[];
+  /** The play-offs' earlier days, before the days listed; null when they did not load. */
+  earlier: FootballEvent[] | null;
 };
 
 /**
@@ -756,7 +756,9 @@ function leagueDataFrom(league: EspnFootballLeague, feeds: Feeds, today: string)
 
   const span = activeSpan(league, today);
   let knockout: BracketRound[] = [];
-  if (span) {
+  // Without the earlier days a bracket would be missing its first rounds:
+  // none is drawn until they load, and the rest of the league stays live.
+  if (span && feeds.earlier) {
     const seeds = new Map(table.groups.flatMap((g) => g.standings.map((s) => [s.teamId, s.position] as const)));
     const { games, teams } = knockoutGamesFrom([...feeds.earlier, ...feeds.days], league, span);
     teams.forEach(add);
@@ -800,16 +802,13 @@ async function fetchEspnFootball(id: EspnFootballLeagueId): Promise<FootballLeag
     Promise.all(earlier.map((s) => fetchHeader(scores, s.from, s.to))).then((spans) => spans.flat()),
   ]);
   if (days.status === "rejected") throw days.reason;
-  // Stored without them, the league would have no bracket until the next
-  // refresh; thrown, the last good one is kept.
-  if (before.status === "rejected") throw before.reason;
   return leagueDataFrom(
     league,
     {
       days: days.value,
       standings: settledOrNull(standings),
       teams: settledOrNull(teams),
-      earlier: before.value,
+      earlier: settledOrNull(before),
     },
     today
   );

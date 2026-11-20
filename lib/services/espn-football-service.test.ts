@@ -323,13 +323,14 @@ describe("getEspnFootballLeague", () => {
     expect(data.knockout).toHaveLength(5);
   });
 
-  it("throws when the play-offs' earlier days fail, so the last good bracket is kept", async () => {
+  it("keeps the league live without a bracket when the play-offs' earlier days fail", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2025-12-10T12:00:00Z"));
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     stubMls(() => new Response("{}", { status: 502 }));
-    expect(await getEspnFootballLeague("mls")).toBe(getFootballLeague("mls"));
-    expect(warn).toHaveBeenCalledWith("espn football league unavailable, using fallback:", expect.any(Error));
+    const data = await getEspnFootballLeague("mls");
+    expect(data).not.toBe(getFootballLeague("mls"));
+    expect(data.matches.length).toBeGreaterThan(0);
+    expect(data.knockout ?? []).toHaveLength(0);
   });
 
   it("falls back to the league's own fixture when ESPN does not answer", async () => {

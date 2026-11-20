@@ -93,13 +93,13 @@ export async function backfillTransactionAllocations(
  * button. Every owner's methods go through one pass, so each asset's history
  * is fetched once rather than once per owner holding it.
  */
-export async function backfillAllOwners(): Promise<BackfillRun> {
+export async function backfillAllOwners(maxCalls: number = MASSIVE_CALLS_PER_RUN): Promise<BackfillRun> {
   const owned = await db
     .select({ id: investmentMethods.id })
     .from(investmentMethods)
     .where(isNotNull(investmentMethods.ownerUserId));
 
-  return backfillMethods(owned.map((m) => m.id));
+  return backfillMethods(owned.map((m) => m.id), maxCalls);
 }
 
 type PricingJob = {
@@ -109,7 +109,7 @@ type PricingJob = {
   parts: { assetId: string; amount: number }[];
 };
 
-async function backfillMethods(methodIds: string[]): Promise<BackfillRun> {
+async function backfillMethods(methodIds: string[], maxCalls: number = MASSIVE_CALLS_PER_RUN): Promise<BackfillRun> {
   if (methodIds.length === 0) return { priced: 0, skipped: 0, errors: [], massiveCalls: 0 };
 
   // One query for every method's policy, grouped in memory — a query per
@@ -264,7 +264,7 @@ async function backfillMethods(methodIds: string[]): Promise<BackfillRun> {
       errors.push(`${asset.symbol} has no provider id`);
       continue;
     }
-    if (massiveCalls >= MASSIVE_CALLS_PER_RUN) {
+    if (massiveCalls >= maxCalls) {
       errors.push(`${asset.symbol}: rate limit, history deferred to the next run`);
       continue;
     }

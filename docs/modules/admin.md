@@ -64,4 +64,4 @@ may use), transaction approval queue, and impersonation (with audit trail).
   stays on screen. The role menu closes before its confirm opens
   (`DropdownMenu modal={false}`, no `preventDefault`) — held open, it stayed
   painted under the dialog and left the page inert after Cancel.
-- More Apps screenshots (2026-11-20): the whole microlink lookup, failures included, is cached for a day and at most three run at once, so a spent 50/day quota is not asked again on every visit. `VERCEL_API_TOKEN` and `CRON_SECRET` are read per call, never in the import-time env schema.
+- More Apps screenshots (2026-11-20): a screenshot is cached for a day; a failed lookup keeps the last good one, and the instance leaves that url alone for an hour, so a spent 50/day quota is not asked again on every visit. At most three run at once. `VERCEL_API_TOKEN` and `CRON_SECRET` are read per call, never in the import-time env schema.

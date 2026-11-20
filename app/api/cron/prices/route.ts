@@ -24,6 +24,12 @@ import { refreshPrices } from "@/lib/services/price-service";
 export const maxDuration = 60;
 
 const LAST_PRICE_RUN_KEY = "last_price_run";
+/**
+ * The backfill's share of Massive's five calls. A contribution Massive can
+ * never price (a delisted ticker, a day before its history) is asked about
+ * again every run, so an uncapped backfill could starve the quotes for good.
+ */
+const BACKFILL_CALLS = 2;
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown error";
@@ -36,14 +42,24 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const at = new Date().toISOString();
   try {
-    // The backfill goes first and the refresh gets whatever is left of
-    // Massive's five requests a minute. Pricing a contribution is the one
-    // that cannot wait: a missed quote is retried tomorrow from the last
-    // known price, while an unpriced contribution is money missing from the
-    // margin. Most days the backfill has nothing to do and spends nothing.
-    const { massiveCalls, ...backfill } = await backfillAllOwners();
+    // The backfill goes first, within its share, and the refresh gets what
+    // is left of Massive's five requests a minute: an unpriced contribution
+    // is money missing from the margin, while a missed quote keeps the last
+    // known price. Most days the backfill has nothing to do and spends
+    // nothing. Its failure must not cost the day's quotes.
+    let backfill: { priced: number; skipped: number; errors: string[] } = { priced: 0, skipped: 0, errors: [] };
+    let spent = 0;
+    try {
+      const { massiveCalls, ...done } = await backfillAllOwners(BACKFILL_CALLS);
+      backfill = done;
+      spent = massiveCalls;
+    } catch (error) {
+      console.error("Price backfill error:", error);
+      backfill.errors.push(`backfill failed: ${messageOf(error)}`);
+      spent = BACKFILL_CALLS;
+    }
     const result = await refreshPrices({
-      massiveCalls: Math.max(0, MASSIVE_CALLS_PER_RUN - massiveCalls),
+      massiveCalls: Math.max(0, MASSIVE_CALLS_PER_RUN - spent),
     });
 
     // Partial failures are reported, not thrown: one unpriced asset must not

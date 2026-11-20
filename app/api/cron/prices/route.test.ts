@@ -50,8 +50,25 @@ describe("GET /api/cron/prices", () => {
     );
   });
 
-  it("records a failed run too", async () => {
+  it("caps the backfill's share of Massive's calls", async () => {
+    await GET(request);
+    expect(backfillAllOwners).toHaveBeenCalledWith(2);
+  });
+
+  it("still refreshes the quotes when the backfill fails, and records why", async () => {
     vi.mocked(backfillAllOwners).mockRejectedValueOnce(new Error("db down"));
+    const res = await GET(request);
+    expect(res.status).toBe(200);
+    expect(refreshPrices).toHaveBeenCalledWith({ massiveCalls: 3 });
+    expect(setAppState).toHaveBeenCalledWith(
+      "last_price_run",
+      expect.any(String),
+      expect.stringContaining("backfill failed: db down")
+    );
+  });
+
+  it("records a failed run too", async () => {
+    vi.mocked(refreshPrices).mockRejectedValueOnce(new Error("db down"));
     const res = await GET(request);
     expect(res.status).toBe(500);
     expect(setAppState).toHaveBeenCalledWith("last_price_run", expect.any(String), "db down");

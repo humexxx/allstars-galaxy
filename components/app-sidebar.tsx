@@ -60,7 +60,7 @@ export function AppSidebar({
     // from the header down.
     <Sidebar
       collapsible="offExamples"
-      className="top-14 h-[calc(100svh-3.5rem)] after:absolute after:top-18 after:right-0 after:bottom-6 after:w-px after:bg-sidebar-border after:mask-y-from-75%"
+      className="top-14 h-[calc(100svh-3.5rem)] [&_[data-slot=sidebar-inner]]:bg-transparent after:absolute after:top-18 after:right-0 after:bottom-6 after:w-px after:bg-sidebar-border after:mask-y-from-75%"
       {...props}
     >
       <SidebarContent className="gap-0 px-2 pt-18">
@@ -73,7 +73,7 @@ export function AppSidebar({
             {section.label && (
               // Docs-style section heading: muted + light, so the section
               // titles recede and the page links read as the primary text.
-              <SidebarGroupLabel className="text-muted-foreground">
+              <SidebarGroupLabel className="font-mono text-2xs tracking-widest text-muted-foreground uppercase">
                 {section.label}
               </SidebarGroupLabel>
             )}
@@ -90,6 +90,7 @@ export function AppSidebar({
                           title={item.locked ? "Not enabled for your account" : undefined}
                           className="w-fit cursor-not-allowed opacity-60"
                         >
+                          <item.icon aria-hidden="true" />
                           {item.title}
                         </SidebarMenuButton>
                       ) : (
@@ -100,9 +101,10 @@ export function AppSidebar({
                         <SidebarMenuButton
                           asChild
                           isActive={active}
-                          className="w-fit max-w-full"
+                          className="w-fit max-w-full text-sidebar-foreground data-active:text-sidebar-accent-foreground [&_svg]:text-muted-foreground data-active:[&_svg]:text-sidebar-primary"
                         >
                           <Link href={item.url} onClick={handleNavClick}>
+                            <item.icon aria-hidden="true" />
                             {item.title}
                           </Link>
                         </SidebarMenuButton>

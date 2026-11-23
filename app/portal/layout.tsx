@@ -58,7 +58,7 @@ export default async function PortalLayout({
             `overflow-auto` never gives it the chance. From `md` up the shell
             goes back to filling the viewport with its own scrolling pane,
             which is what keeps the sidebar and header fixed. */}
-          <div className="flex min-h-svh w-full flex-col md:h-svh">
+          <div className="portal-sky flex min-h-svh w-full flex-col md:h-svh">
             <SkipLink />
             <AppHeader
               realUser={ctx.realUser}
@@ -77,7 +77,7 @@ export default async function PortalLayout({
                 min-content width by default, so from `lg` (sidebar showing) a
                 wide board or table pushed the whole page sideways by the
                 sidebar's width instead of scrolling inside its own card. */}
-              <SidebarInset className="min-w-0">
+              <SidebarInset className="min-w-0 bg-transparent">
                 {/* No container here: each route renders its own
                   `PortalPageContainer`. `relative`: an absolutely placed
                   descendant with nothing positioned nearer (every `sr-only`

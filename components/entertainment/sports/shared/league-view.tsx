@@ -48,6 +48,7 @@ export function LeagueView({
   emptyTitle,
   table,
   lead,
+  extraTab,
 }: {
   sportId: SportId;
   title: string;
@@ -70,6 +71,8 @@ export function LeagueView({
   table: ReactNode;
   /** Above the split on the Overview (the NBA's note before tip-off). */
   lead?: ReactNode;
+  /** A tab of the sport's own after the bracket's (the NBA Cup), opened by `?tab=<value>`. */
+  extraTab?: { value: string; label: string; content: ReactNode };
 }): React.ReactElement {
   const hasPlayoffs = isBracketDrawn(playoffs);
   const hasNews = news.length > 0;
@@ -78,7 +81,9 @@ export function LeagueView({
   const opening =
     initialTab === "news" && hasNews
       ? "news"
-      : initialTab === "overview"
+      : extraTab && initialTab === extraTab.value
+        ? extraTab.value
+        : initialTab === "overview"
         ? "overview"
         : hasPlayoffs && (opensOnBracket || initialTab === "bracket")
           ? "bracket"
@@ -94,6 +99,7 @@ export function LeagueView({
           <TabsList variant="line">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             {hasPlayoffs && <TabsTrigger value="bracket">{bracketLabel}</TabsTrigger>}
+            {extraTab && <TabsTrigger value={extraTab.value}>{extraTab.label}</TabsTrigger>}
             {hasNews && <TabsTrigger value="news">News</TabsTrigger>}
           </TabsList>
         }
@@ -132,6 +138,8 @@ export function LeagueView({
             </div>
           </TabsContent>
         )}
+
+        {extraTab && <TabsContent value={extraTab.value}>{extraTab.content}</TabsContent>}
 
         {hasNews && (
           <TabsContent value="news">

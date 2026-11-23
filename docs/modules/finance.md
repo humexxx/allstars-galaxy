@@ -1,7 +1,7 @@
 # Finance
 
 > **Status:** Active
-> **Last reviewed:** 2026-11-15
+> **Last reviewed:** 2026-11-23
 
 ## Overview
 Personal financial planning: users build *plans* (scenarios) with incomes,
@@ -233,6 +233,8 @@ gated on the `showContextAvatar` preference — see [Settings](./settings.md).
 - **A balance adjustment** (2026-11-15). Swaps and commissions are not recorded on the trades, so the journal drifts from the broker; **Adjust balance** takes what the account really holds and stores the difference. It is its own table and not a third `trading_cash_kind`: a deposit or withdrawal is capital the user moves, an adjustment is a result of trading, and every reader of cash movements keeps meaning what it meant. It counts as P&L that is not a trade: in the balance, the equity curve (`cumulativePnl` too), its month's P&L and return (so in a plan's pace) and the balance a later trade's return is measured against; never in `deposited` / `withdrawn`, in `realizedPnl` (the trades' — the sum is `adjusted`, its own term under the balance), or in the stats, the days, the streaks and the per-symbol / setup / weekday breakdowns. On the calendar a day's figure and the Week column stay the trades'. In a day's cell the label and the amount give way whole, label first, when the cell is short (a wrapping column the box clips, never a sliced line); a phone shows only the scale mark, since a rounded figure misstates a small amount; a day whose adjustments cancel shows nothing (the picked day lists them). In Analytics the "Net P&L" tile stays the trades' and says "before adjustments", while the equity chart's P&L line and "P&L by month" say "after adjustments". The dialog hints at Deposit when a credit is over $100 and over a tenth of the balance — an adjustment that size would read as trading profit in the plan's pace.
 
 - **The trading account in a plan.** `projectionOptionsFor` passes the journal's balance as `tradingValue`, growing at `trailingMonthlyRate` (a losing pace shrinks it, never below 0) and only after `tradingAsOf`, the day it was read — it is a live figure, not one as of the plan's opening, so it never grows across the periods before today. It is in net worth (and the dashboard's investments part), the chart's tooltip has a Trading row, and the past reads the journal's equity at each point's day on read (`withTradingBalance`); stored snapshots exclude it, like receivables.
+
+- **A series is drawn whole or not at all** (2026-11-22). On the plan chart and the dashboard card (and each plan's debt on the comparison chart), a part that holds money anywhere in the window — Portfolio, Trading, Owed to you, Debt — runs from the window's first point to its last, its zeros on $0; one that is zero throughout is not drawn. Lines used to start at the point before the first money and stop at the $0 after the last, so a trading account opened mid-window began there and a paid-off debt vanished. One rule, `chartParts` / `wholeSeries` in `lib/finance/chart-series.ts`, also decides the tooltip's rows ($0 included, superseding "only when > 0" above) and the dashboard rail, which is the chart's legend: a part the chart doesn't draw has no figure there, Portfolio included.
 
 ## Calculation semantics (audit 2026-09-29)
 

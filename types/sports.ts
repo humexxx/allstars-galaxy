@@ -361,13 +361,20 @@ export const FOOTBALL_COMPETITION_IDS = [
   "bundesliga",
   "mls",
   "costa-rica",
+  "concacaf-champions-cup",
+  "concacaf-central-american-cup",
   "world-cup",
 ] as const;
 
 export type FootballLeagueId = (typeof FOOTBALL_COMPETITION_IDS)[number];
 
 /** The competitions read from ESPN's key-less feeds rather than football-data.org. */
-export const ESPN_FOOTBALL_LEAGUE_IDS = ["mls", "costa-rica"] as const satisfies readonly FootballLeagueId[];
+export const ESPN_FOOTBALL_LEAGUE_IDS = [
+  "mls",
+  "costa-rica",
+  "concacaf-champions-cup",
+  "concacaf-central-american-cup",
+] as const satisfies readonly FootballLeagueId[];
 
 export type EspnFootballLeagueId = (typeof ESPN_FOOTBALL_LEAGUE_IDS)[number];
 
@@ -412,6 +419,22 @@ export type FootballLeagueData = {
   /** Group-stage tables for cup tournaments; empty for domestic leagues. */
   groups?: FootballGroupStandings[];
   knockout?: BracketRound[];
+  /**
+   * Each club's id at its provider (ESPN's or football-data's number), by the
+   * id it has here: what a club's games in its other competitions are found by.
+   */
+  providerTeamIds?: Record<string, string>;
+};
+
+/**
+ * One or more clubs' games in every competition the app covers, each game's
+ * stage led by its competition ("UCL · Matchday 5"). `teamIds` are the clubs
+ * asked for, by the ids of the league on screen.
+ */
+export type FootballClubMatches = {
+  teamIds: string[];
+  teams: Team[];
+  matches: Match[];
 };
 
 // ---------- F1 ----------
@@ -1135,4 +1158,40 @@ export type F1NewsArticle = {
 export const SPORT_COMPETITIONS: Partial<Record<SportId, readonly string[]>> = {
   football: FOOTBALL_COMPETITION_IDS,
   lol: LOL_REGIONS,
+};
+
+// ---------- NBA Cup ----------
+
+/** A team's line in its NBA Cup group: its group games alone. */
+export type NbaCupGroupRow = {
+  teamId: string;
+  won: number;
+  lost: number;
+  /** Points scored less points allowed, in the group's games. */
+  pointDiff: number;
+  /** Leads its group, or is its conference's best runner-up (the wildcard), as things stand. */
+  advancing?: "winner" | "wildcard";
+};
+
+/** Five teams of one conference who play each other once in November. */
+export type NbaCupGroup = {
+  id: string;
+  conference: NbaConference;
+  /** Best first: wins, head to head, then point difference. */
+  rows: NbaCupGroupRow[];
+};
+
+/**
+ * The NBA Cup (once the In-Season Tournament): group nights in November,
+ * then quarterfinals, semifinals and a final in December. ESPN publishes no
+ * groups, so they are read off who plays whom on a Cup night.
+ */
+export type NbaCup = {
+  groups: NbaCupGroup[];
+  /** Quarterfinals, semifinals and final, East half first; TBD until ESPN names the teams. */
+  knockout: BracketRound[];
+  /** Each knockout round's calendar days (US Eastern, "2026-12-04"), for before anyone is drawn. */
+  knockoutDates: Array<{ label: string; from: string; to: string }>;
+  /** Group nights still to play. */
+  groupNightsLeft: number;
 };

@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/app/actions/sports", () => ({ setSportTeamFilterAction: vi.fn() }));
 
 import { getFootballLeague } from "@/lib/data/sports/football";
-import type { BracketRound, FootballLeagueId } from "@/types/sports";
+import type { BracketRound, FootballClubMatches, FootballLeagueId } from "@/types/sports";
 
 import { FootballView } from "./football-view";
 
@@ -111,6 +111,58 @@ describe("FootballView", () => {
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Knockout" }), { button: 0 });
 
     expect(teamFilter()).toBeNull();
+  });
+
+  it("shows a club tapped in the table in all its competitions, each game led by its competition", () => {
+    const league = getFootballLeague("la-liga");
+    const clubs: FootballClubMatches = {
+      teamIds: ["realmadrid"],
+      teams: [{ id: "psv", name: "PSV Eindhoven", shortName: "PSV", code: "PSV" }],
+      matches: [
+        { ...league.matches.find((m) => m.id === "ll-1")!, stageLabel: "La Liga · Matchday 31 · El Clásico" },
+        {
+          id: "m-ucl",
+          homeTeamId: "realmadrid",
+          awayTeamId: "psv",
+          homeScore: 3,
+          awayScore: 1,
+          kickoff: "2026-04-24T19:00:00Z",
+          status: "ft",
+          stageLabel: "UCL · Matchday 5",
+        },
+      ],
+    };
+    render(<FootballView league={league} options={OPTIONS} clubs={clubs} />);
+    expect(screen.queryByText(/UCL · Matchday 5/)).toBeNull();
+
+    fireEvent.click(within(screen.getByRole("table")).getByRole("button", { name: "Real Madrid" }));
+
+    expect(screen.getByText(/UCL · Matchday 5/)).toBeInTheDocument();
+    expect(screen.getByText(/La Liga · Matchday 31 · El Clásico/)).toBeInTheDocument();
+    expect(screen.getAllByText("PSV").length).toBeGreaterThan(0);
+    // The filter still offers the league's clubs alone. jsdom has no
+    // scrollIntoView, which cmdk calls on its highlighted option.
+    const { scrollIntoView } = Element.prototype;
+    Element.prototype.scrollIntoView = vi.fn();
+    try {
+      fireEvent.click(teamFilter()!);
+      expect(screen.getByRole("option", { name: /Barcelona/ })).toBeInTheDocument();
+      expect(screen.queryByRole("option", { name: /PSV/ })).toBeNull();
+    } finally {
+      Element.prototype.scrollIntoView = scrollIntoView;
+    }
+  });
+
+  it("keeps the league's own games while the clubs loaded are not the ones picked", () => {
+    const league = getFootballLeague("la-liga");
+    const clubs: FootballClubMatches = {
+      teamIds: ["barcelona"],
+      teams: [],
+      matches: [{ ...league.matches[0], id: "m-other", stageLabel: "UCL · Matchday 5" }],
+    };
+    render(<FootballView league={league} options={OPTIONS} clubs={clubs} />);
+    fireEvent.click(within(screen.getByRole("table")).getByRole("button", { name: "Real Madrid" }));
+    expect(screen.queryByText(/UCL · Matchday 5/)).toBeNull();
   });
 
   it("is headed by the competition's name", () => {

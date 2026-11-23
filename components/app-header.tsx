@@ -4,7 +4,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { useTransition } from "react";
 import { UserCog, X } from "lucide-react";
-import { User } from "@supabase/supabase-js";
+import type { SessionUser } from "@/lib/auth/session-header";
 
 import { Logo } from "@/components/logo";
 import { ModeToggle } from "@/components/mode-toggle";
@@ -26,7 +26,7 @@ type ImpersonatedUser = {
 };
 
 type AppHeaderProps = {
-  realUser: User;
+  realUser: SessionUser;
   impersonatedUser: ImpersonatedUser | null;
   /** Effective role from the server context (DB-backed). Drives whether the
    *  Admin link surfaces in the horizontal nav. */

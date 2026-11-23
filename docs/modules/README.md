@@ -10,6 +10,7 @@ restructuring.
 | Portfolio (transactions, snapshots, methods) | [portfolio.md](./portfolio.md) | `portfolio`¹ |
 | Productivity (board, road paths) | [productivity.md](./productivity.md) | `productivity`¹ |
 | Entertainment / Travel | [entertainment.md](./entertainment.md) | `travel`, `entertainment` |
+| Wellness (calorie calculator) | [wellness.md](./wellness.md) | `wellness` |
 | Admin (users, transactions, impersonation) | [admin.md](./admin.md) | `admin`¹ / `auth` |
 | Auth | [auth.md](./auth.md) | `auth` |
 | Settings (user preferences, module mascot) | [settings.md](./settings.md) | `portal` |

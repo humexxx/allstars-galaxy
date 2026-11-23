@@ -222,7 +222,13 @@ function SportContent({
   switch (payload.sport) {
     case "football":
       return (
-        <FootballView league={payload.league} options={payload.options} news={payload.news} initialTab={initialTab} />
+        <FootballView
+          league={payload.league}
+          options={payload.options}
+          news={payload.news}
+          clubs={payload.clubs}
+          initialTab={initialTab}
+        />
       );
     case "f1":
       return (
@@ -231,10 +237,11 @@ function SportContent({
           news={payload.news}
           initialTab={initialTab}
           weekend={payload.weekend}
+          justRunRound={payload.justRunRound}
         />
       );
     case "nba":
-      return <NbaView data={payload.data} news={payload.news} initialTab={initialTab} />;
+      return <NbaView data={payload.data} news={payload.news} cup={payload.cup} initialTab={initialTab} />;
     case "tennis":
       return <TennisView data={payload.data} news={payload.news} initialTab={initialTab} />;
     case "padel":

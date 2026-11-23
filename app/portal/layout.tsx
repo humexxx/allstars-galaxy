@@ -88,7 +88,15 @@ export default async function PortalLayout({
                   tabIndex={-1}
                   className="relative flex min-h-0 min-w-0 flex-1 flex-col outline-none md:overflow-auto"
                 >
-                  {children}
+                  {/* Every page stands on the backdrop grid, faded out at
+                      all four edges. A page with a mascot is at least a
+                      little taller than the window, so the mascot only
+                      peeks in under the fold and the page's own content has
+                      the screen. */}
+                  <div className="relative flex flex-1 flex-col has-[[data-page-mascot]]:min-h-[calc(100svh+4rem)]">
+                    <div aria-hidden className="portal-grid pointer-events-none absolute inset-0 -z-1" />
+                    {children}
+                  </div>
                 </main>
               </SidebarInset>
             </div>

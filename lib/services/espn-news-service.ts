@@ -31,6 +31,8 @@ const FEEDS: Record<NewsFeed, FeedSource> = {
   // espn.com's English wire for the league stopped in 2023 (seen October
   // 2026); ESPN's Costa Rican edition, in Spanish, still writes about it.
   "costa-rica": { path: "soccer/crc.1", params: { lang: "es", region: "cr" } },
+  "concacaf-champions-cup": { path: "soccer/concacaf.champions" },
+  "concacaf-central-american-cup": { path: "soccer/concacaf.central.american.cup" },
   "uefa-champions-league": { path: "soccer/uefa.champions" },
   "world-cup": { path: "soccer/fifa.world" },
 };

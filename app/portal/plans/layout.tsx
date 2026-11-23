@@ -2,6 +2,7 @@ import { Suspense, type ReactNode } from "react";
 
 import { PlansAssistant } from "@/components/finance/assistant/plans-assistant";
 import { ContextAvatar } from "@/components/portal/context-avatar";
+import { PageMascot } from "@/components/portal/module-mascot";
 import { PortalPageContainer } from "@/components/portal/page-container";
 import { canUseAssistant } from "@/lib/ai/assistant/access";
 import { getEffectiveContext, requireEffectiveContext } from "@/lib/services/impersonation";
@@ -48,7 +49,11 @@ async function FinanceMascot(): Promise<React.ReactElement | null> {
   if (!showContextAvatar) return null;
 
   const mood = await getFinanceMood(ctx.effectiveUserId);
-  return <ContextAvatar variant="finance" mood={mood} character={mascotCharacter} />;
+  return (
+    <PageMascot>
+      <ContextAvatar variant="finance" mood={mood} character={mascotCharacter} />
+    </PageMascot>
+  );
 }
 
 /** The assistant for admins on a server with an API key (see `canUseAssistant`). */

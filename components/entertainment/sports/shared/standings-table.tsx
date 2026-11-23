@@ -57,6 +57,8 @@ const ZONE_LABELS: Record<FootballLeagueId, Partial<Record<Zone, string>>> = {
   "bundesliga": { ...DOMESTIC_ZONES, playoff: "Relegation play-off" },
   mls: { champions: "Round One", playoff: "Wild card" },
   "costa-rica": { champions: "Semi-finals" },
+  "concacaf-champions-cup": {},
+  "concacaf-central-american-cup": { champions: "Quarter-finals" },
   "uefa-champions-league": { champions: "Round of 16", playoff: "Knockout play-off" },
   "world-cup": { champions: "Round of 32", playoff: "Best third places" },
 };

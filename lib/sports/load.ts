@@ -10,8 +10,8 @@ import { NHL_DATA } from "@/lib/data/sports/nhl";
 import { PADEL_DATA } from "@/lib/data/sports/padel";
 import { SURF_DATA } from "@/lib/data/sports/surf";
 import { TENNIS_DATA } from "@/lib/data/sports/tennis";
-import { FOOTBALL_COMPETITIONS, getFootballCompetition } from "@/lib/services/football-service";
-import { getNbaData } from "@/lib/services/balldontlie-nba-service";
+import { FOOTBALL_COMPETITIONS, getFootballClubMatches, getFootballCompetition } from "@/lib/services/football-service";
+import { getNbaCup, getNbaData } from "@/lib/services/balldontlie-nba-service";
 import { getEspnNews } from "@/lib/services/espn-news-service";
 import { getMlbData } from "@/lib/services/espn-mlb-service";
 import { getNflData } from "@/lib/services/espn-nfl-service";
@@ -26,13 +26,25 @@ import { getTennisData } from "@/lib/services/espn-tennis-service";
 import { getSurfData } from "@/lib/services/wsl-surf-service";
 import { getPadelNews } from "@/lib/services/premier-padel-news-service";
 import { getSurfNews } from "@/lib/services/stab-surf-news-service";
-import { racesTabGroups, weekendWindow } from "@/lib/sports/f1-weekend";
+import { justRunRace, racesTabGroups, weekendWindow } from "@/lib/sports/f1-weekend";
+import { getRequestTimeZone } from "@/lib/utils/request-today";
 import { type SportPayload } from "@/lib/sports/payload";
 import type { FootballLeagueId, SportId } from "@/types/sports";
 
 /** A `?league=` value, or the first league on offer when it names none of them. */
 export function footballLeagueFrom(value: string | undefined): FootballLeagueId {
   return (FOOTBALL_COMPETITIONS.find((c) => c.id === value) ?? FOOTBALL_COMPETITIONS[0]).id;
+}
+
+/**
+ * A football payload with the clubs picked in its match list (`teamIds`, the
+ * saved team filter) in every competition they play in: a pick saves and
+ * refreshes the page, so the next render brings their other games in. Any
+ * other payload as it is.
+ */
+export async function withFootballClubs(payload: SportPayload, teamIds: readonly string[]): Promise<SportPayload> {
+  if (payload.sport !== "football" || payload.sample || teamIds.length === 0) return payload;
+  return { ...payload, clubs: await getFootballClubMatches(payload.league, teamIds) };
 }
 
 /**
@@ -75,13 +87,17 @@ export async function loadSport(
       const [data, news] = await Promise.all([getF1Data(), getF1News()]);
       // The race on now or next shows each session's result as it comes in,
       // from OpenF1 (practice too, which Jolpica does not carry).
-      const { featured } = racesTabGroups(data.races);
-      const window = featured ? weekendWindow(featured, Date.now()) : null;
+      // A race just run leads for its day and the next, on the reader's
+      // calendar, as on the dashboard card (`justRunRace`).
+      const now = Date.now();
+      const justRun = justRunRace(data.races, now, await getRequestTimeZone());
+      const lead = justRun ?? racesTabGroups(data.races).featured;
+      const window = lead ? weekendWindow(lead, now) : null;
       const weekend =
-        featured && window
-          ? await getF1WeekendResults(data.season, featured.round, window.from, window.to)
+        lead && window
+          ? await getF1WeekendResults(data.season, lead.round, window.from, window.to)
           : undefined;
-      return { sport, data, news, weekend, sample: data === F1_DATA };
+      return { sport, data, news, weekend, justRunRound: justRun?.round, sample: data === F1_DATA };
     }
     case "lol": {
       const [data, news] = await Promise.all([getLolData(), getLolNews()]);
@@ -97,7 +113,9 @@ export async function loadSport(
     }
     case "nba": {
       const [data, news] = await Promise.all([getNbaData(), getEspnNews("nba")]);
-      return { sport, data, news, sample: data === NBA_DATA };
+      // The Cup's groups take their conference from the table, so after it.
+      const cup = data === NBA_DATA ? null : await getNbaCup(data.standings);
+      return { sport, data, news, cup, sample: data === NBA_DATA };
     }
     case "nfl": {
       const [data, news] = await Promise.all([getNflData(), getEspnNews("nfl")]);

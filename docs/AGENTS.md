@@ -12,6 +12,7 @@ changed — don't rewrite anything else.
 | Architecture, conventions, tech stack, env vars, dev commands | [`/CLAUDE.md`](../CLAUDE.md) → relevant section |
 | Public-facing project info (what it is, how to run it, links) | [`/README.md`](../README.md) |
 | Anything inside a feature module (routes, actions, services, schemas, tables) | [`docs/modules/<module>.md`](./modules/) |
+| The Wellness module (calorie calculator, `lib/wellness/`) | [`docs/modules/wellness.md`](./modules/wellness.md) |
 | Typography / font / type system | [`docs/TYPOGRAPHY.md`](./TYPOGRAPHY.md) |
 | Spacing / padding / margin scale, app-shell offsets | [`docs/SPACING.md`](./SPACING.md) |
 | Composition patterns for data-dense UIs (cards, KPI rails, outcome selectors, sticky rails) | [`.github/skills/data-density-ui/SKILL.md`](../.github/skills/data-density-ui/SKILL.md) |

@@ -1,4 +1,5 @@
 import type { PlanSummary, Projection, TodayState } from "@/types/finance";
+import { moneySign } from "@/lib/utils/format";
 
 import { nextPeriodStart, periodIndexForDate, periodStartFor } from "./period";
 
@@ -448,6 +449,48 @@ export function portfolioSeries(
     const own = p.investments ?? null;
     return managed === null && own === null ? null : (managed ?? 0) + (own ?? 0);
   });
+}
+
+// ---------- which series a chart draws ----------
+
+/**
+ * One series over the chart's whole window, or nothing: a series that holds
+ * money anywhere in the window is drawn from the window's first point to its
+ * last, with its zeros (and missing figures) drawn as $0; one that is zero
+ * everywhere is not drawn at all. Lines used to start at the point before the
+ * first money and stop at the $0 after the last, so a trading account opened
+ * in October began there and a paid-off debt vanished.
+ */
+export function wholeSeries(values: readonly (number | null | undefined)[]): number[] | null {
+  if (!values.some((v) => v != null && moneySign(v) !== 0)) return null;
+  return values.map((v) => v ?? 0);
+}
+
+/** The parts a finance chart can draw beside net worth. */
+export type ChartParts = {
+  portfolio: number[] | null;
+  trading: number[] | null;
+  debt: number[] | null;
+  owed: number[] | null;
+};
+
+/**
+ * The parts the plan chart and the dashboard card draw (see `wholeSeries`):
+ * null is a part not drawn, and so not in the legend or the tooltip either.
+ * `portfolioValues` is `portfolioSeries`; Trading only for an account with the
+ * module.
+ */
+export function chartParts(
+  points: readonly Pick<ChartPoint, "totalDebt" | "receivables" | "tradingValue">[],
+  portfolioValues?: readonly (number | null)[],
+  { trading = false }: { trading?: boolean } = {}
+): ChartParts {
+  return {
+    portfolio: portfolioValues ? wholeSeries(points.map((_, i) => portfolioValues[i])) : null,
+    trading: trading ? wholeSeries(points.map((p) => p.tradingValue)) : null,
+    debt: wholeSeries(points.map((p) => p.totalDebt)),
+    owed: wholeSeries(points.map((p) => p.receivables)),
+  };
 }
 
 // ---------- debt-free: one definition everywhere ----------

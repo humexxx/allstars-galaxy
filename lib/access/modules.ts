@@ -14,6 +14,7 @@ export const APP_MODULES = [
   { key: "road-paths", label: "Road Paths", area: "Productivity", url: "/portal/productivity/road-paths" },
   { key: "travel", label: "Travel Planner", area: "Entertainment", url: "/portal/entertainment/travel-planner" },
   { key: "sports", label: "Sports", area: "Entertainment", url: "/portal/entertainment/sports" },
+  { key: "wellness", label: "Calories", area: "Wellness", url: "/portal/wellness/calories" },
 ] as const;
 
 export type AppModule = (typeof APP_MODULES)[number]["key"];

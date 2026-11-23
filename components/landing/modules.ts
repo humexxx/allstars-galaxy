@@ -105,12 +105,13 @@ export const LANDING_MODULES: LandingModule[] = [
   },
   {
     area: "Wellness",
-    name: "Wellness",
-    title: "Wellness",
+    name: "Calories",
+    title: "Calories",
     description:
-      "Sleep, energy and focus — the inputs behind every decision worth making. (Coming soon)",
+      "Your daily calories for a goal — lose, keep or gain weight — from your age, height, weight and how active you are, with the protein, fat and carbs to match.",
     icon: HeartPulse,
-    status: "soon",
+    status: "live",
+    href: "/portal/wellness/calories",
   },
 ];
 

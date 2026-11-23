@@ -1,34 +1,33 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase-server";
-import { db } from "@/db";
-import { users } from "@/db/schema";
-import { eq } from "drizzle-orm";
-import type { User } from "@supabase/supabase-js";
+import { headers } from "next/headers";
+
+import { decodeSessionUser, SESSION_USER_HEADER, type SessionUser } from "@/lib/auth/session-header";
 import { cache } from "react";
+
+import { getUserAccessRow } from "./user-access-row";
 import { redirect } from "next/navigation";
 import type { UserRole } from "@/types/user";
 
-async function fetchCurrentUser(): Promise<User | null> {
+async function fetchCurrentUser(): Promise<SessionUser | null> {
+  // The proxy verified this request's session already and handed the user on.
+  const verified = decodeSessionUser((await headers()).get(SESSION_USER_HEADER));
+  if (verified) return verified;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   return user;
 }
 
 async function fetchUserRole(userId: string): Promise<UserRole | null> {
-  const [dbUser] = await db
-    .select({ role: users.role })
-    .from(users)
-    .where(eq(users.id, userId));
-  
-  return dbUser?.role || null;
+  return (await getUserAccessRow(userId))?.role || null;
 }
 
 export const getCurrentUserCached = cache(fetchCurrentUser);
 export const getUserRoleCached = cache(fetchUserRole);
 
 // Server-side auth utilities
-export async function getCurrentUser(): Promise<User | null> {
+export async function getCurrentUser(): Promise<SessionUser | null> {
   return fetchCurrentUser();
 }
 
@@ -36,7 +35,7 @@ export async function getUserRole(userId: string): Promise<UserRole | null> {
   return fetchUserRole(userId);
 }
 
-export async function requireAuth(): Promise<User> {
+export async function requireAuth(): Promise<SessionUser> {
   const user = await getCurrentUser();
   if (!user) {
     throw new Error("Unauthorized");
@@ -44,7 +43,7 @@ export async function requireAuth(): Promise<User> {
   return user;
 }
 
-export async function requireAuthCached(): Promise<User> {
+export async function requireAuthCached(): Promise<SessionUser> {
   const user = await getCurrentUserCached();
   if (!user) {
     throw new Error("Unauthorized");
@@ -52,7 +51,7 @@ export async function requireAuthCached(): Promise<User> {
   return user;
 }
 
-export async function requireAdmin(): Promise<User> {
+export async function requireAdmin(): Promise<SessionUser> {
   const user = await requireAuth();
   const role = await getUserRole(user.id);
   
@@ -63,7 +62,7 @@ export async function requireAdmin(): Promise<User> {
   return user;
 }
 
-export async function requireAdminCached(): Promise<User> {
+export async function requireAdminCached(): Promise<SessionUser> {
   const user = await requireAuthCached();
   const role = await getUserRoleCached(user.id);
 
@@ -82,7 +81,7 @@ function isAuthGateError(err: unknown): boolean {
   );
 }
 
-export async function requireAdminOrRedirect(fallback = "/portal"): Promise<User> {
+export async function requireAdminOrRedirect(fallback = "/portal"): Promise<SessionUser> {
   try {
     return await requireAdminCached();
   } catch (err) {
@@ -104,7 +103,7 @@ export async function requireAdminOrRedirect(fallback = "/portal"): Promise<User
  *
  * Admins pass because an admin can do anything a provider can.
  */
-export async function requireProvider(): Promise<User> {
+export async function requireProvider(): Promise<SessionUser> {
   const user = await requireAuth();
   const role = await getUserRole(user.id);
 

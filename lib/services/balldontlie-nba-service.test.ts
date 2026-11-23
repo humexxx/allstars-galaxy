@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NBA_DATA } from "@/lib/data/sports/nba";
-import type { BracketMatch, BracketRound, Match, MatchStatus } from "@/types/sports";
+import type { BracketMatch, BracketRound, Match, MatchStatus, NbaStanding } from "@/types/sports";
 
 import gamesOct18 from "./__fixtures__/balldontlie-nba-games-2026-10-18.json";
 import postseason2026 from "./__fixtures__/espn-nba-postseason-2026.json";
@@ -25,6 +25,9 @@ const {
   preseasonFrom,
   channelsFrom,
   withChannels,
+  cupFeedFrom,
+  cupFrom,
+  withCupLabels,
 } = __testing;
 
 const logo = (slug: string) =>
@@ -1019,9 +1022,10 @@ describe("getNbaData through the year", () => {
   });
 
   it("makes no extra request in the middle of the season", async () => {
-    vi.setSystemTime(new Date(2026, 11, 15, 12));
+    // January: past the NBA Cup, whose weeks are read November to December.
+    vi.setSystemTime(new Date(2027, 0, 15, 12));
     const calls = stubFeeds({
-      games: [bdlGame("2026-12-14", false, 2026)],
+      games: [bdlGame("2027-01-14", false, 2026)],
       header: () => json(postseason2026),
     });
     const data = await getNbaData();
@@ -1066,5 +1070,122 @@ describe("getNbaData through the year", () => {
     expect(data).not.toBe(NBA_DATA);
     expect(data.games).toHaveLength(1);
     expect(data.playoffs).toEqual([]);
+  });
+});
+
+describe("the NBA Cup", () => {
+  const side = (code: string, homeAway: "home" | "away", score?: number) => ({
+    abbreviation: code,
+    displayName: code,
+    homeAway,
+    ...(score === undefined ? {} : { score: String(score) }),
+  });
+  const cupGame = (
+    id: string,
+    note: string,
+    date: string,
+    home: string,
+    away: string,
+    score?: [number, number]
+  ) => ({
+    id,
+    date,
+    note,
+    fullStatus: { type: { state: score ? "post" : "pre", name: score ? "STATUS_FINAL" : "STATUS_SCHEDULED" } },
+    competitors: [side(home, "home", score?.[0]), side(away, "away", score?.[1])],
+  });
+  const GROUP = "NBA Cup - Group Play";
+  // East: BOS, NY, WSH meet among themselves; West: GS, LAL meet. NY is ESPN's code for the Knicks.
+  const events = [
+    cupGame("1", GROUP, "2026-11-07T00:00Z", "BOS", "NY", [110, 100]),
+    cupGame("2", GROUP, "2026-11-14T00:00Z", "NY", "WSH", [120, 90]),
+    cupGame("3", GROUP, "2026-11-21T00:00Z", "WSH", "BOS", [101, 99]),
+    cupGame("4", GROUP, "2026-11-28T00:00Z", "GS", "LAL"),
+    cupGame("5", "NBA Cup - Quarterfinals", "2026-12-04T05:00:00Z", "TBD", "TBD"),
+    cupGame("6", "NBA Cup Championship", "2026-12-11T05:00:00Z", "TBD", "TBD"),
+    // Not a Cup game.
+    cupGame("7", "", "2026-11-08T00:00Z", "BOS", "LAL", [100, 90]),
+  ];
+  const standing = (teamId: string, conference: "east" | "west"): NbaStanding => ({
+    position: 1,
+    teamId,
+    conference,
+    played: 0,
+    won: 0,
+    drawn: 0,
+    lost: 0,
+    goalsFor: 0,
+    goalsAgainst: 0,
+    points: 0,
+    winPct: 0,
+    gamesBehind: 0,
+    streak: "",
+    last10: "",
+  });
+  const table = [
+    standing("BOS", "east"),
+    standing("NYK", "east"),
+    standing("WAS", "east"),
+    standing("GSW", "west"),
+    standing("LAL", "west"),
+  ];
+
+  it("reads the Cup's games off their note, in balldontlie's codes, and nothing else", () => {
+    const feed = cupFeedFrom(events as never);
+    expect(feed.games.map((g) => g.id)).toEqual(["1", "2", "3", "4", "5", "6"]);
+    expect(feed.games[1]).toMatchObject({ stage: "group", homeTeamId: "NYK", awayTeamId: "WAS", played: true });
+    expect(feed.games[4]).toMatchObject({ stage: "quarter-final", homeTeamId: null, awayTeamId: null });
+    expect(feed.games[5].stage).toBe("final");
+  });
+
+  it("throws when ESPN lists no Cup game, so a bad answer is never cached", () => {
+    expect(() => cupFeedFrom([events[6]] as never)).toThrow();
+  });
+
+  it("finds the groups by who meets whom, ranks them and marks who goes through", () => {
+    const cup = cupFrom(cupFeedFrom(events as never), table)!;
+    expect(cup.groups.map((g) => g.conference)).toEqual(["east", "west"]);
+    const east = cup.groups[0];
+    // Three level at 1–1: point difference decides (BOS +8, NYK +20, WAS −28).
+    expect(east.rows.map((r) => [r.teamId, r.won, r.lost, r.pointDiff])).toEqual([
+      ["NYK", 1, 1, 20],
+      ["BOS", 1, 1, 8],
+      ["WAS", 1, 1, -28],
+    ]);
+    expect(east.rows[0].advancing).toBe("winner");
+    expect(east.rows[1].advancing).toBe("wildcard");
+    expect(cup.groupNightsLeft).toBe(1);
+  });
+
+  it("dates the knockout by New York's calendar and leaves it undrawn until ESPN names its teams", () => {
+    const cup = cupFrom(cupFeedFrom(events as never), table)!;
+    expect(cup.knockoutDates).toEqual([
+      { label: "Quarterfinals", from: "2026-12-04", to: "2026-12-04" },
+      { label: "Championship", from: "2026-12-11", to: "2026-12-11" },
+    ]);
+    expect(cup.knockout.map((r) => r.matches.length)).toEqual([4, 2, 1]);
+    expect(cup.knockout.flatMap((r) => r.matches).every((m) => !m.homeTeamId && !m.awayTeamId)).toBe(true);
+  });
+
+  it("has no Cup without a table to name each group's conference", () => {
+    expect(cupFrom(cupFeedFrom(events as never), [])).toBeNull();
+  });
+
+  it("labels the listed games that are Cup games", () => {
+    const feed = cupFeedFrom(events as never);
+    const game = (id: string, home: string, away: string, kickoff: string): Match => ({
+      id,
+      homeTeamId: home,
+      awayTeamId: away,
+      homeScore: null,
+      awayScore: null,
+      kickoff,
+      status: "scheduled",
+    });
+    const labelled = withCupLabels(
+      [game("a", "GSW", "LAL", "2026-11-28T00:30:00Z"), game("b", "BOS", "LAL", "2026-11-08T00:00:00Z")],
+      feed
+    );
+    expect(labelled.map((g) => g.stageLabel)).toEqual(["NBA Cup · Group play", undefined]);
   });
 });

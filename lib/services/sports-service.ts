@@ -21,7 +21,7 @@ import { getLolNews } from "@/lib/services/lolesports-news-service";
 import { getLolData } from "@/lib/services/lolesports-service";
 import { getPadelData, getPadelDraw } from "@/lib/services/padel-api-service";
 import { getTennisData, getTennisDraw } from "@/lib/services/espn-tennis-service";
-import { leadRace, startsIn, weekendNow } from "@/lib/sports/f1-weekend";
+import { justRunRace, leadRace, startsIn, weekendNow } from "@/lib/sports/f1-weekend";
 import { tournamentPath } from "@/lib/sports/paths";
 import { splitSeasonLabel } from "@/lib/sports/season";
 import { calendarDayInTimeZone, formatDay, formatDayRange } from "@/lib/utils/date";
@@ -1098,12 +1098,7 @@ function surfBracket(name: string, draw: SurfDraw): DashboardBracket | undefined
  * Tuesday — and then the next one takes over; one on track comes first.
  */
 function f1Highlight(data: F1Data, now: number, timeZone = "UTC"): F1DashboardHighlight | null {
-  const dayOf = (instant: number): number => calendarDayInTimeZone(new Date(instant), timeZone).getTime();
-  const yesterday = dayOf(now) - 86_400_000;
-  const justRun = data.races.findLast(
-    (r) => r.status === "completed" && dayOf(Date.parse(r.startsAt ?? `${r.date}T12:00:00Z`)) >= yesterday
-  );
-  const race = data.races.find((r) => r.status === "live") ?? justRun ?? leadRace(data.races);
+  const race = justRunRace(data.races, now, timeZone) ?? leadRace(data.races);
   if (!race) return null;
   const { live, next } = race.status === "completed" ? {} : weekendNow(race, now);
   return {

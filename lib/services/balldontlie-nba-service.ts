@@ -3,6 +3,7 @@ import "server-only";
 import { NBA_DATA } from "@/lib/data/sports/nba";
 import { headerBroadcasts } from "@/lib/sports/espn-broadcasts";
 import { espnImage } from "@/lib/sports/espn-images";
+import { calendarDayInTimeZone } from "@/lib/utils/date";
 import type {
   BracketMatch,
   BracketRound,
@@ -11,13 +12,19 @@ import type {
   MatchStatus,
   NbaChampion,
   NbaConference,
+  NbaCup,
+  NbaCupGroup,
+  NbaCupGroupRow,
   NbaData,
   NbaStanding,
   Team,
 } from "@/types/sports";
 import {
   fetchHeader,
+  headerNote,
+  isoDay,
   shiftDay,
+  weekChunks,
   type HeaderCompetitor,
   type HeaderEvent,
   type HeaderLeague,
@@ -1043,6 +1050,328 @@ const getNbaFeed = cachedFeed(
   { revalidate: REVALIDATE_SECONDS, tags: ["sports:nba"] }
 );
 
+// ---------- NBA Cup ----------
+
+type CupStage = "group" | "quarter-final" | "semi-final" | "final";
+
+/** One NBA Cup game as ESPN's scores bar lists it; a knockout slot is TBD until drawn. */
+type CupGame = {
+  id: string;
+  stage: CupStage;
+  startsAt: string;
+  homeTeamId: string | null;
+  awayTeamId: string | null;
+  homeScore: number | null;
+  awayScore: number | null;
+  played: boolean;
+};
+
+type NbaCupFeed = { games: CupGame[]; teams: Team[] };
+
+/** The note on each Cup game: "NBA Cup - Group Play", "NBA Cup - Quarterfinals", "NBA Cup Championship". */
+function cupStage(note: string | undefined): CupStage | null {
+  if (!note || !/^NBA Cup\b/i.test(note)) return null;
+  if (/group/i.test(note)) return "group";
+  if (/quarter/i.test(note)) return "quarter-final";
+  if (/semi/i.test(note)) return "semi-final";
+  if (/championship|final/i.test(note)) return "final";
+  return null;
+}
+
+/** What a Cup game says in the match list, over the night's other games. */
+const CUP_STAGE_LABEL: Record<CupStage, string> = {
+  group: "NBA Cup · Group play",
+  "quarter-final": "NBA Cup · Quarterfinal",
+  "semi-final": "NBA Cup · Semifinal",
+  final: "NBA Cup · Final",
+};
+
+const CUP_ROUNDS: ReadonlyArray<{ id: BracketRoundId; stage: CupStage; label: string; size: number }> = [
+  { id: "quarter-final", stage: "quarter-final", label: "Quarterfinals", size: 4 },
+  { id: "semi-final", stage: "semi-final", label: "Semifinals", size: 2 },
+  { id: "final", stage: "final", label: "Championship", size: 1 },
+];
+
+/**
+ * The Cup's span: the group nights start in November and the final is played
+ * by mid-December. The tab stays to the end of the year with its champion.
+ */
+function cupWindow(season: number): { from: string; to: string; showUntil: string } {
+  return { from: `${season}-11-01`, to: `${season}-12-21`, showUntil: `${season}-12-31` };
+}
+
+function inCupWindow(today: Date, season: number): boolean {
+  const day = iso(today);
+  const { from, showUntil } = cupWindow(season);
+  return day >= from && day <= showUntil;
+}
+
+/**
+ * Every Cup game of the season, a week a request: a request answers ~200 games
+ * at most and November alone has more. All weeks or none — a group read with a
+ * week missing would be cached with the wrong table.
+ */
+async function fetchCup(season: number): Promise<EspnHeaderEvent[]> {
+  const { from, to } = cupWindow(season);
+  const weeks = await Promise.all(weekChunks(from, to).map((w) => fetchNbaHeader(w.from, w.to)));
+  return weeks.flat();
+}
+
+function cupFeedFrom(events: EspnHeaderEvent[]): NbaCupFeed {
+  const games: CupGame[] = [];
+  const teams = new Map<string, Team>();
+  for (const event of events) {
+    const stage = cupStage(headerNote(event));
+    if (!stage || !event.date) continue;
+    const home = event.competitors?.find((c) => c.homeAway === "home");
+    const away = event.competitors?.find((c) => c.homeAway === "away");
+    for (const c of [home, away]) {
+      const code = playoffTeamId(c);
+      if (code && !teams.has(code)) teams.set(code, headerTeam(c, code));
+    }
+    const status = event.fullStatus?.type;
+    if (status?.name === "STATUS_CANCELED") continue;
+    games.push({
+      id: event.id ?? `${stage}-${event.date}-${games.length}`,
+      stage,
+      startsAt: event.date,
+      homeTeamId: playoffTeamId(home),
+      awayTeamId: playoffTeamId(away),
+      homeScore: headerScore(home),
+      awayScore: headerScore(away),
+      played: status?.state === "post",
+    });
+  }
+  if (games.length === 0) throw new Error("espn scoreboard: no NBA Cup games");
+  games.sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  return { games, teams: [...teams.values()] };
+}
+
+/** The groups as sets of teams: whoever meets on a group night shares a group. */
+function cupGroupsOf(games: CupGame[]): string[][] {
+  const parent = new Map<string, string>();
+  const find = (id: string): string => {
+    const up = parent.get(id) ?? id;
+    if (up === id) return id;
+    const root = find(up);
+    parent.set(id, root);
+    return root;
+  };
+  for (const g of games) {
+    if (g.stage !== "group" || !g.homeTeamId || !g.awayTeamId) continue;
+    for (const id of [g.homeTeamId, g.awayTeamId]) if (!parent.has(id)) parent.set(id, id);
+    parent.set(find(g.homeTeamId), find(g.awayTeamId));
+  }
+  const groups = new Map<string, string[]>();
+  for (const id of parent.keys()) {
+    const root = find(id);
+    groups.set(root, [...(groups.get(root) ?? []), id]);
+  }
+  return [...groups.values()].map((ids) => ids.sort());
+}
+
+/** Share of games won, nothing played reading as none won. */
+function winShare(r: { won: number; lost: number }): number {
+  return r.won + r.lost === 0 ? 0 : r.won / (r.won + r.lost);
+}
+
+/**
+ * A group's table, best first: by record (the share won, as teams level on
+ * nights can be a game apart mid-group), then — for two level — the game
+ * between them, then point difference, then points scored, as the NBA breaks
+ * a tie in its groups.
+ */
+function cupGroupRows(teamIds: string[], games: CupGame[]): NbaCupGroupRow[] {
+  const line = new Map(teamIds.map((id) => [id, { teamId: id, won: 0, lost: 0, pointDiff: 0, scored: 0 }]));
+  const beat = new Set<string>();
+  for (const g of games) {
+    if (g.stage !== "group" || !g.played || !g.homeTeamId || !g.awayTeamId) continue;
+    const home = line.get(g.homeTeamId);
+    const away = line.get(g.awayTeamId);
+    if (!home || !away || g.homeScore === null || g.awayScore === null) continue;
+    const homeWon = g.homeScore > g.awayScore;
+    (homeWon ? home : away).won++;
+    (homeWon ? away : home).lost++;
+    home.pointDiff += g.homeScore - g.awayScore;
+    away.pointDiff += g.awayScore - g.homeScore;
+    home.scored += g.homeScore;
+    away.scored += g.awayScore;
+    beat.add(homeWon ? `${g.homeTeamId}>${g.awayTeamId}` : `${g.awayTeamId}>${g.homeTeamId}`);
+  }
+  const rows = [...line.values()];
+  const level = (row: { won: number; lost: number }): number =>
+    rows.filter((r) => winShare(r) === winShare(row)).length;
+  rows.sort((a, b) => {
+    if (winShare(a) !== winShare(b)) return winShare(b) - winShare(a);
+    if (level(a) === 2) {
+      if (beat.has(`${a.teamId}>${b.teamId}`)) return -1;
+      if (beat.has(`${b.teamId}>${a.teamId}`)) return 1;
+    }
+    return b.pointDiff - a.pointDiff || b.scored - a.scored || a.teamId.localeCompare(b.teamId);
+  });
+  return rows.map(({ teamId, won, lost, pointDiff }) => ({ teamId, won, lost, pointDiff }));
+}
+
+/** A knockout tie's slot id, kept while its teams fill in. */
+function cupTieId(round: number, k: number): string {
+  const { id, size } = CUP_ROUNDS[round];
+  if (size === 1) return `nba-cup-${id}`;
+  const half = size / 2;
+  return `nba-cup-${id}-${k < half ? "east" : "west"}-${k % half}`;
+}
+
+function cupTie(id: string, game: CupGame | undefined): BracketMatch {
+  if (!game) return { id, homeTeamId: null, awayTeamId: null };
+  const decided = game.played && game.homeScore !== null && game.awayScore !== null;
+  const winner = decided
+    ? (game.homeScore! > game.awayScore! ? game.homeTeamId : game.awayTeamId)
+    : null;
+  return {
+    id,
+    homeTeamId: game.homeTeamId,
+    awayTeamId: game.awayTeamId,
+    homeScore: game.played ? game.homeScore : null,
+    awayScore: game.played ? game.awayScore : null,
+    winnerTeamId: winner,
+    date: game.startsAt,
+    bestOf: 1,
+  };
+}
+
+/**
+ * The knockout, East half then West, each tie in the slot of the conference
+ * its teams play in (`conferenceOf`), and the semifinals placed by the
+ * quarterfinals their teams came out of. Undrawn ties stay TBD.
+ */
+function cupKnockout(games: CupGame[], conferenceOf: (id: string) => NbaConference | undefined): BracketRound[] {
+  const rounds: BracketRound[] = [];
+  let previous: BracketMatch[] = [];
+  CUP_ROUNDS.forEach((round, r) => {
+    const own = games.filter((g) => g.stage === round.stage);
+    const slots: Array<CupGame | undefined> = Array.from({ length: round.size }, () => undefined);
+    const drawn = own.filter((g) => g.homeTeamId || g.awayTeamId);
+    for (const game of drawn) {
+      const teams = [game.homeTeamId, game.awayTeamId].filter((t): t is string => t !== null);
+      let k: number | undefined;
+      if (round.size === 1) k = 0;
+      else if (r > 0) {
+        k = slots.findIndex(
+          (slot, i) =>
+            !slot &&
+            [previous[2 * i], previous[2 * i + 1]].some((p) => teams.some((t) => t === p?.homeTeamId || t === p?.awayTeamId))
+        );
+        if (k < 0) k = undefined;
+      }
+      if (k === undefined) {
+        const conference = teams.map(conferenceOf).find(Boolean);
+        const start = conference === "west" ? round.size / 2 : 0;
+        const found = Array.from({ length: round.size / 2 }, (_, i) => start + i).find((i) => !slots[i]);
+        k = found;
+      }
+      if (k !== undefined) slots[k] = game;
+    }
+    const matches = slots.map((game, k) => cupTie(cupTieId(r, k), game));
+    rounds.push({ id: round.id, label: round.label, matches });
+    previous = matches;
+  });
+  return rounds;
+}
+
+/**
+ * The Cup as the view shows it: the groups (each with its conference, taken
+ * from the table, and who goes through as things stand) and the knockout.
+ * Null when there are no groups to show.
+ */
+function cupFrom(feed: NbaCupFeed, standings: NbaStanding[]): NbaCup | null {
+  const conferences = new Map(standings.map((s) => [s.teamId, s.conference]));
+  const conferenceOf = (id: string): NbaConference | undefined => conferences.get(id);
+  const groups: NbaCupGroup[] = [];
+  for (const teamIds of cupGroupsOf(feed.games)) {
+    const conference = teamIds.map(conferenceOf).find(Boolean);
+    if (!conference) continue;
+    groups.push({ id: `${conference}-${teamIds[0]}`, conference, rows: cupGroupRows(teamIds, feed.games) });
+  }
+  if (groups.length === 0) return null;
+
+  for (const conference of ["east", "west"] as const) {
+    const own = groups.filter((g) => g.conference === conference);
+    for (const g of own) if (g.rows[0]) g.rows[0].advancing = "winner";
+    const runnersUp = own
+      .map((g) => g.rows[1])
+      .filter((r): r is NbaCupGroupRow => r !== undefined)
+      .sort((a, b) => winShare(b) - winShare(a) || b.pointDiff - a.pointDiff);
+    if (runnersUp[0]) runnersUp[0].advancing = "wildcard";
+  }
+  // East first, then by their first team alphabetically: an order that holds from one night to the next.
+  groups.sort(
+    (a, b) =>
+      (a.conference === b.conference ? 0 : a.conference === "east" ? -1 : 1) ||
+      a.id.localeCompare(b.id)
+  );
+
+  // An undrawn tie is listed at midnight Eastern, its time still to come: its
+  // day is the one in New York, not the reader's evening before.
+  const knockoutDates = CUP_ROUNDS.flatMap((round) => {
+    const days = feed.games
+      .filter((g) => g.stage === round.stage)
+      .map((g) => isoDay(calendarDayInTimeZone(new Date(g.startsAt), "America/New_York")))
+      .sort();
+    return days.length > 0 ? [{ label: round.label, from: days[0], to: days[days.length - 1] }] : [];
+  });
+  const groupNights = new Set(
+    // By the US night, as the knockout dates are: a 7:30pm ET tip is the next UTC day.
+    feed.games
+      .filter((g) => g.stage === "group" && !g.played)
+      .map((g) => isoDay(calendarDayInTimeZone(new Date(g.startsAt), "America/New_York")))
+  );
+  return {
+    groups,
+    knockout: cupKnockout(feed.games, conferenceOf),
+    knockoutDates,
+    groupNightsLeft: groupNights.size,
+  };
+}
+
+/** Each listed game that is a Cup game, labelled so: the same sides within a day and a half. */
+function withCupLabels(games: Match[], cup: NbaCupFeed | null): Match[] {
+  if (!cup) return games;
+  return games.map((game) => {
+    if (game.stageLabel) return game;
+    const at = Date.parse(game.kickoff);
+    const hit = cup.games.find(
+      (c) =>
+        c.homeTeamId === game.homeTeamId &&
+        c.awayTeamId === game.awayTeamId &&
+        Math.abs(Date.parse(c.startsAt) - at) <= CHANNEL_MATCH_MS
+    );
+    return hit ? { ...game, stageLabel: CUP_STAGE_LABEL[hit.stage] } : game;
+  });
+}
+
+/**
+ * The Cup's games, keyed by season, a quarter of an hour: eight weeks of the
+ * scores bar is eight requests, and the groups change on a Cup night only.
+ */
+const getNbaCupFeed = cachedFeed(
+  "ESPN NBA Cup",
+  async (season: number): Promise<NbaCupFeed | null> => cupFeedFrom(await fetchCup(season)),
+  (): NbaCupFeed | null => null,
+  ["nba-cup"],
+  { revalidate: 900, tags: ["sports:nba"] }
+);
+
+/**
+ * The NBA Cup of the season shown, from November to the end of December;
+ * null the rest of the year or without ESPN. The table names each group's
+ * conference, so it takes the standings `getNbaData` read.
+ */
+export async function getNbaCup(standings: NbaStanding[], today: Date = new Date()): Promise<NbaCup | null> {
+  const season = currentSeason(today);
+  if (!inCupWindow(today, season)) return null;
+  const feed = await getNbaCupFeed(season);
+  return feed ? cupFrom(feed, standings) : null;
+}
+
 /**
  * Live NBA games, falling back to the mock fixture when there is no last good
  * answer to serve.
@@ -1064,14 +1393,15 @@ export async function getNbaData(): Promise<NbaData> {
   const soon = feed.games.some(
     (g) => g.status !== "ft" && Date.parse(g.kickoff) - today.getTime() < CHANNEL_DAYS.ahead * DAY_MS
   );
-  const [table, bracket, preseason, channels] = await Promise.all([
+  const [table, bracket, preseason, channels, cup] = await Promise.all([
     getNbaStandings(feed.season),
     feed.playoffYear === null ? Promise.resolve(NO_PLAYOFFS) : getNbaPlayoffs(feed.playoffYear),
     feed.tipOff ? getNbaPreseason(feed.season) : Promise.resolve(NO_PRESEASON),
     soon ? getNbaChannels(from) : Promise.resolve([]),
+    inCupWindow(today, feed.season) ? getNbaCupFeed(feed.season) : Promise.resolve(null),
   ]);
   const data = nbaDataFrom(feed, table, bracket, preseason);
-  return { ...data, games: withChannels(data.games, channels) };
+  return { ...data, games: withCupLabels(withChannels(data.games, channels), cup) };
 }
 
 /** Pure helpers, exported for their tests — nothing here touches the network. */
@@ -1092,4 +1422,7 @@ export const __testing = {
   preseasonFrom,
   channelsFrom,
   withChannels,
+  cupFeedFrom,
+  cupFrom,
+  withCupLabels,
 };

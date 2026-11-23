@@ -3,11 +3,13 @@ import "server-only";
 import { getFootballLeague } from "@/lib/data/sports/football";
 import { WORLD_CUP_DATA } from "@/lib/data/sports/world-cup";
 import { orderMatchesForDisplay } from "@/lib/sports/match-order";
+import { competitionStage } from "@/lib/sports/football-clubs";
 import type {
   BracketMatch,
   BracketRound,
   BracketRoundId,
   EspnFootballLeagueId,
+  FootballClubMatches,
   FootballGroupStandings,
   FootballLeagueData,
   FootballLeagueId,
@@ -140,6 +142,8 @@ type FdMatch = {
   score: FdScore;
   homeTeam: FdTeam;
   awayTeam: FdTeam;
+  /** On a club's own list (`/teams/{id}/matches`), which of its competitions this is: "PD", "CL". */
+  competition?: { code?: string };
 };
 
 const LEAGUE_STAGES = new Set([
@@ -254,6 +258,10 @@ export const ZONE_BAND_DEFAULTS: Record<FootballLeagueId, (pos: number, total: n
     return null;
   },
   "costa-rica": (pos) => (pos <= 4 ? "champions" : null),
+  // A knockout from the first round: no table.
+  "concacaf-champions-cup": () => null,
+  // Five clubs a group, the top two into the quarter-finals.
+  "concacaf-central-american-cup": (pos) => (pos <= 2 ? "champions" : null),
   "uefa-champions-league": (pos) => {
     if (pos <= 8) return "champions";
     if (pos <= 24) return "playoff";
@@ -881,8 +889,67 @@ async function fetchLeague(
     matches,
     standings,
     knockout,
+    providerTeamIds: providerIdsOf([
+      ...tableBlock.table.map((row) => row.team),
+      ...matchesRes.matches.flatMap((m) => [m.homeTeam, m.awayTeam]),
+    ]),
   };
 }
+
+/** football-data's number for each club `teams` name, by the id it has here. */
+function providerIdsOf(teams: Array<FdTeam | null | undefined>): Record<string, string> {
+  const ids: Record<string, string> = {};
+  for (const team of teams) {
+    const mapped = teamFromFd(team);
+    if (mapped && team?.id != null) ids[mapped.id] = String(team.id);
+  }
+  return ids;
+}
+
+/**
+ * A club's games in every competition this app reads from football-data (its
+ * league and the Champions League), one request for all of them: the days
+ * the leagues list, each game's stage led by its competition ("UCL · Matchday
+ * 5"). A competition the app does not cover is left out.
+ */
+async function fetchClubMatches(providerId: string): Promise<FootballClubMatches> {
+  const window = windowDates();
+  const res = await fetchFd<FdMatchesResponse>(
+    `/teams/${encodeURIComponent(providerId)}/matches?dateFrom=${window.from}&dateTo=${window.to}`
+  );
+  const teamsMap = new Map<string, Team>();
+  const matches: Match[] = [];
+  for (const competition of COMPETITIONS) {
+    const own = res.matches.filter((m) => m.competition?.code === competition.code);
+    if (own.length === 0) continue;
+    const mapped = await withLateScores(competition.internalId, mapMatches(own, teamsMap), teamsMap);
+    matches.push(...mapped.map((m) => ({ ...m, stageLabel: competitionStage(competition.shortName, m.stageLabel) })));
+  }
+  const club = res.matches.flatMap((m) => [m.homeTeam, m.awayTeam]).find((t) => String(t.id) === providerId);
+  const teamId = teamFromFd(club)?.id;
+  // No games in the window is an answer, kept like one: thrown, it would be
+  // asked again on every render and spend the shared budget each time.
+  if (!teamId) return { teamIds: [], teams: [], matches: [] };
+  return {
+    teamIds: [teamId],
+    teams: Array.from(teamsMap.values()),
+    matches: orderMatchesForDisplay(matches, (m) => m.kickoff, (m) => m.status, MATCH_CAPS),
+  };
+}
+
+/**
+ * One club's games across its competitions (`fetchClubMatches`), cached on
+ * its own for as long as a league is: a tap on a club spends one of
+ * football-data's ten requests a minute, and only the first in five minutes.
+ * Null when football-data does not answer: the view keeps the league's games.
+ */
+export const getFootballDataClubMatches = cachedFeed<[string], FootballClubMatches | null>(
+  "football-data club matches",
+  fetchClubMatches,
+  () => null,
+  ["football-data:club-matches"],
+  { revalidate: REVALIDATE_SECONDS, tags: ["sports:football"] },
+);
 
 function competitionFor(id: FootballDataLeagueId): CompetitionConfig {
   const competition = COMPETITIONS.find((c) => c.internalId === id);
@@ -912,6 +979,8 @@ export const getFootballLeagueData = cachedFeed(
 
 /** The mappers and the request budget, exported for their tests. */
 export const __testing = {
+  fetchClubMatches,
+  providerIdsOf,
   goalsOf,
   mapMatchStatus,
   mapMatches,

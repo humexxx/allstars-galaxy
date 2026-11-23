@@ -13,7 +13,7 @@ import {
   ArrowLeftRight,
   CandlestickChart,
   ChartSpline,
-  HeartPulse,
+  Flame,
   Kanban,
   LayoutDashboard,
   PieChart,
@@ -75,8 +75,7 @@ export const PORTAL_NAV: NavSection[] = [
   },
   {
     label: "Wellness",
-    disabled: true,
-    items: [{ title: "Coming soon", url: "#", disabled: true, icon: HeartPulse }],
+    items: [{ title: "Calories", url: "/portal/wellness/calories", icon: Flame }],
   },
   {
     label: "Admin",

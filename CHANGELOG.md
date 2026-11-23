@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.22.0](https://github.com/humexxx/allstars-galaxy/compare/v0.21.2...v0.22.0) (2026-11-23)
+
+
+### Features
+
+* **ui:** give the app a night-observatory identity ([8da3677](https://github.com/humexxx/allstars-galaxy/commit/8da3677fd0a4dad67f1f2cbde5f1337012f98767))
+* **ui:** give the app a night-observatory identity ([4831bc1](https://github.com/humexxx/allstars-galaxy/commit/4831bc115a67a09cc03dc873afb7afdabcad4b30))
+* **ui:** give the app a night-observatory identity ([729fbc7](https://github.com/humexxx/allstars-galaxy/commit/729fbc7c56e8d5104100bfcc3ea33d7cb65aad52))
+
+
+### Bug Fixes
+
+* **ui:** legible checks on night cyan, chat above dev tools, sky behind sticky bars ([79ec65f](https://github.com/humexxx/allstars-galaxy/commit/79ec65fcd09cc23357971735f14d96076df40954))
+
 ## [0.21.2](https://github.com/humexxx/allstars-galaxy/compare/v0.21.1...v0.21.2) (2026-11-20)
 
 

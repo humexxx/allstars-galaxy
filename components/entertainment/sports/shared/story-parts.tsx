@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ExternalLink, Play } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
-import { Mono } from "@/components/ui/typography";
+import { Mono, Text } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 import type { NewsStory } from "@/types/sports";
 
@@ -80,11 +80,27 @@ export function StoryImage({
   );
 }
 
-/** When, and — for a story opened at the source — that it leaves the page. */
-export function StoryFoot({ story, day }: { story: NewsStory; day: string }): React.ReactElement {
+/**
+ * When, and — for a story opened at the source — that it leaves the page;
+ * with `source`, the site it leaves for, named ahead of the day.
+ */
+export function StoryFoot({
+  story,
+  day,
+  source = false,
+}: {
+  story: NewsStory;
+  day: string;
+  source?: boolean;
+}): React.ReactElement {
   return (
-    <span className="mt-auto flex items-center gap-1 text-muted-foreground">
-      <Mono className="text-2xs">{day}</Mono>
+    <span className="mt-auto flex min-w-0 items-center gap-1 text-muted-foreground">
+      {source && story.external && (
+        <Text variant="small" as="span" className="truncate">
+          {sourceName(story.href)} ·
+        </Text>
+      )}
+      <Mono className="shrink-0 text-2xs">{day}</Mono>
       {story.external && (
         <>
           <ExternalLink aria-hidden className="size-3" />
@@ -96,7 +112,7 @@ export function StoryFoot({ story, day }: { story: NewsStory; day: string }): Re
 }
 
 /** "espn.com", "lolesports.com": the site a story leaves for. */
-function sourceName(href: string): string {
+export function sourceName(href: string): string {
   try {
     return new URL(href).hostname.replace(/^www\./, "");
   } catch {

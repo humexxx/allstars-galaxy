@@ -1,5 +1,4 @@
 import type { DashboardParts } from "@/lib/finance/dashboard";
-import { moneySign } from "@/lib/utils/format";
 
 export type DashboardSeries = {
   key: keyof DashboardParts;
@@ -12,8 +11,8 @@ export type DashboardSeries = {
 /**
  * The dashboard chart's series, in the order the card's figure rail lists
  * them. Portfolio takes the first slot, the brand cyan: the owner read the
- * orange it had as a loss. Trading shows for an account with the module; Owed
- * to you and Debt only appear in the rail when they are not zero. The rail
+ * orange it had as a loss. A part appears in the rail only when the chart
+ * draws it (`chartParts`): money somewhere in the chart's range. The rail
  * draws its swatches from here, which makes it the chart's legend. Outside the chart's "use client" module because the card is a
  * server component and would only get a client reference to it.
  *
@@ -37,27 +36,4 @@ export function dashboardSeries(key: keyof DashboardParts): DashboardSeries {
   const series = DASHBOARD_SERIES.find((s) => s.key === key);
   if (!series) throw new Error(`No dashboard series "${key}"`);
   return series;
-}
-
-/** Parts that show only when they are not zero somewhere in the range. */
-const ONLY_WHEN_PRESENT: ReadonlySet<keyof DashboardParts> = new Set(["receivables", "debt"]);
-
-/**
- * Which series the dashboard's rail and tooltip list for this range: net
- * worth and Portfolio always; Trading when the account has the module; Owed
- * to you and Debt when any point has some — then at every point, $0 included,
- * so a debt being paid off reads as reaching zero instead of vanishing from
- * the tooltip. Never Cash, as on the plan page's chart.
- */
-export function visibleSeriesKeys(
-  points: readonly DashboardParts[],
-  { trading = false }: { trading?: boolean } = {}
-): Set<keyof DashboardParts> {
-  return new Set(
-    DASHBOARD_SERIES.filter((s) => {
-      if (s.key === "savings") return false;
-      if (s.key === "trading") return trading;
-      return !ONLY_WHEN_PRESENT.has(s.key) || points.some((p) => moneySign(p[s.key]) > 0);
-    }).map((s) => s.key)
-  );
 }

@@ -3,10 +3,12 @@ import type {
   F1Data,
   F1NewsArticle,
   F1WeekendResults,
+  FootballClubMatches,
   FootballLeagueData,
   FootballLeagueId,
   LolData,
   MlbData,
+  NbaCup,
   NbaData,
   NewsStory,
   NflData,
@@ -32,18 +34,28 @@ export type SportPayload = (
       options: ReadonlyArray<{ id: FootballLeagueId; name: string }>;
       /** The league's news, ESPN's. */
       news?: NewsStory[];
+      /** The clubs last picked in the league's match list, in all their competitions. */
+      clubs?: FootballClubMatches | null;
     }
   | {
       sport: "f1";
       data: F1Data;
       news: F1NewsArticle[];
-      /** The sessions run so far of the race on now or next. */
+      /** The sessions run so far of the race the Overview leads with. */
       weekend?: F1WeekendResults;
+      /** The round just run, while it still leads the Overview (`justRunRace`). */
+      justRunRound?: number;
     }
   | { sport: "lol"; data: LolData; news?: NewsStory[] }
   | { sport: "padel"; data: PadelData; news?: NewsStory[] }
   | { sport: "tennis"; data: TennisData; news?: NewsStory[] }
-  | { sport: "nba"; data: NbaData; news?: NewsStory[] }
+  | {
+      sport: "nba";
+      data: NbaData;
+      news?: NewsStory[];
+      /** The NBA Cup, November to December; null the rest of the year. */
+      cup?: NbaCup | null;
+    }
   | { sport: "nfl"; data: NflData; news?: NewsStory[] }
   | { sport: "mlb"; data: MlbData; news?: NewsStory[] }
   | { sport: "nhl"; data: NhlData; news?: NewsStory[] }

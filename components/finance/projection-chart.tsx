@@ -14,7 +14,9 @@ import {
 import {
   buildCompareRows,
   calendarTicks,
+  chartParts,
   milestoneCrossings,
+  wholeSeries,
   type PlanTimeline,
 } from "@/lib/finance/chart-series";
 import { DEFAULT_FINANCE_MILESTONES } from "@/lib/finance/milestones";
@@ -262,26 +264,26 @@ type ChartRow = {
 // Custom tooltip. The past (solid) and future (dashed) series OVERLAP at the
 // boundary index (today) to keep the line continuous, so that point would show
 // "Net worth" twice with the default content. We instead read the underlying
-// data row ONCE and render: Net worth always, Debt only when > 0, Investments
-// only when > 0. The bucket of investments rides along unplotted.
+// data row ONCE and render: Net worth always, and every part the chart draws
+// (see `chartParts`), $0 included, so a debt paid off reads as reaching zero.
 function PointTooltip(props: {
   active?: boolean;
   payload?: Array<{ value: number | null; payload: ChartRow }>;
   lineColor: string;
   ghostLabel?: string;
-  /** The account has the trading module: its row shows, $0 included. */
-  showTrading?: boolean;
 }) {
-  const { active, payload, lineColor, ghostLabel, showTrading } = props;
+  const { active, payload, lineColor, ghostLabel } = props;
   if (!active || !payload?.length) return null;
   const row = payload.find((p) => p?.value != null)?.payload;
   if (!row) return null;
 
-  const debt = row.totalDebt ?? 0;
   // The plotted portfolio line already holds what the Portfolio card adds up
   // (the plan's own investments and the managed margin); adding the
   // investments again counted them twice.
-  const portfolioTotal = row.portfolioRaw ?? row.investments ?? 0;
+  const portfolioTotal = row.portfolioRaw;
+  const trading = row.tradingPast ?? row.tradingFuture;
+  const owed = row.owedPast ?? row.owedFuture;
+  const debt = row.debtPast ?? row.debtFuture;
   const ghost = row.ghostValue;
   const delta = ghost != null ? row.rawValue - ghost : null;
 
@@ -298,7 +300,7 @@ function PointTooltip(props: {
         {/* Our own investments plus the managed margin (positions less what
             is owed to the investors): negative while the positions are worth
             less than the promise. */}
-        {moneySign(portfolioTotal) !== 0 && (
+        {portfolioTotal != null && (
           <TooltipRow
             swatch={PORTFOLIO}
             label="Portfolio"
@@ -306,18 +308,23 @@ function PointTooltip(props: {
             valueClass={portfolioTotal < 0 ? "text-destructive" : undefined}
           />
         )}
-        {(showTrading || moneySign(row.tradingValue ?? 0) > 0) && (
-          <TooltipRow swatch={TRADING} label="Trading" value={formatMoneyFull(row.tradingValue ?? 0)} />
+        {trading != null && (
+          <TooltipRow swatch={TRADING} label="Trading" value={formatMoneyFull(trading)} />
         )}
         {/* Never under zero (see `shownCash`). */}
         {moneySign(row.savings ?? 0) > 0 && (
           <TooltipRow swatch={CASH} label="Cash" value={formatMoneyFull(row.savings ?? 0)} />
         )}
-        {(row.receivables ?? 0) > 0 && (
-          <TooltipRow swatch={OWED} label="Owed to you" value={formatMoneyFull(row.receivables ?? 0)} />
+        {owed != null && (
+          <TooltipRow swatch={OWED} label="Owed to you" value={formatMoneyFull(owed)} />
         )}
-        {debt > 0 && (
-          <TooltipRow swatch={DEBT} label="Debt" value={formatMoneyFull(debt)} valueClass="text-destructive" />
+        {debt != null && (
+          <TooltipRow
+            swatch={DEBT}
+            label="Debt"
+            value={formatMoneyFull(debt)}
+            valueClass={moneySign(debt) > 0 ? "text-destructive" : undefined}
+          />
         )}
         {ghost != null && delta != null && (
           <TooltipRow
@@ -480,22 +487,10 @@ export const ProjectionChart = memo(function ProjectionChart({
   // instead of snapping to the nearest data point. That avoids two milestones
   // collapsing onto the same month when both cross between the same pair of
   // points.
-  const { data, crossings, yTicks, hasDebt, hasOwed, hasTrading } = useMemo(() => {
-    // Debt is what is still owed, so it falls to zero as it is paid; money owed
-    // to the user falls the same way as it is paid back. Either draws its last
-    // $0 beside the payment that cleared it, then stops: a line along zero for
-    // years would read as something still owed.
-    const debts = points.map((p) => p.totalDebt ?? 0);
-    const owed = points.map((p) => p.receivables ?? 0);
-    const trades = points.map((p) => (showTrading ? (p.tradingValue ?? 0) : 0));
-    // An account with the module sees its trading line even at $0 (flat on
-    // zero), as it sees the Trading card; a balance that ends is drawn down to
-    // zero and stops, like debt.
-    const tradingFlat = showTrading && trades.every((t) => moneySign(t) === 0);
-    const drawnAt = (values: number[], i: number): boolean =>
-      moneySign(values[i]) !== 0 ||
-      (i > 0 && moneySign(values[i - 1]) !== 0) ||
-      (i < values.length - 1 && moneySign(values[i + 1]) !== 0);
+  const { data, crossings, yTicks, hasPortfolio, hasDebt, hasOwed, hasTrading } = useMemo(() => {
+    // Every part holding money somewhere in the window is drawn across all of
+    // it, its zeros on zero; one that is zero throughout isn't drawn at all.
+    const parts = chartParts(points, portfolioValues, { trading: showTrading });
     const rows: ChartRow[] = points.map((p, i) => {
       const value = Number(p.netWorth.toFixed(2));
       const isPast = i < pastCount;
@@ -503,14 +498,14 @@ export const ProjectionChart = memo(function ProjectionChart({
       const isBoundary = i === pastCount;
       // Portfolio rides its own line, split past/future like net worth, with
       // the same boundary overlap so the series stays continuous.
-      const portfolio = portfolioValues?.[i] ?? null;
+      const portfolio = parts.portfolio?.[i] ?? null;
       // Today shares its month with that month's checkpoint, so it is named
       // by its day.
       const monthLabel =
         isBoundary && todayLabel ? TODAY_DAY.format(p.date) : MONTH_FORMATTER.format(p.date);
-      const debt = drawnAt(debts, i) ? debts[i] : null;
-      const owedNow = drawnAt(owed, i) ? owed[i] : null;
-      const trading = !showTrading ? null : tradingFlat ? 0 : drawnAt(trades, i) ? trades[i] : null;
+      const debt = parts.debt?.[i] ?? null;
+      const owedNow = parts.owed?.[i] ?? null;
+      const trading = parts.trading?.[i] ?? null;
       return {
         idx: i,
         monthLabel,
@@ -574,9 +569,10 @@ export const ProjectionChart = memo(function ProjectionChart({
       data: rows,
       crossings: cross,
       yTicks: ticks,
-      hasDebt: debts.some((d) => moneySign(d) !== 0),
-      hasOwed: owed.some((d) => moneySign(d) !== 0),
-      hasTrading: showTrading,
+      hasPortfolio: parts.portfolio !== null,
+      hasDebt: parts.debt !== null,
+      hasOwed: parts.owed !== null,
+      hasTrading: parts.trading !== null,
     };
   }, [points, pastCount, ghostValues, portfolioValues, showTrading, milestones, todayLabel]);
 
@@ -785,7 +781,7 @@ export const ProjectionChart = memo(function ProjectionChart({
             />
           ))}
           <ChartTooltip
-            content={<PointTooltip lineColor={lineColor} ghostLabel={ghostLabel} showTrading={showTrading} />}
+            content={<PointTooltip lineColor={lineColor} ghostLabel={ghostLabel} />}
           />
 
           {/* Base plan ghost (scenario comparison) — subdued and underneath the
@@ -809,7 +805,7 @@ export const ProjectionChart = memo(function ProjectionChart({
           {/* Portfolio — its own series so the user can read how much of the
               net worth is the (growing) portfolio. Solid past, dashed future,
               same convention as the net-worth line. */}
-          {portfolioValues && (
+          {hasPortfolio && (
             <Area
               dataKey="portfolioPast"
               name="Portfolio"
@@ -823,7 +819,7 @@ export const ProjectionChart = memo(function ProjectionChart({
               activeDot={{ r: 4 }}
             />
           )}
-          {portfolioValues && (
+          {hasPortfolio && (
             <Area
               dataKey="portfolioFuture"
               name="Portfolio"
@@ -1054,8 +1050,9 @@ function ComparePlansTooltip(props: {
           );
         })}
         {seriesByPlan.map(({ plan, key }) => {
-          const debt = Number(row[`${key}DebtPast`] ?? row[`${key}DebtFuture`] ?? 0);
-          if (!(debt > 0)) return null;
+          const value = row[`${key}DebtPast`] ?? row[`${key}DebtFuture`];
+          if (value == null) return null;
+          const debt = Number(value);
           return (
             <TooltipRow
               key={`${key}Debt`}
@@ -1174,8 +1171,9 @@ export function ComparePlansChart({
     ).key;
 
     // Beside net worth, each plan's debt, as on a plan's own page: what is
-    // still owed, falling to zero. A paid-off debt draws its last $0 beside the
-    // payment that cleared it and stops. Same window, so the rows line up.
+    // still owed, falling to zero, and drawn across the whole window when it
+    // is owed anywhere in it (see `wholeSeries`). Same window, so the rows
+    // line up; a month the plan doesn't cover stays empty.
     const debtRows = buildCompareRows(
       series.map((s, i) => ({ key: `series${i}`, timeline: s.timeline })),
       "totalDebt",
@@ -1183,10 +1181,14 @@ export function ComparePlansChart({
       months,
       pastMonths
     ).rows;
-    const owed = (i: number, key: string): boolean => (debtRows[i]?.values[key] ?? 0) > 0;
-    const debtAt = (i: number, key: string): number | null =>
-      owed(i, key) || owed(i - 1, key) || owed(i + 1, key) ? debtRows[i]?.values[key] ?? null : null;
-    const hasDebt = debtRows.some((_, i) => seriesByPlan.some(({ key }) => owed(i, key)));
+    const debtByKey = new Map(
+      seriesByPlan.map(({ key }) => {
+        const values = debtRows.map((r) => r.values[key] ?? null);
+        return [key, wholeSeries(values) && values] as const;
+      })
+    );
+    const debtAt = (i: number, key: string): number | null => debtByKey.get(key)?.[i] ?? null;
+    const hasDebt = [...debtByKey.values()].some((v) => v !== null);
 
     const data = rows.map((r, i) => {
       const row: Record<string, string | number | null> = {

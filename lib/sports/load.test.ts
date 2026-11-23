@@ -141,14 +141,22 @@ describe("loadSport", () => {
       "bundesliga",
       "mls",
       "costa-rica",
+      "concacaf-champions-cup",
+      "concacaf-central-american-cup",
       "world-cup",
     ]);
   });
 
+  // A domestic league reads the regional cups its clubs play in too, for the
+  // games two of them play each other there (`withRegionalDerbies`).
   it.each([
-    ["mls", "usa.1", "https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/news?limit=24"],
-    ["costa-rica", "crc.1", "https://site.api.espn.com/apis/site/v2/sports/soccer/crc.1/news?limit=24&lang=es&region=cr"],
-  ])("reads %s from ESPN alone, spending no football-data request", async (league, slug, newsUrl) => {
+    ["mls", ["usa.1", "concacaf.champions"], "https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/news?limit=24"],
+    [
+      "costa-rica",
+      ["crc.1", "concacaf.champions", "concacaf.central.american.cup"],
+      "https://site.api.espn.com/apis/site/v2/sports/soccer/crc.1/news?limit=24&lang=es&region=cr",
+    ],
+  ])("reads %s from ESPN alone, spending no football-data request", async (league, slugs, newsUrl) => {
     vi.stubEnv("FOOTBALL_DATA_API_KEY", "test-key");
     const event = {
       id: "761904",
@@ -183,7 +191,9 @@ describe("loadSport", () => {
 
     const urls: string[] = fetchSpy.mock.calls.map(([url]) => url);
     expect(urls.filter((url) => url.includes("football-data.org"))).toEqual([]);
-    expect(urls.filter((url) => url.includes("/scoreboard/header")).every((url) => url.includes(`league=${slug}`))).toBe(true);
+    const boards = urls.filter((url) => url.includes("/scoreboard/header"));
+    expect(boards.every((url) => slugs.some((slug) => url.includes(`league=${slug}&`)))).toBe(true);
+    expect(boards.some((url) => url.includes(`league=${slugs[0]}&`))).toBe(true);
     expect(urls).toContain(newsUrl);
     if (payload.sport !== "football") throw new Error("not football");
     expect(payload.sample).toBe(false);

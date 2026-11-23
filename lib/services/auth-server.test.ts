@@ -28,6 +28,12 @@ vi.mock("@/lib/supabase-server", () => ({
   })),
 }));
 
+// The proxy's hand-off: none by default, so these tests read the session.
+const headerStore = new Map<string, string>();
+vi.mock("next/headers", () => ({
+  headers: vi.fn(async () => ({ get: (name: string) => headerStore.get(name) ?? null })),
+}));
+
 // DB mock — the role lookup chains `.select().from().where()` and awaits the
 // final builder. The thenable is reseeded per test via `seedRole`.
 vi.mock("@/db", () => ({
@@ -297,5 +303,29 @@ describe("requireProvider", () => {
   it("refuses an account with no role at all", async () => {
     seedRole(null);
     await expect(requireProvider()).rejects.toThrow(/provider access required/i);
+  });
+});
+
+describe("the proxy's hand-off", () => {
+  afterEach(() => {
+    headerStore.clear();
+    getUserMock.mockReset();
+  });
+
+  it("takes the user the proxy verified, without asking Supabase again", async () => {
+    headerStore.set(
+      "x-session-user",
+      encodeURIComponent(JSON.stringify({ id: USER_ID, email: "a@b.test", user_metadata: { full_name: "A" } }))
+    );
+    const user = await getCurrentUser();
+    expect(user).toEqual({ id: USER_ID, email: "a@b.test", user_metadata: { full_name: "A" } });
+    expect(getUserMock).not.toHaveBeenCalled();
+  });
+
+  it("asks Supabase when there is no hand-off or it is garbage", async () => {
+    headerStore.set("x-session-user", "%E0not-json");
+    getUserMock.mockResolvedValue({ data: { user: null }, error: null });
+    expect(await getCurrentUser()).toBeNull();
+    expect(getUserMock).toHaveBeenCalledTimes(1);
   });
 });

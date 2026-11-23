@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { Flag } from "lucide-react";
-import { useMemo } from "react";
+import { ArrowLeft, ArrowRight, Flag } from "lucide-react";
+import { useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Eyebrow, Heading, Mono, Text } from "@/components/ui/typography";
@@ -42,24 +43,55 @@ import { useNow } from "./use-now";
 export function F1Races({
   data,
   weekend,
+  justRunRound,
 }: {
   data: F1Data;
-  /** The sessions run so far of the race on now or next, read with the page. */
+  /** The sessions run so far of the race the page leads with, read with the page. */
   weekend?: F1WeekendResults;
+  /**
+   * The round just run (`justRunRace`): it leads, with its results, until the
+   * reader moves on to the next race — as the dashboard card keeps it.
+   */
+  justRunRound?: number;
 }): React.ReactElement {
-  const { featured, comingUp, justFinished } = useMemo(
-    () => racesTabGroups(data.races),
-    [data.races]
-  );
-  const featuredResults = featured && weekend?.round === featured.round ? weekend.sessions : [];
-  const { listRef, earlier, next, reveal } = useRevealEarlier(justFinished, { open: !featured, attr: "data-race" });
+  const groups = useMemo(() => racesTabGroups(data.races), [data.races]);
+  const justRun = data.races.find((r) => r.round === justRunRound && r.status === "completed");
+  const [onToNext, setOnToNext] = useState(false);
+  const leadsJustRun = justRun !== undefined && !onToNext;
+  const lead = leadsJustRun ? justRun : groups.featured;
+  // While the race just run leads, it is not also the first of the earlier ones.
+  // and the next race, out of the lead, is the first of those coming up.
+  const played = leadsJustRun ? groups.justFinished.filter((r) => r !== justRun) : groups.justFinished;
+  const comingUp = leadsJustRun && groups.featured ? [groups.featured, ...groups.comingUp] : groups.comingUp;
+  const leadResults = lead && weekend?.round === lead.round ? weekend.sessions : [];
+  const { listRef, earlier, next, reveal } = useRevealEarlier(played, { open: !groups.featured, attr: "data-race" });
+
+  const heading = leadsJustRun ? "Just run" : lead?.status === "live" ? "On now" : "Next race";
+  const toggle =
+    justRun === undefined ? null : leadsJustRun ? (
+      groups.featured && (
+        <Button variant="outline" size="xs" className={PILL} onClick={() => setOnToNext(true)}>
+          Next race
+          <span className="sr-only">: {groups.featured.name}</span>
+          <ArrowRight data-icon="inline-end" />
+        </Button>
+      )
+    ) : (
+      <Button variant="outline" size="xs" className={PILL} onClick={() => setOnToNext(false)}>
+        <ArrowLeft data-icon="inline-start" />
+        <span className="sr-only">Back to</span> {justRun.name}
+      </Button>
+    );
 
   return (
     <div ref={listRef} className="@container flex min-w-0 flex-col gap-6">
       <section className="flex flex-col gap-2">
-        <SectionHeading>{featured?.status === "live" ? "On now" : "Next race"}</SectionHeading>
-        {featured ? (
-          <FeaturedRace race={featured} results={featuredResults} drivers={data.drivers} />
+        <div className="flex items-center justify-between gap-2">
+          <SectionHeading>{heading}</SectionHeading>
+          {toggle}
+        </div>
+        {lead ? (
+          <FeaturedRace race={lead} results={leadResults} drivers={data.drivers} />
         ) : (
           <EmptyState
             icon={Flag}
@@ -79,7 +111,7 @@ export function F1Races({
 
       {/* Its line stands from the start, the pill on it: what a tap brings in
           lands right under it rather than past the races to come. */}
-      {justFinished.length > 0 && (
+      {played.length > 0 && (
         <TileSection
           title="Earlier races"
           action={next.length > 0 && <EarlierPill detail={showRounds(next)} onClick={reveal} />}
@@ -92,6 +124,9 @@ export function F1Races({
     </div>
   );
 }
+
+/** The lead's switch, a pill like "Earlier" that keeps the heading's line (`RevealPill`). */
+const PILL = "-my-1.5 rounded-full font-medium tracking-normal normal-case";
 
 /** What a tap brings in: "Show rounds 13 – 15", or "Show round 13". */
 function showRounds(races: F1Race[]): string {
@@ -169,7 +204,7 @@ function FeaturedRace({
         {/* Pinned to the first column: a circuit with no outline leaves the
             second one empty, and they would flow into it. */}
         <div className="col-span-2 @2xl:col-span-1 @2xl:col-start-1">
-          <WhatsNext race={race} />
+          {race.status === "completed" ? <ResultsLine race={race} /> : <WhatsNext race={race} />}
         </div>
 
         <div className="col-span-2 @2xl:col-span-1 @2xl:col-start-1">

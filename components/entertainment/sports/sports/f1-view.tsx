@@ -38,8 +38,10 @@ type F1ViewProps = {
   news?: F1NewsArticle[];
   /** `?tab=news` — the article page's "All news" link lands on the wire. */
   initialTab?: string;
-  /** The sessions run so far of the race on now or next. */
+  /** The sessions run so far of the race the Overview leads with. */
   weekend?: F1WeekendResults;
+  /** The round just run, which leads until the reader moves on to the next. */
+  justRunRound?: number;
 };
 
 type F1Tab = "overview" | "news";
@@ -69,7 +71,7 @@ function openingView(
   return { tab: initialTab === "news" && hasNews ? "news" : "overview", championship: "drivers" };
 }
 
-export function F1View({ data, news = [], initialTab, weekend }: F1ViewProps): React.ReactElement {
+export function F1View({ data, news = [], initialTab, weekend, justRunRound }: F1ViewProps): React.ReactElement {
   const opening = openingView(initialTab, news.length > 0);
   const [championship, setChampionship] = useState<Championship>(opening.championship);
   const wire = useMemo(() => leadStory(fromF1Wire(news), f1Interest(data)), [news, data]);
@@ -92,7 +94,7 @@ export function F1View({ data, news = [], initialTab, weekend }: F1ViewProps): R
             table: the races on the left, the championship beside them. */}
         <TabsContent value="overview">
           <OverviewSplit
-            matches={<F1Races data={data} weekend={weekend} />}
+            matches={<F1Races data={data} weekend={weekend} justRunRound={justRunRound} />}
             table={
               <TableCard className="@container">
                 {/* A segmented control, not two more tabs: both championships

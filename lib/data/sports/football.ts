@@ -317,6 +317,33 @@ const LEAGUES: Record<FootballLeagueId, FootballLeagueData> = {
     matches: CRC_MATCHES,
     standings: CRC_STANDINGS,
   },
+  // Cups with no hand-written season: an empty one, flagged as a sample.
+  "concacaf-champions-cup": {
+    league: {
+      id: "concacaf-champions-cup",
+      name: "Concacaf Champions Cup",
+      shortName: "Champions Cup",
+      region: "CONCACAF",
+      hasKnockout: true,
+      season: "2026",
+    },
+    teams: [],
+    matches: [],
+    standings: [],
+  },
+  "concacaf-central-american-cup": {
+    league: {
+      id: "concacaf-central-american-cup",
+      name: "Concacaf Central American Cup",
+      shortName: "Central American Cup",
+      region: "CONCACAF",
+      hasKnockout: true,
+      season: "2026",
+    },
+    teams: [],
+    matches: [],
+    standings: [],
+  },
   "world-cup": WORLD_CUP_DATA,
 };
 
@@ -331,6 +358,8 @@ export const FOOTBALL_LEAGUE_IDS: FootballLeagueId[] = [
   "bundesliga",
   "mls",
   "costa-rica",
+  "concacaf-champions-cup",
+  "concacaf-central-american-cup",
 ];
 
 export function getFootballLeague(id: FootballLeagueId): FootballLeagueData {

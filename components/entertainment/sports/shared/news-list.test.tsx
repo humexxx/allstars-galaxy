@@ -36,35 +36,48 @@ const story = (id: string, headline: string, over: Partial<NewsStory> = {}): New
 });
 
 describe("NewsList", () => {
-  it("makes every story a heading under the sport's h1, the lead at the same level as the rest", () => {
+  it("leads with one story, sets two beside it and lists the rest under a heading of their own", () => {
+    const image = { url: "https://cdn.example/a.jpg" };
     render(
       <NewsList
-        lead={story("1", "Verstappen takes pole in Austin")}
-        items={[story("2", "Norris fastest in practice"), story("3", "Hamilton handed a grid penalty")]}
+        lead={story("1", "Verstappen takes pole in Austin", { image })}
+        items={[
+          story("2", "Norris fastest in practice"),
+          story("3", "Hamilton handed a grid penalty", { image }),
+          story("4", "Leclerc to start from the back", { image }),
+          story("5", "Alonso signs for 2027", { external: true, href: "https://www.espn.com/f1/5" }),
+        ]}
       />
     );
 
+    // The two set beside the lead are the first with a picture.
     expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
       "Verstappen takes pole in Austin",
-      "Norris fastest in practice",
       "Hamilton handed a grid penalty",
+      "Leclerc to start from the back",
+      "More stories",
     ]);
-    expect(screen.queryByRole("heading", { level: 3 })).toBeNull();
+    expect(screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual([
+      "Norris fastest in practice",
+      "Alonso signs for 2027",
+    ]);
     expect(screen.getByRole("link", { name: /Norris fastest in practice/ })).toHaveAttribute(
       "href",
       "/news/f1/2"
     );
+    // A story read at the source names it.
+    expect(screen.getByRole("link", { name: /Alonso signs for 2027/ })).toHaveTextContent("espn.com");
   });
 
-  it("shows ten stories under the lead, then ten more a tap", () => {
-    const items = Array.from({ length: 23 }, (_, i) => story(`${i + 2}`, `Story ${i + 2}`));
+  it("lists ten stories after the two beside the lead, then ten more a tap", () => {
+    const items = Array.from({ length: 25 }, (_, i) => story(`${i + 2}`, `Story ${i + 2}`));
     render(<NewsList lead={story("1", "The lead")} items={items} />);
 
-    expect(screen.getAllByRole("heading", { level: 2 })).toHaveLength(11);
+    expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(10);
     fireEvent.click(screen.getByRole("button", { name: "Show 10 more" }));
-    expect(screen.getAllByRole("heading", { level: 2 })).toHaveLength(21);
+    expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(20);
     fireEvent.click(screen.getByRole("button", { name: "Show 3 more" }));
-    expect(screen.getAllByRole("heading", { level: 2 })).toHaveLength(24);
+    expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(23);
   });
 
   it("has no button for a wire of ten or fewer", () => {

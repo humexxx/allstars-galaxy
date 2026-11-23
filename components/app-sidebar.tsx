@@ -42,7 +42,7 @@ export function AppSidebar({
   }
 
   // Topology + data come straight from the shared `PORTAL_NAV` so the sidebar,
-  // header, and ⌘K menu never drift apart. Disabled sections (e.g. Wellness)
+  // header, and ⌘K menu never drift apart. Disabled sections (a "Coming soon" one)
   // are kept here as "Coming soon" placeholders.
   const sections = React.useMemo(
     () => visibleSections(role, isImpersonating, disabledModules),

@@ -5,7 +5,7 @@ import { cache } from "react";
 import { db } from "@/db";
 import { impersonationLogs, users } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import type { User } from "@supabase/supabase-js";
+import type { SessionUser } from "@/lib/auth/session-header";
 import type { UserRole } from "@/types/user";
 import {
   getCurrentUserCached,
@@ -42,7 +42,7 @@ export async function getImpersonationTarget(
 }
 
 export type EffectiveContext = {
-  realUser: User;
+  realUser: SessionUser;
   realRole: UserRole | null;
   impersonatedUser: { id: string; email: string | null; fullName: string | null } | null;
   effectiveUserId: string;

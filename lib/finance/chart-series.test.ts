@@ -6,6 +6,7 @@ import {
   buildCompareRows,
   buildPlanTimeline,
   calendarTicks,
+  chartParts,
   computeProjectionWindow,
   debtFreeMonthsFromNow,
   describeDebtFree,
@@ -15,6 +16,7 @@ import {
   historyToCheckpoints,
   milestoneCrossings,
   summaryDebtFree,
+  wholeSeries,
   type PlanHistoryPoint,
 } from "./chart-series";
 import { projectPlan } from "./projection";
@@ -627,5 +629,57 @@ describe("forecastKpiPoints — a plan that hasn't started", () => {
     );
     expect(todayPoint?.netWorth).toBe(12402.93);
     expect(nextPoint?.netWorth).toBe(16127.74);
+  });
+});
+
+describe("wholeSeries — a series is drawn across the whole window or not at all", () => {
+  it("draws a balance that starts mid-window from the first point, on $0", () => {
+    expect(wholeSeries([0, 0, 1200, 1500])).toEqual([0, 0, 1200, 1500]);
+  });
+
+  it("keeps a paid-off debt to the last point, on $0", () => {
+    expect(wholeSeries([900, 400, 0, 0, 0])).toEqual([900, 400, 0, 0, 0]);
+  });
+
+  it("reads a missing figure as $0 rather than a gap", () => {
+    expect(wholeSeries([undefined, null, 50, undefined])).toEqual([0, 0, 50, 0]);
+  });
+
+  it("counts a negative balance as money", () => {
+    expect(wholeSeries([0, -300, 0])).toEqual([0, -300, 0]);
+  });
+
+  it("draws nothing for a series at zero (or absent) throughout", () => {
+    expect(wholeSeries([0, 0, 0])).toBeNull();
+    expect(wholeSeries([null, undefined])).toBeNull();
+    expect(wholeSeries([])).toBeNull();
+    // Below a cent is zero, as everywhere money is compared.
+    expect(wholeSeries([0.001, -0.004])).toBeNull();
+  });
+});
+
+describe("chartParts — the parts the plan chart and the dashboard card draw", () => {
+  const points = [
+    { totalDebt: 500, receivables: 0, tradingValue: undefined },
+    { totalDebt: 0, receivables: 0, tradingValue: 0 },
+    { totalDebt: 0, receivables: 0, tradingValue: 800 },
+  ];
+
+  it("spans every drawn part over the whole window and leaves out the empty ones", () => {
+    expect(chartParts(points, [0, 0, 0], { trading: true })).toEqual({
+      portfolio: null,
+      trading: [0, 0, 800],
+      debt: [500, 0, 0],
+      owed: null,
+    });
+  });
+
+  it("draws Trading only for an account with the module", () => {
+    expect(chartParts(points, undefined).trading).toBeNull();
+  });
+
+  it("draws the portfolio when it holds money, its gaps on $0", () => {
+    expect(chartParts(points, [null, 100, 250]).portfolio).toEqual([0, 100, 250]);
+    expect(chartParts(points, undefined).portfolio).toBeNull();
   });
 });

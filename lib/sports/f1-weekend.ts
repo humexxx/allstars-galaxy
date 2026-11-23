@@ -1,3 +1,4 @@
+import { calendarDayInTimeZone } from "@/lib/utils/date";
 import type { F1Race, F1Session, F1SessionKind } from "@/types/sports";
 
 /**
@@ -111,6 +112,25 @@ export function leadRace(races: F1Race[]): F1Race | undefined {
     races.find((r) => r.status === "live") ??
     races.find((r) => r.status === "upcoming") ??
     races.findLast((r) => r.status === "completed")
+  );
+}
+
+/**
+ * The race just run, while it still leads: on the day it was run and the two
+ * after, on the reader's calendar — a Sunday race until Tuesday night. Both
+ * the dashboard card and F1's Overview keep it this long, then the next race
+ * takes over. Nothing while a race is on track: that one leads.
+ */
+
+const JUST_RUN_DAYS = 2;
+
+export function justRunRace(races: F1Race[], now: number, timeZone = "UTC"): F1Race | undefined {
+  if (races.some((r) => r.status === "live")) return undefined;
+  const dayOf = (instant: number): number => calendarDayInTimeZone(new Date(instant), timeZone).getTime();
+  // The race's own day and the two after it, by the reader's calendar.
+  const since = dayOf(now) - JUST_RUN_DAYS * 86_400_000;
+  return races.findLast(
+    (r) => r.status === "completed" && dayOf(Date.parse(r.startsAt ?? `${r.date}T12:00:00Z`)) >= since
   );
 }
 

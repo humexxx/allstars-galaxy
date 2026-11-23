@@ -6,7 +6,7 @@ vi.mock("@/app/actions/sports", () => ({ setSportTeamFilterAction: vi.fn() }));
 
 import { ReaderTimeZoneProvider } from "@/components/reader-time-zone";
 import { NBA_DATA } from "@/lib/data/sports/nba";
-import type { NbaData, NewsStory } from "@/types/sports";
+import type { NbaCup, NbaData, NewsStory } from "@/types/sports";
 
 import { NbaView } from "./nba-view";
 
@@ -141,5 +141,43 @@ describe("NbaView, the news", () => {
     expect(lead).toHaveAttribute("target", "_blank");
     expect(lead).toHaveAttribute("rel", "noopener noreferrer");
     expect(screen.getByText("Video")).toBeInTheDocument();
+  });
+
+  it("gives the NBA Cup a tab of its own: the knockout's dates, then the groups by conference", () => {
+    const [a, b, c] = NBA_DATA.teams;
+    const cup: NbaCup = {
+      groups: [
+        {
+          id: "east-a",
+          conference: "east",
+          rows: [
+            { teamId: a.id, won: 2, lost: 0, pointDiff: 18, advancing: "winner" },
+            { teamId: b.id, won: 1, lost: 1, pointDiff: -3, advancing: "wildcard" },
+            { teamId: c.id, won: 0, lost: 2, pointDiff: -15 },
+          ],
+        },
+      ],
+      knockout: [{ id: "final", label: "Championship", matches: [{ id: "nba-cup-final", homeTeamId: null, awayTeamId: null }] }],
+      knockoutDates: [{ label: "Championship", from: "2026-12-16", to: "2026-12-16" }],
+      groupNightsLeft: 2,
+    };
+    render(
+      <ReaderTimeZoneProvider timeZone="UTC">
+        <NbaView data={NBA_DATA} cup={cup} initialTab="cup" />
+      </ReaderTimeZoneProvider>
+    );
+
+    expect(openTab()).toBe("NBA Cup");
+    expect(screen.getByText("Championship")).toBeInTheDocument();
+    expect(screen.getByText(/2 group nights to play/)).toBeInTheDocument();
+    const group = screen.getByRole("table", { name: "East group 1" });
+    expect(within(group).getAllByRole("row")).toHaveLength(4);
+    expect(within(group).getByText("+18")).toBeInTheDocument();
+    expect(within(group).getByText(", Wildcard")).toBeInTheDocument();
+  });
+
+  it("has no Cup tab the rest of the year", () => {
+    render(<NbaView data={NBA_DATA} cup={null} />);
+    expect(screen.queryByRole("tab", { name: "NBA Cup" })).toBeNull();
   });
 });

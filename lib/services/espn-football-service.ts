@@ -99,6 +99,16 @@ type EspnFootballLeague = {
   playoffs: readonly PlayoffSpan[];
   rounds: readonly KnockoutRound[];
   phase: (event: FootballEvent) => Phase;
+  /**
+   * A cup drawn rather than seeded (Concacaf's): its first round is laid out
+   * by the ties its winners went on to meet in, not by a table's ranks.
+   */
+  drawn?: boolean;
+  /**
+   * A cup lists every game of its edition, not just the days around today:
+   * between rounds, or once it is over, those days would be empty.
+   */
+  wholeEdition?: boolean;
 };
 
 export type FootballCompetitor = HeaderCompetitor & {
@@ -192,7 +202,98 @@ const COSTA_RICA: EspnFootballLeague = {
   phase: costaRicaPhase,
 };
 
-const LEAGUES: Record<EspnFootballLeagueId, EspnFootballLeague> = { mls: MLS, "costa-rica": COSTA_RICA };
+/** A Concacaf round by ESPN's name for it: "Round of 16", "Quarterfinals", "Final" or "Finals". */
+type CupRoundName = { pattern: RegExp; round: number };
+
+/**
+ * A Concacaf game's stage: a knockout round's games are drawn, a group's are
+ * labelled with it, and a round outside the bracket (the Central American
+ * Cup's play-in, the Champions Cup's first round) goes by its own name.
+ */
+function cupPhase(
+  event: FootballEvent,
+  names: readonly CupRoundName[],
+  others: ReadonlyArray<{ pattern: RegExp; label: string }>,
+  rounds: readonly KnockoutRound[]
+): Phase {
+  const name = event.group?.name?.trim() ?? "";
+  const leg = event.leg?.value;
+  const legLabel = leg ? ` · Leg ${leg}` : "";
+  const found = names.find((r) => r.pattern.test(name));
+  if (found) return { kind: "knockout", round: found.round, half: null, label: `${rounds[found.round].matchLabel}${legLabel}` };
+  if (/^group\b/i.test(name)) return { kind: "league", label: /stage/i.test(name) ? "Group stage" : name };
+  const other = others.find((o) => o.pattern.test(name));
+  return { kind: "other", label: other ? `${other.label}${legLabel}` : name || undefined };
+}
+
+const CHAMPIONS_CUP_ROUNDS: readonly CupRoundName[] = [
+  { pattern: /^round of 16$/i, round: 0 },
+  { pattern: /^quarter-?finals?$/i, round: 1 },
+  { pattern: /^semi-?finals?$/i, round: 2 },
+  { pattern: /^finals?$/i, round: 3 },
+];
+
+const CENTRAL_AMERICAN_CUP_ROUNDS: readonly CupRoundName[] = [
+  { pattern: /^quarter-?finals?$/i, round: 0 },
+  { pattern: /^semi-?finals?$/i, round: 1 },
+  { pattern: /^finals?$/i, round: 2 },
+];
+
+/**
+ * The Concacaf Champions Cup (ESPN `concacaf.champions`): a knockout from
+ * February to the end of May, a first round, then sixteen clubs. The last
+ * edition stays up until the next one opens.
+ */
+const CHAMPIONS_CUP: EspnFootballLeague = {
+  id: "concacaf-champions-cup",
+  slug: "concacaf.champions",
+  name: "Concacaf Champions Cup",
+  shortName: "Champions Cup",
+  region: "CONCACAF",
+  tournamentInSeason: false,
+  playoffs: [{ from: "02-01", to: "06-15", until: "01-31" }],
+  rounds: [
+    { id: "round-of-16", label: "Round of 16", matchLabel: "Round of 16", size: 8, format: "two-legged" },
+    { id: "quarter-final", label: "Quarter-finals", matchLabel: "Quarter-final", size: 4, format: "two-legged" },
+    { id: "semi-final", label: "Semi-finals", matchLabel: "Semi-final", size: 2, format: "two-legged" },
+    { id: "final", label: "Final", matchLabel: "Final", size: 1, format: "single" },
+  ],
+  phase: (event) => cupPhase(event, CHAMPIONS_CUP_ROUNDS, [{ pattern: /^round one$/i, label: "Round One" }], CHAMPIONS_CUP.rounds),
+  drawn: true,
+  wholeEdition: true,
+};
+
+/**
+ * The Concacaf Central American Cup (ESPN `concacaf.central.american.cup`):
+ * four groups from late July, then quarter-finals, semi-finals and a final,
+ * every round home and away, the final into December. The quarter-finals'
+ * losers play in for a Champions Cup place: not part of the bracket.
+ */
+const CENTRAL_AMERICAN_CUP: EspnFootballLeague = {
+  id: "concacaf-central-american-cup",
+  slug: "concacaf.central.american.cup",
+  name: "Concacaf Central American Cup",
+  shortName: "Central American Cup",
+  region: "CONCACAF",
+  tournamentInSeason: false,
+  playoffs: [{ from: "07-20", to: "12-20", until: "07-15" }],
+  rounds: [
+    { id: "quarter-final", label: "Quarter-finals", matchLabel: "Quarter-final", size: 4, format: "two-legged" },
+    { id: "semi-final", label: "Semi-finals", matchLabel: "Semi-final", size: 2, format: "two-legged" },
+    { id: "final", label: "Final", matchLabel: "Final", size: 1, format: "two-legged" },
+  ],
+  phase: (event) =>
+    cupPhase(event, CENTRAL_AMERICAN_CUP_ROUNDS, [{ pattern: /^play-?in$/i, label: "Play-in" }], CENTRAL_AMERICAN_CUP.rounds),
+  drawn: true,
+  wholeEdition: true,
+};
+
+const LEAGUES: Record<EspnFootballLeagueId, EspnFootballLeague> = {
+  mls: MLS,
+  "costa-rica": COSTA_RICA,
+  "concacaf-champions-cup": CHAMPIONS_CUP,
+  "concacaf-central-american-cup": CENTRAL_AMERICAN_CUP,
+};
 
 export function isEspnFootballLeague(id: FootballLeagueId): id is EspnFootballLeagueId {
   return ESPN_FOOTBALL_LEAGUE_IDS.some((league) => league === id);
@@ -212,12 +313,41 @@ function logoOf(t: EspnTeam): string | undefined {
   return (light.find((l) => l.rel?.includes("default")) ?? light[0] ?? logos[0])?.href ?? t.logo;
 }
 
-/** A club from the teams list or the table, keyed like the scores bar's sides: its abbreviation in lower case. */
-function teamFrom(t: EspnTeam | undefined): Team | null {
+/** The teams list's and the table's club, with ESPN's number for it. */
+type FootballEspnTeam = EspnTeam & { id?: string };
+
+/**
+ * A club's id here: its abbreviation in lower case, as the scores bar's sides
+ * are keyed — unless two clubs of the competition share one (the Central
+ * American Cup has two ALIs, Alianza of El Salvador and of Panama), when each
+ * takes ESPN's number after it.
+ */
+export type TeamIdOf = (side: { abbreviation?: string; id?: string }) => string;
+
+const byAbbreviation: TeamIdOf = (side) => (side.abbreviation ?? "").toLowerCase();
+
+/** `byAbbreviation`, but `${abbreviation}-${number}` for an abbreviation more than one club of `sides` goes by. */
+export function teamIdsFor(sides: Iterable<{ abbreviation?: string; id?: string }>): TeamIdOf {
+  const numbers = new Map<string, Set<string>>();
+  for (const { abbreviation, id } of sides) {
+    if (!abbreviation || !id) continue;
+    const seen = numbers.get(abbreviation) ?? new Set<string>();
+    seen.add(id);
+    numbers.set(abbreviation, seen);
+  }
+  return (side) => {
+    const code = (side.abbreviation ?? "").toLowerCase();
+    const shared = side.abbreviation ? (numbers.get(side.abbreviation)?.size ?? 0) > 1 : false;
+    return shared && side.id ? `${code}-${side.id}` : code;
+  };
+}
+
+/** A club from the teams list or the table. */
+function teamFrom(t: FootballEspnTeam | undefined, idOf: TeamIdOf = byAbbreviation): Team | null {
   const code = t?.abbreviation;
   if (!code) return null;
   return {
-    id: code.toLowerCase(),
+    id: idOf(t),
     name: t.displayName ?? code,
     shortName: t.shortDisplayName ?? t.displayName ?? code,
     code,
@@ -279,19 +409,42 @@ export function shootout(home: FootballCompetitor, away: FootballCompetitor): Ma
   return typeof h === "number" && typeof a === "number" ? { home: h, away: a } : undefined;
 }
 
-/** "Alajuelense advance 4-1 on aggregate", "Saprissa advances." */
+/**
+ * "Alajuelense advance 4-1 on aggregate", "Saprissa advances.", Concacaf's
+ * "2nd Leg - Cartaginés win 5-4 on aggregate" and "2nd Leg - Tied on
+ * aggregate - ALA win 4-3 on penalties".
+ */
 function advancingFromNotes(event: FootballEvent, teams: Team[]): string | null {
   const notes = [event.note, ...(event.notes ?? []).map((n) => n.headline)];
   for (const note of notes) {
-    const named = /^(?:2nd Leg - )?(.+?) advances?\b/i.exec(note ?? "")?.[1];
-    const team = named && teams.find((t) => t.name === named || t.shortName === named);
+    const named = /^(?:2nd Leg - )?(?:Tied on aggregate - )?(.+?) (?:advances?|wins?)\b/i.exec(note ?? "")?.[1];
+    const team = named && teams.find((t) => t.name === named || t.shortName === named || t.code === named);
     if (team) return team.id;
   }
   return null;
 }
 
-function gameFrom(event: FootballEvent, league: EspnFootballLeague): Game | null {
+/** The scores bar's game with its sides keyed by `idOf`, which the scores bar knows nothing of. */
+function rekeyed(event: FootballEvent, idOf: TeamIdOf): ReturnType<typeof headerMatch> {
   const mapped = headerMatch(event);
+  if (!mapped || idOf === byAbbreviation) return mapped;
+  const homeId = idOf(mapped.home);
+  const awayId = idOf(mapped.away);
+  const swap = (id: string | null): string | null =>
+    id === mapped.teams[0].id ? homeId : id === mapped.teams[1].id ? awayId : id;
+  return {
+    ...mapped,
+    match: { ...mapped.match, homeTeamId: homeId, awayTeamId: awayId },
+    teams: [
+      { ...mapped.teams[0], id: homeId },
+      { ...mapped.teams[1], id: awayId },
+    ],
+    winnerTeamId: swap(mapped.winnerTeamId),
+  };
+}
+
+function gameFrom(event: FootballEvent, league: EspnFootballLeague, idOf: TeamIdOf = byAbbreviation): Game | null {
+  const mapped = rekeyed(event, idOf);
   const { home, away } = sidesOf(event.competitors);
   if (!mapped || !home || !away) return null;
   const phase = league.phase(event);
@@ -327,7 +480,7 @@ type FootballStandingsGroup = {
     season?: number;
     /** "2026-27 Primera División de Costa Rica", "2026 MLS". */
     seasonDisplayName?: string;
-    entries?: Array<{ team?: EspnTeam; note?: StandingNote; stats?: Array<{ name?: string; displayValue?: string; value?: number | null }> }>;
+    entries?: Array<{ team?: FootballEspnTeam; note?: StandingNote; stats?: Array<{ name?: string; displayValue?: string; value?: number | null }> }>;
   };
 };
 
@@ -351,7 +504,7 @@ type Table = { groups: FootballGroupStandings[]; teams: Team[]; season?: string 
  * rows carry ESPN's notes takes its zones from them; one without any, from
  * the competition's rule.
  */
-function standingsFrom(json: FootballStandings, league: EspnFootballLeague): Table {
+function standingsFrom(json: FootballStandings, league: EspnFootballLeague, idOf: TeamIdOf = byAbbreviation): Table {
   const teams: Team[] = [];
   const groups: FootballGroupStandings[] = [];
   let season: string | undefined;
@@ -361,7 +514,7 @@ function standingsFrom(json: FootballStandings, league: EspnFootballLeague): Tab
     const noted = entries.some((e) => e.note?.description);
     const rows: Standing[] = [];
     for (const entry of entries) {
-      const team = teamFrom(entry.team);
+      const team = teamFrom(entry.team, idOf);
       if (!team) continue;
       teams.push(team);
       rows.push({
@@ -609,7 +762,7 @@ function knockoutFrom(
   league: EspnFootballLeague,
   seedOf: (teamId: string) => number | undefined
 ): BracketRound[] {
-  const contests = contestsFrom(games);
+  const contests = league.drawn ? inDrawOrder(contestsFrom(games), league.rounds.length) : contestsFrom(games);
   const first = league.rounds.findIndex((_, r) => contests.some((c) => c.round === r));
   if (first === -1) return [];
   const rounds: BracketRound[] = [];
@@ -650,11 +803,37 @@ function knockoutFrom(
   return rounds;
 }
 
+/**
+ * A drawn cup's pairings, each round in the order its winners meet: the
+ * final's two sides, then the ties they came out of, and so on down, so the
+ * bracket's lines join a tie to the one it fed. A round nobody has come out
+ * of yet keeps the order its games were played in.
+ */
+function inDrawOrder(contests: Contest[], roundCount: number): Contest[] {
+  const byRound = Array.from({ length: roundCount }, (_, r) => contests.filter((c) => c.round === r));
+  let order: string[] = [];
+  for (let r = roundCount - 1; r >= 0; r--) {
+    const list = byRound[r];
+    if (list.length === 0) continue;
+    const placed: Contest[] = [];
+    for (const teamId of order) {
+      const fed = list.find((c) => !placed.includes(c) && c.teamIds.includes(teamId));
+      if (fed) placed.push(fed);
+    }
+    const ordered = [...placed, ...list.filter((c) => !placed.includes(c))];
+    byRound[r] = ordered;
+    // The next round down is ordered by these ties' sides, the first side first.
+    order = ordered.flatMap((c) => c.teamIds);
+  }
+  return byRound.flat();
+}
+
 /** The knockout's games of `events` played within `span`, each once. */
 function knockoutGamesFrom(
   events: FootballEvent[],
   league: EspnFootballLeague,
-  span: { from: string; to: string }
+  span: { from: string; to: string },
+  idOf: TeamIdOf = byAbbreviation
 ): { games: KnockoutGame[]; teams: Team[] } {
   const seen = new Set<string>();
   const games: KnockoutGame[] = [];
@@ -663,7 +842,7 @@ function knockoutGamesFrom(
     const date = event.date?.slice(0, 10) ?? "";
     if (!event.id || seen.has(event.id) || date < span.from || date > span.to) continue;
     seen.add(event.id);
-    const game = gameFrom(event, league);
+    const game = gameFrom(event, league, idOf);
     if (!game || game.phase.kind !== "knockout") continue;
     teams.push(...game.teams);
     const { match } = game;
@@ -727,22 +906,41 @@ type Feeds = {
  * answers before anything is cached. Throws when there are neither matches
  * nor a table, for the hand-written season to take over.
  */
+/** Every club `feeds` name, with ESPN's number for it: the scores bar's sides, the table's rows, the teams list. */
+function sidesIn(feeds: Feeds): Array<{ abbreviation?: string; id?: string }> {
+  const events = [...feeds.days, ...(feeds.earlier ?? [])];
+  const rows = (feeds.standings?.children ?? []).flatMap((g) => g.standings?.entries ?? []).map((e) => e.team ?? {});
+  const listed = (feeds.teams?.sports ?? [])
+    .flatMap((s) => s.leagues ?? [])
+    .flatMap((l) => l.teams ?? [])
+    .map((t) => (t.team ?? {}) as FootballEspnTeam);
+  return [...events.flatMap((e) => e.competitors ?? []), ...rows, ...listed];
+}
+
 function leagueDataFrom(league: EspnFootballLeague, feeds: Feeds, today: string): FootballLeagueData {
+  const sides = sidesIn(feeds);
+  const idOf = teamIdsFor(sides);
+  const providerTeamIds: Record<string, string> = {};
+  for (const side of sides) if (side.abbreviation && side.id) providerTeamIds[idOf(side)] = side.id;
+
   const byId = new Map<string, Team>();
   const add = (team: Team): void => {
     if (!byId.has(team.id)) byId.set(team.id, team);
   };
-  const table = feeds.standings ? standingsFrom(feeds.standings, league) : { groups: [], teams: [], season: undefined };
-  const listed = feeds.teams ? teamsListFrom(feeds.teams, teamFrom) : [];
+  const table = feeds.standings ? standingsFrom(feeds.standings, league, idOf) : { groups: [], teams: [], season: undefined };
+  const listed = feeds.teams ? teamsListFrom(feeds.teams, (t) => teamFrom(t, idOf)) : [];
   // The list carries club colours, the table none; a game's side names a
   // club by a nickname ESPN cuts short ("Municipal Li"), so it comes last.
   listed.forEach(add);
   table.teams.forEach(add);
 
+  const span = activeSpan(league, today);
+  // A cup's earlier days are its edition's: listed with the rest.
+  const listedEvents = league.wholeEdition && span && feeds.earlier ? [...feeds.earlier, ...feeds.days] : feeds.days;
   const matches = new Map<string, Match>();
   let year: number | undefined;
-  for (const event of feeds.days) {
-    const game = gameFrom(event, league);
+  for (const event of listedEvents) {
+    const game = gameFrom(event, league, idOf);
     if (!game || matches.has(game.match.id)) continue;
     // ESPN cancels a series' Game 3 once one side has won the first two.
     if (game.match.status === "cancelled" && game.phase.kind === "knockout") continue;
@@ -754,15 +952,15 @@ function leagueDataFrom(league: EspnFootballLeague, feeds: Feeds, today: string)
     throw new Error(`espn football ${league.slug} returned neither games nor standings`);
   }
 
-  const span = activeSpan(league, today);
   let knockout: BracketRound[] = [];
   // Without the earlier days a bracket would be missing its first rounds:
   // none is drawn until they load, and the rest of the league stays live.
   if (span && feeds.earlier) {
     const seeds = new Map(table.groups.flatMap((g) => g.standings.map((s) => [s.teamId, s.position] as const)));
-    const { games, teams } = knockoutGamesFrom([...feeds.earlier, ...feeds.days], league, span);
+    const { games, teams } = knockoutGamesFrom([...feeds.earlier, ...feeds.days], league, span, idOf);
     teams.forEach(add);
-    knockout = knockoutFrom(games, league, (id) => seeds.get(id));
+    // A drawn cup's group ranks say nothing of where its ties sit.
+    knockout = knockoutFrom(games, league, (id) => (league.drawn ? undefined : seeds.get(id)));
   }
 
   const conferences = table.groups.length > 1;
@@ -786,6 +984,7 @@ function leagueDataFrom(league: EspnFootballLeague, feeds: Feeds, today: string)
     standings: conferences ? overallTable(table.groups) : (table.groups[0]?.standings ?? []),
     ...(conferences ? { groups: table.groups } : {}),
     ...(knockout.length > 0 ? { knockout } : {}),
+    providerTeamIds,
   };
 }
 
@@ -815,8 +1014,8 @@ async function fetchEspnFootball(id: EspnFootballLeagueId): Promise<FootballLeag
 }
 
 /**
- * MLS or Costa Rica's Primera División, from ESPN's public API (no key), a
- * cache entry each. Its table and teams list fail on their own: the view
+ * MLS, Costa Rica's Primera División or a Concacaf cup, from ESPN's public
+ * API (no key), a cache entry each. Its table and teams list fail on their own: the view
  * does without them. The scores bar does not.
  */
 export const getEspnFootballLeague = cachedFeed(
@@ -830,7 +1029,9 @@ export const getEspnFootballLeague = cachedFeed(
 /** Pure mappers, exported for their tests — nothing here touches the network. */
 export const __testing = {
   activeSpan,
+  advancingFromNotes,
   bandFromNote,
+  inDrawOrder,
   earlierSpans,
   gameFrom,
   knockoutFrom,

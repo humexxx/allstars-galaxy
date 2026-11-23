@@ -8,10 +8,20 @@ import crcStandings from "./__fixtures__/espn-crc-standings-2026.json";
 import mlsDays from "./__fixtures__/espn-mls-days-2026-10-26.json";
 import mlsPostseason from "./__fixtures__/espn-mls-postseason-2025.json";
 import mlsStandings from "./__fixtures__/espn-mls-standings-2026.json";
-import { __testing, getEspnFootballLeague, type FootballEvent } from "./espn-football-service";
+import { __testing, getEspnFootballLeague, teamIdsFor, type FootballEvent } from "./espn-football-service";
 
-const { activeSpan, earlierSpans, gameFrom, knockoutFrom, knockoutGamesFrom, leagueDataFrom, liveClock, standingsFrom, LEAGUES } =
-  __testing;
+const {
+  activeSpan,
+  advancingFromNotes,
+  earlierSpans,
+  gameFrom,
+  knockoutFrom,
+  knockoutGamesFrom,
+  leagueDataFrom,
+  liveClock,
+  standingsFrom,
+  LEAGUES,
+} = __testing;
 const MLS = LEAGUES.mls;
 const CRC = LEAGUES["costa-rica"];
 
@@ -337,5 +347,130 @@ describe("getEspnFootballLeague", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     expect(await getEspnFootballLeague("mls")).toBe(getFootballLeague("mls"));
     expect(await getEspnFootballLeague("costa-rica")).toBe(getFootballLeague("costa-rica"));
+  });
+});
+
+// ---------- Concacaf cups ----------
+
+const CAC = LEAGUES["concacaf-central-american-cup"];
+const CCC = LEAGUES["concacaf-champions-cup"];
+
+type Side = [abbreviation: string, id: string, name: string, score?: number];
+
+/** A Concacaf game as ESPN's scores bar sends it (November 2026), trimmed to the fields read. */
+function cupEvent(
+  id: string,
+  date: string,
+  group: string,
+  [home, away]: [Side, Side],
+  { leg, note }: { leg?: number; note?: string } = {}
+): FootballEvent {
+  const played = home[3] !== undefined;
+  const side = ([abbreviation, teamId, name, score]: Side, homeAway: "home" | "away") => ({
+    id: teamId,
+    homeAway,
+    abbreviation,
+    displayName: name,
+    name,
+    score: score === undefined ? "" : String(score),
+  });
+  return {
+    id,
+    date,
+    season: 2026,
+    group: { name: group },
+    ...(leg ? { leg: { value: leg } } : {}),
+    ...(note ? { note } : {}),
+    fullStatus: played
+      ? { type: { name: "STATUS_FULL_TIME", state: "post", completed: true, shortDetail: "FT" } }
+      : { type: { name: "STATUS_SCHEDULED", state: "pre", shortDetail: "Scheduled" } },
+    competitors: [side(home, "home"), side(away, "away")],
+  };
+}
+
+const ALA: Side = ["ALA", "2057", "Alajuelense"];
+const CAR: Side = ["CAR", "7239", "Cartaginés"];
+const SAP: Side = ["SAP", "858", "Saprissa"];
+const OLI: Side = ["OLI", "884", "Club Deportivo Olimpia"];
+const MOT: Side = ["MOT", "7242", "FC Motagua"];
+const MAR: Side = ["MAR", "7249", "Club Deportivo Marathón"];
+const LAF: Side = ["LAF", "7232", "Luis Ángel Firpo"];
+const ALI_SV: Side = ["ALI", "7225", "Alianza FC"];
+const ALI_PA: Side = ["ALI", "21520", "Alianza FC Panama"];
+const with_ = (side: Side, score: number): Side => [side[0], side[1], side[2], score];
+
+/** The 2026 Central American Cup from its quarter-finals: the final, Alajuelense v Cartaginés, still to play. */
+const CAC_2026: FootballEvent[] = [
+  cupEvent("q1", "2026-09-10T01:06:00Z", "Quarterfinals", [with_(CAR, 2), with_(SAP, 2)], { leg: 1 }),
+  cupEvent("q2", "2026-09-10T03:06:00Z", "Quarterfinals", [with_(ALI_SV, 0), with_(MOT, 3)], { leg: 1 }),
+  cupEvent("q3", "2026-09-11T01:06:00Z", "Quarterfinals", [with_(ALA, 2), with_(MAR, 2)], { leg: 1 }),
+  cupEvent("q4", "2026-09-11T03:06:00Z", "Quarterfinals", [with_(OLI, 3), with_(LAF, 0)], { leg: 1 }),
+  cupEvent("q5", "2026-09-17T00:30:00Z", "Quarterfinals", [with_(SAP, 2), with_(CAR, 3)], {
+    leg: 2,
+    note: "2nd Leg - Cartaginés win 5-4 on aggregate",
+  }),
+  cupEvent("q6", "2026-09-17T03:15:00Z", "Quarterfinals", [with_(MOT, 0), with_(ALI_SV, 0)], { leg: 2 }),
+  cupEvent("q7", "2026-09-18T00:30:00Z", "Quarterfinals", [with_(MAR, 1), with_(ALA, 3)], { leg: 2 }),
+  cupEvent("q8", "2026-09-18T03:15:00Z", "Quarterfinals", [with_(LAF, 0), with_(OLI, 3)], { leg: 2 }),
+  cupEvent("p1", "2026-10-21T02:00:00Z", "Play-In", [with_(ALI_SV, 1), with_(MAR, 2)], { leg: 1 }),
+  cupEvent("s1", "2026-10-22T02:30:00Z", "Semifinals", [with_(OLI, 0), with_(CAR, 1)], { leg: 1 }),
+  cupEvent("s2", "2026-10-23T01:00:00Z", "Semifinals", [with_(ALA, 0), with_(MOT, 0)], { leg: 1 }),
+  cupEvent("s3", "2026-10-29T03:00:00Z", "Semifinals", [with_(CAR, 2), with_(OLI, 2)], { leg: 2 }),
+  cupEvent("s4", "2026-10-30T02:00:00Z", "Semifinals", [with_(MOT, 1), with_(ALA, 2)], { leg: 2 }),
+  cupEvent("f1", "2026-12-03T01:00:00Z", "Finals", [ALA, CAR], { leg: 1 }),
+  cupEvent("f2", "2026-12-07T00:00:00Z", "Finals", [CAR, ALA], { leg: 2, note: "2nd Leg - Tied on aggregate" }),
+];
+
+describe("Concacaf cups", () => {
+  it("names each game's stage, a leg after it, and a group game by its group", () => {
+    expect(gameFrom(CAC_2026[0], CAC)!.match.stageLabel).toBe("Quarter-final · Leg 1");
+    expect(gameFrom(CAC_2026[14], CAC)!.match.stageLabel).toBe("Final · Leg 2");
+    expect(gameFrom(CAC_2026[8], CAC)!.match.stageLabel).toBe("Play-in · Leg 1");
+    const group = cupEvent("g1", "2026-07-30T02:00:00Z", "Group A", [with_(ALA, 1), with_(LAF, 0)]);
+    expect(gameFrom(group, CAC)!.match.stageLabel).toBe("Group A");
+    const final = cupEvent("c1", "2026-05-31T00:00:00Z", "Final", [with_(["UANL", "232", "Tigres UANL"], 1), with_(["TOL", "223", "Toluca"], 1)]);
+    expect(gameFrom(final, CCC)!.phase).toMatchObject({ kind: "knockout", round: 3 });
+    const roundOne = cupEvent("c2", "2026-02-04T00:00:00Z", "Round One", [with_(["UANL", "232", "Tigres UANL"], 0), with_(["FOR", "20026", "Forge"], 0)], { leg: 1 });
+    expect(gameFrom(roundOne, CCC)!.match.stageLabel).toBe("Round One · Leg 1");
+  });
+
+  it("tells apart two clubs ESPN gives one abbreviation, and only those", () => {
+    const idOf = teamIdsFor([ALI_SV, ALI_PA, ALA].map(([abbreviation, id]) => ({ abbreviation, id })));
+    expect(idOf({ abbreviation: "ALI", id: "7225" })).toBe("ali-7225");
+    expect(idOf({ abbreviation: "ALI", id: "21520" })).toBe("ali-21520");
+    expect(idOf({ abbreviation: "ALA", id: "2057" })).toBe("ala");
+  });
+
+  it("reads who went through from Concacaf's notes", () => {
+    const teams = [{ id: "car", name: "Cartaginés", shortName: "Cartaginés", code: "CAR" }, { id: "ala", name: "Alajuelense", shortName: "Alajuelense", code: "ALA" }];
+    expect(advancingFromNotes({ note: "2nd Leg - Cartaginés win 5-4 on aggregate" }, teams)).toBe("car");
+    expect(advancingFromNotes({ note: "2nd Leg - Tied on aggregate - ALA win 4-3 on penalties" }, teams)).toBe("ala");
+    expect(advancingFromNotes({ note: "2nd Leg - Tied on aggregate" }, teams)).toBeNull();
+  });
+
+  it("draws the bracket by the ties each winner went on to, the final dated by its legs", () => {
+    const today = "2026-11-22";
+    const data = leagueDataFrom(
+      CAC,
+      { days: CAC_2026.filter((e) => e.date! >= "2026-10-11"), earlier: CAC_2026.filter((e) => e.date! < "2026-10-11"), standings: null, teams: null },
+      today
+    );
+    const [qf, sf, final] = data.knockout!;
+    // Each semi-final is fed by the two quarter-finals beside each other.
+    expect(qf.matches.map(tie)).toEqual(["ala-mar", "ali-mot", "oli-laf", "car-sap"]);
+    expect(sf.matches.map(tie)).toEqual(["ala-mot", "oli-car"]);
+    expect(qf.matches[3].winnerTeamId).toBe("car");
+    expect(final.matches[0]).toMatchObject({ homeTeamId: "ala", awayTeamId: "car", winnerTeamId: null });
+    expect(final.matches[0].legs?.map((l) => l.date)).toEqual(["2026-12-03T01:00:00Z", "2026-12-07T00:00:00Z"]);
+    // A cup lists its edition's earlier games too, and knows each club by ESPN's number.
+    expect(data.matches.some((m) => m.id === "q1")).toBe(true);
+    expect(data.providerTeamIds).toMatchObject({ ala: "2057", car: "7239" });
+  });
+
+  it("keeps the last Champions Cup up until the next opens, and the Central American Cup's until July", () => {
+    expect(activeSpan(CCC, "2026-11-22")).toEqual({ from: "2026-02-01", to: "2026-06-15" });
+    expect(activeSpan(CCC, "2027-01-10")).toEqual({ from: "2026-02-01", to: "2026-06-15" });
+    expect(activeSpan(CAC, "2026-11-22")).toEqual({ from: "2026-07-20", to: "2026-12-20" });
+    expect(activeSpan(CAC, "2027-03-01")).toEqual({ from: "2026-07-20", to: "2026-12-20" });
   });
 });

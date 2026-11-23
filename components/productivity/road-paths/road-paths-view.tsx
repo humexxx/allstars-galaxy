@@ -26,13 +26,6 @@ import type { RoadPathWithCheckIns } from "@/types";
 
 import { RoadPathCard } from "./road-path-card";
 
-/** A faint square grid in the tone of the charts' gridlines (the border colour, thinned). */
-const GRID_LINE = "color-mix(in oklab, var(--border) 70%, transparent)";
-const GRID: React.CSSProperties = {
-  backgroundImage: `linear-gradient(to right, ${GRID_LINE} 1px, transparent 1px), linear-gradient(to bottom, ${GRID_LINE} 1px, transparent 1px)`,
-  backgroundSize: "2rem 2rem",
-};
-
 type RoadPathsViewProps = {
   roadPaths: RoadPathWithCheckIns[];
   /** Today in the reader's zone (`YYYY-MM-DD`). */
@@ -79,14 +72,8 @@ export function RoadPathsView({ roadPaths, today, timeZone }: RoadPathsViewProps
   return (
     // Columns by the room the grid has: from `lg` the sidebar takes 192px,
     // and viewport breakpoints made two narrow cards with their titles three
-    // words to a line. It fills the rest of the page, over a faint grid that
-    // fades out towards the bottom and the sides.
+    // words to a line. The backdrop grid is the shell's, as on every page.
     <div className="@container relative flex-1">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -inset-4 mask-x-from-90% mask-b-from-30%"
-        style={GRID}
-      />
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={ids} strategy={rectSortingStrategy}>
           <div

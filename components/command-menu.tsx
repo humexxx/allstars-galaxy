@@ -113,6 +113,7 @@ export function CommandMenu({
                     value={`${section.label ?? ""} ${item.title}`}
                     onSelect={() => go(item.url)}
                   >
+                    <item.icon aria-hidden="true" />
                     {item.title}
                   </CommandItem>
                 ))}

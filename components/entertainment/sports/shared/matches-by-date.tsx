@@ -137,11 +137,17 @@ function dateRange(batch: MatchDay[], shortDay: (day: string) => string): string
 export function MatchesByDate({
   matches,
   teams,
+  filterTeamIds,
   emptyTitle = "No matches available yet",
   className,
 }: {
   matches: Match[];
   teams: Map<string, Team>;
+  /**
+   * The teams the filter offers, where `matches` also holds games against
+   * others (a club's cup ties beside its league): every team in them otherwise.
+   */
+  filterTeamIds?: ReadonlySet<string>;
   emptyTitle?: string;
   className?: string;
 }): React.ReactElement {
@@ -160,12 +166,12 @@ export function MatchesByDate({
   );
 
   const options = useMemo(() => {
-    const ids = new Set(matches.flatMap((m) => [m.homeTeamId, m.awayTeamId]));
+    const ids = filterTeamIds ?? new Set(matches.flatMap((m) => [m.homeTeamId, m.awayTeamId]));
     return [...ids]
       .map((id) => teams.get(id))
       .filter((t): t is Team => Boolean(t))
       .sort((a, b) => a.shortName.localeCompare(b.shortName));
-  }, [matches, teams]);
+  }, [filterTeamIds, matches, teams]);
 
   // A remembered team that has left the list (relegated, knocked out) is
   // let go rather than leaving the list empty.

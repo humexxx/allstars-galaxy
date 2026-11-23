@@ -7,7 +7,7 @@ import { DEFAULT_SPORT, SPORTS_BY_ID } from "@/lib/data/sports/registry";
 import { FOOTBALL_COMPETITIONS } from "@/lib/services/football-service";
 import { requireModulePage } from "@/lib/services/module-access-service";
 import { getSportTeamFilter, listUserFavoriteSportIds } from "@/lib/services/sports-service";
-import { footballLeagueFrom, loadSport } from "@/lib/sports/load";
+import { footballLeagueFrom, loadSport, withFootballClubs } from "@/lib/sports/load";
 import { teamFilterList } from "@/lib/sports/team-filter";
 import { getRequestTodayIso } from "@/lib/utils/request-today";
 import { isSportId } from "@/lib/sports/payload";
@@ -72,10 +72,12 @@ export default async function SportsPage({
   const active = named.sport ?? favorites[0] ?? DEFAULT_SPORT;
   // The teams last picked in this list, read beside the sport rather than after it.
   const list = teamFilterList(active, footballLeagueFrom(named.league));
-  const [payload, teamIds] = await Promise.all([
+  const [loaded, teamIds] = await Promise.all([
     loadSport(active, { league: named.league }),
     list ? getSportTeamFilter(ctx.effectiveUserId, list) : Promise.resolve([]),
   ]);
+  // A football club picked in the list brings its games in its other competitions.
+  const payload = await withFootballClubs(loaded, teamIds);
 
   // No PageHeader: the sport's own name row names the page, with the
   // favourites button and the sport picker at its end (SportsHub).

@@ -14,6 +14,7 @@ const config = {
         "sports",
         "entertainment",
         "productivity",
+        "wellness",
         "landing",
         "portal",
         "ui",

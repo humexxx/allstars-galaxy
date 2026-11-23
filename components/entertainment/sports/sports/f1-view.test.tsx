@@ -37,10 +37,11 @@ describe("F1View", () => {
       expect(heading).toHaveClass(cls);
       expect(label).toHaveClass(cls);
     }
-    expect(heading.parentElement).toHaveClass("gap-2");
+    // The heading shares its line with the switch to the race just run, when there is one.
+    expect(heading.parentElement!.parentElement).toHaveClass("gap-2");
     expect(label.parentElement).toHaveClass("gap-2");
     // The heading says "Next race"; the card under it no longer repeats it.
-    const card = heading.nextElementSibling!;
+    const card = heading.parentElement!.nextElementSibling!;
     expect(card).toHaveTextContent(/^Round \d+/);
     expect(card).not.toHaveTextContent("Next race");
   });

@@ -8,10 +8,10 @@ import type { F1Data, F1WeekendResults } from "@/types/sports";
 import { F1_SEASON } from "./__fixtures__/f1";
 import { F1Races } from "./f1-races";
 
-function renderRaces(data: F1Data = F1_SEASON, weekend?: F1WeekendResults): void {
+function renderRaces(data: F1Data = F1_SEASON, weekend?: F1WeekendResults, justRunRound?: number): void {
   render(
     <ReaderTimeZoneProvider timeZone="America/Costa_Rica">
-      <F1Races data={data} weekend={weekend} />
+      <F1Races data={data} weekend={weekend} justRunRound={justRunRound} />
     </ReaderTimeZoneProvider>
   );
 }
@@ -216,5 +216,26 @@ describe("F1Races", () => {
     // With nothing to come, the latest races run are there from the start.
     expect(rounds("Earlier races")).toEqual(["17", "16", "15"]);
     expect(screen.getByRole("button", { name: "Earlier: Show round 14" })).toBeInTheDocument();
+  });
+
+  it("leads with the race just run, its result in, until the reader moves on to the next", () => {
+    renderRaces(F1_SEASON, undefined, 17);
+
+    const lead = screen.getByRole("heading", { name: "Just run" }).closest("section")!;
+    expect(within(lead).getByRole("heading", { level: 3 })).toHaveTextContent("Singapore Grand Prix");
+    expect(within(lead).getByText("Winner")).toBeInTheDocument();
+    // Not twice: the race leading is not also the first of the earlier ones.
+    expect(rounds("Earlier races")).toEqual(["16"]);
+    // The next race waits first in line under Coming up.
+    expect(rounds("Coming up")[0]).toBe("18");
+
+    fireEvent.click(within(lead).getByRole("button", { name: /Next race/ }));
+    expect(screen.getByRole("heading", { name: "Next race" })).toBeInTheDocument();
+    expect(within(featuredCard()).getByRole("heading", { level: 3 })).toHaveTextContent("United States Grand Prix");
+    expect(rounds("Coming up")[0]).toBe("19");
+    expect(rounds("Earlier races")).toEqual(["17"]);
+
+    fireEvent.click(screen.getByRole("button", { name: /Back to Singapore Grand Prix/ }));
+    expect(screen.getByRole("heading", { name: "Just run" })).toBeInTheDocument();
   });
 });

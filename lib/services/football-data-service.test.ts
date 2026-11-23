@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getFootballLeague } from "@/lib/data/sports/football";
 import type { Team } from "@/types/sports";
 
-import { __testing, getFootballLeagueData } from "./football-data-service";
+import { __testing, getFootballDataClubMatches, getFootballLeagueData } from "./football-data-service";
 
 const { goalsOf, mapMatches, buildKnockoutBracket, noteBudget, budget } =
   __testing;
@@ -273,5 +273,68 @@ describe("mapMatchStatus", () => {
     expect(mapMatchStatus("AWARDED")).toBe("ft");
     expect(mapMatchStatus("SUSPENDED")).toBe("postponed");
     expect(mapMatchStatus("TIMED")).toBe("scheduled");
+  });
+});
+
+describe("getFootballDataClubMatches", () => {
+  const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
+  const madrid = { id: 86, name: "Real Madrid CF", shortName: "Real Madrid", tla: "RMA" };
+  const game = (id: number, code: string, stage: string, away: { id: number; name: string; shortName: string; tla: string }) => ({
+    id,
+    utcDate: "2026-11-24T20:00:00Z",
+    status: "TIMED",
+    stage,
+    matchday: 5,
+    score: { fullTime: { home: null, away: null } },
+    homeTeam: madrid,
+    awayTeam: away,
+    competition: { code },
+  });
+
+  beforeEach(() => {
+    budget.spentUntil = 0;
+    vi.stubEnv("FOOTBALL_DATA_API_KEY", "test-key");
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("fetch is disabled in unit tests"))));
+  });
+
+  it("reads a club's games in each competition it plays, led by the competition, in one request", async () => {
+    const fetchSpy = vi.fn<(url: string) => Promise<Response>>(() =>
+      Promise.resolve(
+        json({
+          matches: [
+            game(1, "CL", "LEAGUE_STAGE", { id: 674, name: "PSV", shortName: "PSV", tla: "PSV" }),
+            game(2, "PD", "REGULAR_SEASON", { id: 263, name: "Deportivo Alavés", shortName: "Alavés", tla: "ALA" }),
+            // A competition the app does not cover stays out.
+            game(3, "CDR", "LAST_16", { id: 90, name: "Real Betis", shortName: "Betis", tla: "BET" }),
+          ],
+        })
+      )
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+    const club = await getFootballDataClubMatches("86");
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy.mock.calls[0][0]).toMatch(/\/teams\/86\/matches\?dateFrom=/);
+    expect(club?.teamIds).toEqual(["real-madrid"]);
+    expect(club?.matches.map((m) => m.stageLabel).sort()).toEqual(["La Liga · Matchday 5", "UCL · Matchday 5"]);
+    expect(club?.teams.map((t) => t.id).sort()).toEqual(["alaves", "psv", "real-madrid"]);
+  });
+
+  it("answers null when football-data refuses, for the league's own games to stand", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response("", { status: 429 }))));
+    await expect(getFootballDataClubMatches("86")).resolves.toBeNull();
+  });
+});
+
+describe("providerIdsOf", () => {
+  it("keys football-data's number for each club by the id it has here", () => {
+    expect(__testing.providerIdsOf([{ id: 86, name: "Real Madrid CF", shortName: "Real Madrid" }, null])).toEqual({
+      "real-madrid": "86",
+    });
   });
 });

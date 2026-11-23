@@ -291,7 +291,7 @@ enforced by `commitlint` via a `husky` `commit-msg` hook. Format:
   `test`, `build`, `ci`, `chore`, `revert`
 - **scope** (optional, but constrained): `auth`, `db`, `finance`, `portfolio`, `travel`,
   `entertainment`, `landing`, `portal`, `ui`, `deps`, `release`, `ci`, `docs`,
-  `config`, `types`, `schemas` — extend the list in [`commitlint.config.mjs`](commitlint.config.mjs) if needed.
+  `config`, `types`, `schemas`, `wellness` — extend the list in [`commitlint.config.mjs`](commitlint.config.mjs) if needed.
 - **subject**: imperative, lower-case start, no trailing period, ≤100 chars total header.
 - **Breaking change**: append `!` after type/scope (e.g. `feat(db)!: drop legacy column`)
   or include a `BREAKING CHANGE:` footer.

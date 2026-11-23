@@ -5,6 +5,7 @@ import type { F1Race } from "@/types/sports";
 
 import {
   isRaceWeekend,
+  justRunRace,
   leadRace,
   raceSessions,
   racesTabGroups,
@@ -155,5 +156,32 @@ describe("weekendWindow", () => {
 
   it("is nothing for a race with no times", () => {
     expect(weekendWindow({ ...austin, sessions: undefined, startsAt: undefined })).toBeNull();
+  });
+});
+
+describe("justRunRace", () => {
+  const run = (round: number, startsAt: string): F1Race => ({
+    ...austin,
+    id: `r-${round}`,
+    round,
+    date: startsAt.slice(0, 10),
+    startsAt,
+    status: "completed",
+  });
+  // Las Vegas runs Saturday night local, 04:00 UTC on Sunday.
+  const vegas = run(21, "2026-11-22T04:00:00.000Z");
+  const qatar: F1Race = { ...austin, id: "r-22", round: 22, startsAt: "2026-11-29T16:00:00.000Z", status: "upcoming" };
+
+  it("keeps the race on its day and the two after, on the reader's calendar", () => {
+    // Costa Rica: the race is Saturday the 21st there, and stays through Monday.
+    expect(justRunRace([vegas, qatar], Date.parse("2026-11-24T05:00:00Z"), "America/Costa_Rica")?.round).toBe(21);
+    expect(justRunRace([vegas, qatar], Date.parse("2026-11-24T07:00:00Z"), "America/Costa_Rica")).toBeUndefined();
+    // UTC: Sunday the 22nd, so through Tuesday.
+    expect(justRunRace([vegas, qatar], Date.parse("2026-11-24T20:00:00Z"))?.round).toBe(21);
+    expect(justRunRace([vegas, qatar], Date.parse("2026-11-25T01:00:00Z"))).toBeUndefined();
+  });
+
+  it("gives way to a race on track", () => {
+    expect(justRunRace([vegas, { ...qatar, status: "live" }], Date.parse("2026-11-22T12:00:00Z"))).toBeUndefined();
   });
 });

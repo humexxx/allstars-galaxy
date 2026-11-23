@@ -527,6 +527,8 @@ describe("getDashboardSportCard", () => {
         { id: "bundesliga", label: "Bundesliga" },
         { id: "mls", label: "Major League Soccer" },
         { id: "costa-rica", label: "Primera División de Costa Rica" },
+        { id: "concacaf-champions-cup", label: "Concacaf Champions Cup" },
+        { id: "concacaf-central-american-cup", label: "Concacaf Central American Cup" },
         { id: "world-cup", label: "FIFA World Cup 2026" },
       ],
     });

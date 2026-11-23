@@ -58,7 +58,7 @@ afterEach(() => {
 });
 
 describe("f1Highlight", () => {
-  it("keeps the race just run, with its winner, on its day and the next on the reader's calendar", () => {
+  it("keeps the race just run, with its winner, on its day and the two after on the reader's calendar", () => {
     const run: F1Race = { ...austin, status: "completed", podium: ["NOR", "VER", "LEC"] };
     const data = season([singapore, run, mexico]);
     const costaRica = "America/Costa_Rica";
@@ -66,8 +66,10 @@ describe("f1Highlight", () => {
     expect(f1Highlight(data, at("2026-10-26T04:00:00Z"), costaRica)?.race.id).toBe("r-19");
     // Monday evening: the day after.
     expect(f1Highlight(data, at("2026-10-27T01:00:00Z"), costaRica)?.race.id).toBe("r-19");
-    // Tuesday: on to Mexico City.
-    expect(f1Highlight(data, at("2026-10-27T14:00:00Z"), costaRica)?.race.id).toBe("r-20");
+    // Tuesday: two days after, still.
+    expect(f1Highlight(data, at("2026-10-27T14:00:00Z"), costaRica)?.race.id).toBe("r-19");
+    // Wednesday: on to Mexico City.
+    expect(f1Highlight(data, at("2026-10-28T14:00:00Z"), costaRica)?.race.id).toBe("r-20");
   });
 
   it("puts a race on track ahead of the one just run", () => {

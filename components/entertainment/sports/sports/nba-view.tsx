@@ -6,23 +6,26 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Text } from "@/components/ui/typography";
-import type { NbaConference, NbaData, NewsStory, Team } from "@/types/sports";
+import type { NbaConference, NbaCup as NbaCupData, NbaData, NewsStory, Team } from "@/types/sports";
 
 import { LeagueView, StandingsTeamCell, useTeamsMap } from "../shared/league-view";
 import { ShowMoreRows, useShownRows } from "../shared/show-more";
 import { SportsTh, TableCellNum } from "../shared/table-primitives";
 import { TeamBadge } from "../shared/team-badge";
 import { useMatchTime } from "../shared/time-zone-context";
+import { NbaCup } from "./nba-cup";
 
 type NbaViewProps = {
   data: NbaData;
   /** ESPN's NBA news; no News tab without any. */
   news?: NewsStory[];
-  /** `?tab=news` opens on the news. */
+  /** `?tab=news` opens on the news, `?tab=cup` on the Cup. */
   initialTab?: string;
+  /** The NBA Cup, November to December: a tab of its own while there is one. */
+  cup?: NbaCupData | null;
 };
 
-export function NbaView({ data, news = [], initialTab }: NbaViewProps): React.ReactElement {
+export function NbaView({ data, news = [], initialTab, cup }: NbaViewProps): React.ReactElement {
   const teamsMap = useTeamsMap(data.teams);
   // ESPN's table rides along with balldontlie's games; a table invented next
   // to real scores is worse than none, so without it the games fill the row.
@@ -42,6 +45,7 @@ export function NbaView({ data, news = [], initialTab }: NbaViewProps): React.Re
       emptyTitle="No games scheduled right now."
       lead={<SeasonNote data={data} teamsMap={teamsMap} hasStandings={hasStandings} />}
       table={hasStandings && <NbaStandings data={data} teamsMap={teamsMap} />}
+      extraTab={cup ? { value: "cup", label: "NBA Cup", content: <NbaCup cup={cup} teams={teamsMap} /> } : undefined}
     />
   );
 }

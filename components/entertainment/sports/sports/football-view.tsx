@@ -1,12 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import type { FootballGroupStandings, FootballLeagueData, FootballLeagueId, NewsStory, Team } from "@/types/sports";
+import type {
+  FootballClubMatches,
+  FootballGroupStandings,
+  FootballLeagueData,
+  FootballLeagueId,
+  Match,
+  NewsStory,
+  Team,
+} from "@/types/sports";
 
 import { KnockoutBracket } from "../shared/knockout-bracket";
 import { useTeamsMap } from "../shared/league-view";
@@ -16,7 +24,7 @@ import { OverviewSplit } from "../shared/overview-split";
 import { SportShell } from "../shared/sport-shell";
 import { StandingsTable } from "../shared/standings-table";
 import { TableCard } from "../shared/table-primitives";
-import { TeamPicksProvider } from "../shared/team-picks";
+import { TeamPicksProvider, useTeamPicks } from "../shared/team-picks";
 import { useSportsNavigation } from "../sports-navigation";
 import { WorldCupView } from "./world-cup-view";
 
@@ -25,6 +33,8 @@ type FootballViewProps = {
   options: ReadonlyArray<{ id: FootballLeagueId; name: string }>;
   /** ESPN's news for the league; no News tab without any. */
   news?: NewsStory[];
+  /** The clubs last picked in the match list, in every competition they play in. */
+  clubs?: FootballClubMatches | null;
   /** `?tab=`: the tab to open on, when the league has it. */
   initialTab?: string;
 };
@@ -39,12 +49,12 @@ type TabKey = "overview" | "knockout" | "news";
  * The World Cup is one of them, laid out as the tournament it is: a bracket,
  * fixtures and group tables rather than a season's single table.
  */
-export function FootballView({ league, options, news = [], initialTab }: FootballViewProps): React.ReactElement {
+export function FootballView({ league, options, news = [], clubs, initialTab }: FootballViewProps): React.ReactElement {
   const leagues = <LeagueMenu leagueId={league.league.id} options={options} />;
   return league.league.id === "world-cup" ? (
     <WorldCupView data={league} leagues={leagues} news={news} initialTab={initialTab} />
   ) : (
-    <LeagueView league={league} leagues={leagues} news={news} initialTab={initialTab} />
+    <LeagueView league={league} leagues={leagues} news={news} clubs={clubs ?? null} initialTab={initialTab} />
   );
 }
 
@@ -75,11 +85,13 @@ function LeagueView({
   league,
   leagues,
   news,
+  clubs,
   initialTab,
 }: {
   league: FootballLeagueData;
   leagues: React.ReactNode;
   news: NewsStory[];
+  clubs: FootballClubMatches | null;
   initialTab?: string;
 }): React.ReactElement {
   const leagueId = league.league.id;
@@ -121,11 +133,11 @@ function LeagueView({
       >
         {/* Every match day by day, and the whole table beside them: a Table
             tab of its own only repeated it with more columns. A club tapped
-            in either narrows the matches to its own. */}
+            in either narrows the matches to its own, in every competition. */}
         <TabsContent value="overview">
           <TeamPicksProvider matches={league.matches}>
             <OverviewSplit
-              matches={<MatchesByDate matches={league.matches} teams={teamsMap} />}
+              matches={<LeagueMatches matches={league.matches} teams={teamsMap} clubs={clubs} />}
               table={
                 conferences ? (
                   <ConferenceStandings
@@ -174,6 +186,45 @@ function LeagueView({
       </SportShell>
     </Tabs>
   );
+}
+
+/** The same teams, whatever order they were picked in. */
+function sameTeams(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && [...a].sort().join(",") === [...b].sort().join(",");
+}
+
+/**
+ * The league's match days, or with clubs picked their games in every
+ * competition they play in, each led by its competition. Those arrive with
+ * the page's refresh after a pick saves (`clubs`), for the clubs it saved:
+ * until they match the clubs picked, the list is the league's own games.
+ * The filter keeps offering the league's clubs alone.
+ */
+function LeagueMatches({
+  matches,
+  teams,
+  clubs,
+}: {
+  matches: Match[];
+  teams: Map<string, Team>;
+  clubs: FootballClubMatches | null;
+}): React.ReactElement {
+  const { picks } = useTeamPicks();
+  const own = useMemo(() => new Set(matches.flatMap((m) => [m.homeTeamId, m.awayTeamId])), [matches]);
+  const picked = picks.filter((id) => own.has(id));
+  const across = clubs && picked.length > 0 && sameTeams(picked, clubs.teamIds) ? clubs : null;
+
+  const listed = useMemo((): Match[] => {
+    if (!across) return matches;
+    const ids = new Set(across.matches.map((m) => m.id));
+    return [...across.matches, ...matches.filter((m) => !ids.has(m.id))];
+  }, [across, matches]);
+  const named = useMemo(
+    (): Map<string, Team> => (across ? new Map([...across.teams.map((t) => [t.id, t] as const), ...teams]) : teams),
+    [across, teams]
+  );
+
+  return <MatchesByDate matches={listed} teams={named} filterTeamIds={across ? own : undefined} />;
 }
 
 /**

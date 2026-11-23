@@ -16,12 +16,13 @@ describe("app modules", () => {
     expect(moduleOfPath("/portal/plans/abc?view=table")).toBe("plans");
     expect(moduleOfPath("/portal/entertainment/sports/f1/3")).toBe("sports");
     expect(moduleOfPath("/portal/trading")).toBe("trading");
+    expect(moduleOfPath("/portal/wellness/calories")).toBe("wellness");
     expect(moduleOfPath("/portal")).toBeNull();
     expect(moduleOfPath("/portal/plansx")).toBeNull();
   });
 
   it("drops stored names that are no longer modules", () => {
-    expect(parseDisabledModules(["trading", "wellness", "sports"])).toEqual(["trading", "sports"]);
+    expect(parseDisabledModules(["trading", "nutrition", "sports"])).toEqual(["trading", "sports"]);
     expect(parseDisabledModules(null)).toEqual([]);
   });
 

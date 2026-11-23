@@ -460,3 +460,21 @@ body {
     animation: shooting-star 24s cubic-bezier(0.32, 0.72, 0, 1) 6s infinite;
   }
 }
+
+/*
+ * The backdrop grid every portal page stands on: 2rem squares in the border
+ * colour, thinned, faded out towards all four edges of the page so it never
+ * starts or stops on a hard line.
+ */
+@utility portal-grid {
+  --grid-line: var(--border);
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: 2rem 2rem;
+  background-position: center top;
+  mask-image:
+    linear-gradient(to bottom, transparent, black 12rem, black calc(100% - 16rem), transparent),
+    linear-gradient(to right, transparent, black 6%, black 94%, transparent);
+  mask-composite: intersect;
+}

@@ -23,11 +23,7 @@ import { DeltaChip } from "./delta-chip";
 import { SeriesSwatch } from "./series-swatch";
 import { ProjectionChart } from "./projection-chart";
 import { drawDelay } from "./dashboard-motion";
-import {
-  dashboardSeries,
-  visibleSeriesKeys,
-  type DashboardSeries,
-} from "./dashboard-finance-series";
+import { dashboardSeries, type DashboardSeries } from "./dashboard-finance-series";
 import { formatCurrency, formatSignedPercent, moneySign } from "@/lib/utils/format";
 import {
   getMainPlan,
@@ -39,6 +35,7 @@ import {
   alignTodayPoint,
   buildChartSeries,
   buildPlanTimeline,
+  chartParts,
   portfolioSeries,
 } from "@/lib/finance/chart-series";
 import { buildDashboardFigures, changeBaseline, dashboardGoal } from "@/lib/finance/dashboard";
@@ -166,21 +163,25 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
     anchorDay
   );
   const sinceClose = changeFrom ? fig.netWorth - changeFrom.point.netWorth : null;
-  // The parts the plan page shows: Portfolio always, Trading for an account
-  // with the module, Owed to you and Debt when the chart's range has any — a
-  // $0.00 debt tile on a plan with none is noise. No cash, as on the plan.
-  const visible = visibleSeriesKeys(points, { trading: tradingOn });
+  // The rail is the chart's legend: a part shows when the chart draws it —
+  // money somewhere in the chart's range (see `chartParts`); a $0.00 debt
+  // tile on a plan with none is noise. No cash, as on the plan.
+  const drawn = chartParts(chart.points, portfolioValues, { trading: tradingOn });
   const portfolioNote = managedNote(managed, fig.positions, fig.claims);
   const breakdown: Figure[] = [
-    {
-      series: dashboardSeries("investments"),
-      label: "Portfolio",
-      amount: fig.investments,
-      note: portfolioNote,
-      wide: portfolioNote !== undefined,
-      href: "/portal/portfolio",
-    },
-    ...(visible.has("trading")
+    ...(drawn.portfolio
+      ? [
+          {
+            series: dashboardSeries("investments"),
+            label: "Portfolio",
+            amount: fig.investments,
+            note: portfolioNote,
+            wide: portfolioNote !== undefined,
+            href: "/portal/portfolio",
+          },
+        ]
+      : []),
+    ...(drawn.trading
       ? [
           {
             series: dashboardSeries("trading"),
@@ -190,7 +191,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
           },
         ]
       : []),
-    ...(visible.has("receivables")
+    ...(drawn.owed
       ? [
           {
             series: dashboardSeries("receivables"),
@@ -199,7 +200,7 @@ export async function DashboardFinanceCard({ userId }: DashboardFinanceCardProps
           },
         ]
       : []),
-    ...(visible.has("debt")
+    ...(drawn.debt
       ? [
           {
             series: dashboardSeries("debt"),

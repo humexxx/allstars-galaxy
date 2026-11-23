@@ -287,7 +287,7 @@ export function MatchesByDate({
                     size="sm"
                     as="div"
                     className={cn(
-                      "sticky top-26 z-10 flex items-center justify-between gap-2 bg-background py-1 md:top-12",
+                      "sticky top-26 z-10 flex items-center justify-between gap-2 bg-background py-1 md:top-12 md:bg-background/75 md:backdrop-blur",
                       day === today && "text-foreground"
                     )}
                   >

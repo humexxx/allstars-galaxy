@@ -210,7 +210,7 @@ export function SportShell({
         <div
           ref={tabsRef}
           data-sport-tabs
-          className="sticky top-14 z-20 flex h-12 min-w-0 items-end gap-4 border-b bg-background md:top-0"
+          className="sticky top-14 z-20 flex h-12 min-w-0 items-end gap-4 border-b bg-background md:top-0 md:bg-background/75 md:backdrop-blur"
         >
           {/* The name again, small, only while the row above is out of
               sight; the h1 is still there for a screen reader. On a phone the

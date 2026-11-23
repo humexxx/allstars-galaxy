@@ -410,10 +410,8 @@ body {
  * motion. Painted on a fixed pseudo-element, never the scrolling pane, so a
  * phone does not repaint it on scroll.
  */
-.portal-sky {
-  position: relative;
-  isolation: isolate;
-}
+/* No stacking context on the shell itself: the chat window inside it and the
+   dev tools beside it must keep stacking against each other by z-index. */
 .portal-sky::before {
   content: "";
   position: fixed;

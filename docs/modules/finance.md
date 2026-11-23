@@ -1,7 +1,7 @@
 # Finance
 
 > **Status:** Active
-> **Last reviewed:** 2026-11-15
+> **Last reviewed:** 2026-11-23
 
 ## Overview
 Personal financial planning: users build *plans* (scenarios) with incomes,

@@ -1,7 +1,7 @@
 # Auth
 
 > **Status:** Active
-> **Last reviewed:** 2026-10-18
+> **Last reviewed:** 2026-11-23
 
 ## Overview
 Supabase-backed authentication: email/password login, signup, password reset,
@@ -97,3 +97,4 @@ All four use `Alert` for form-level errors and `Field` + `FieldError` with
   missing from the allow-list makes Supabase fall back to the Site URL after
   the Google handshake, dropping the code exchange (symptom: Google login
   "does nothing" / lands logged-out).
+- **One session check per request** (2026-11-23). `proxy.ts` verifies the session with `getClaims()` and hands the user (`id`, `email`, `user_metadata`) to the request's server code in the `x-session-user` header (`lib/auth/session-header.ts`), deleting any copy the browser sent; `getCurrentUser` reads it before falling back to `getUser()`. The role and the switched-off modules come from one cached read of the user's row (`getUserAccessRow`). Local build, warm: first byte ~570 → ~290 ms per page. While Supabase signs with the legacy shared secret, `getClaims()` still asks Supabase once; after moving the project to an asymmetric signing key (Supabase dashboard → JWT signing keys) it checks the token locally and that round trip goes too.

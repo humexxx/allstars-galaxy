@@ -1,5 +1,7 @@
 import "server-only";
 
+import { getUserAccessRow } from "./user-access-row";
+
 import { eq, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { cache } from "react";
@@ -19,11 +21,7 @@ export class ModuleDisabledError extends Error {
 
 /** The modules an admin turned off for this account. Request-cached: the nav, the page and its cards all ask. */
 export const getDisabledModules = cache(async function getDisabledModules(userId: string): Promise<AppModule[]> {
-  const [row] = await db
-    .select({ disabledModules: users.disabledModules })
-    .from(users)
-    .where(eq(users.id, userId));
-  return parseDisabledModules(row?.disabledModules);
+  return parseDisabledModules((await getUserAccessRow(userId))?.disabledModules);
 });
 
 export async function isModuleEnabled(userId: string, module: AppModule): Promise<boolean> {

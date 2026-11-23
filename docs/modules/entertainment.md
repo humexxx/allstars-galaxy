@@ -1,7 +1,7 @@
 # Entertainment
 
 > **Status:** In progress (travel shipped + dashboard card; sports UI shipped, favourites end-to-end on DB; LoL, F1, football, World Cup, padel, tennis, NBA and NFL wired to free live providers)
-> **Last reviewed:** 2026-11-20
+> **Last reviewed:** 2026-11-23
 
 ## Overview
 Two sub-modules: Travel Planner (trips, items, photos, public sharing) and

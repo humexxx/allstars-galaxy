@@ -103,53 +103,49 @@
 }
 
 :root {
-  /* 14px. iOS corners: cards land at rounded-xl = 18px, buttons and fields at
-     rounded-md = 12px, menus at rounded-lg = 14px. One token moves every
-     primitive, so nothing hand-picks a radius. */
-  --radius: 0.875rem;
+  /* 16px. Cards land at rounded-xl = 20px, buttons and fields at rounded-md
+     = 14px, menus at rounded-lg = 16px. One token moves every primitive, so
+     nothing hand-picks a radius. */
+  --radius: 1rem;
 
-  /* Light theme — iOS "grouped" surfaces: a cool grey page
-     (systemGroupedBackground, #F2F2F7) with white cards floating on it, system
-     blue for actions, system red for destruction. The chart palette below is
-     NOT part of this and stays brand-validated. */
+  /* "Night observatory" — the app is a galaxy of modules, so the neutrals are
+     never grey: every surface and ink carries a little indigo (hue 265-270),
+     and the one accent is the brand's orbit cyan (chart-1's hue). Light is
+     the observatory by day: a cool porcelain page, white cards, navy ink.
+     Every text pair below was measured: ink 17:1 on a card, muted ink 6:1,
+     cyan 5.2:1, a white label 5.2:1 on the cyan fill. */
 
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.22 0.035 268);
 
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
+  --popover-foreground: oklch(0.22 0.035 268);
 
-  /* A step deeper than systemBlue (#007AFF), which carries white text at only
-     3.7:1. This is the blue Apple's own web puts under white button labels:
-     4.5:1, and the same as text on a card. */
-  --primary: oklch(0.57 0.18 255);      /* #1175DE */
+  --primary: oklch(0.52 0.1 222);       /* #007696 orbit cyan, text-safe */
   /* What a solid fill under `primary-foreground` text is painted with. One with
      `primary` here; dark mode splits them. */
   --primary-fill: var(--primary);
   --primary-foreground: oklch(1 0 0);
 
-  --secondary: oklch(0.93 0.004 286);   /* #E5E5EA systemGray5 */
-  --secondary-foreground: oklch(0.21 0.006 285.885);
+  --secondary: oklch(0.935 0.012 265);
+  --secondary-foreground: oklch(0.25 0.035 268);
 
-  --muted: oklch(0.945 0.005 286);
-  /* Deeper than iOS's secondaryLabel (#7F7F87 was 3.5:1 on the page, 4:1 on a
-     card): text-safe, 4.9:1 on the page, 5.5:1 on a card, 4.7:1 on muted. */
-  --muted-foreground: oklch(0.52 0.012 286);
+  --muted: oklch(0.955 0.009 265);
+  --muted-foreground: oklch(0.5 0.03 265); /* 6:1 on a card, 5.3:1 on muted */
 
-  --accent: oklch(0.945 0.005 286);
-  --accent-foreground: oklch(0.205 0 0);
+  --accent: oklch(0.95 0.014 240);
+  --accent-foreground: oklch(0.24 0.035 268);
 
   /* The three status hues are used as TEXT far more than as fills, so the light
-     steps sit deeper than Apple's swatches: systemGreen #34C759 is 2.3:1 on
-     white, these clear ~4.4–4.8:1. Dark mode keeps the bright system values,
-     where they measure 7:1 on the card. */
-  --destructive: oklch(0.58 0.22 27);   /* systemRed, text-safe */
+     steps sit deep enough to read on white (~4.4–5.2:1). Dark mode keeps the
+     bright values, where they measure 6–9:1 on the card. */
+  --destructive: oklch(0.58 0.22 27);
   --destructive-foreground: oklch(0.985 0 0);
 
-  --success: oklch(0.51 0.16 152);      /* systemGreen, text-safe: 5.2:1 on a card, 4.5:1 on its own /10 tint */
+  --success: oklch(0.51 0.16 152);
   --success-foreground: oklch(1 0 0);
 
-  --warning: oklch(0.57 0.16 58);       /* systemOrange, text-safe */
+  --warning: oklch(0.57 0.16 58);
   --warning-foreground: oklch(0.2 0 0);
 
   /* Period health, best to worst (lib/finance/period-health.ts). Green, teal,
@@ -162,28 +158,31 @@
   --health-strained: var(--destructive);
   --health-underwater: oklch(0.45 0.19 8);
 
-  --border: oklch(0.9 0.005 286);
-  --input: oklch(0.9 0.005 286);
-  --ring: oklch(0.57 0.18 255);
-  --background: oklch(0.962 0.005 286); /* #F2F2F7 systemGroupedBackground */
-  --foreground: oklch(0.145 0 0);
+  --border: oklch(0.91 0.012 265);
+  --input: oklch(0.89 0.014 265);
+  --ring: oklch(0.52 0.1 222);
+  --background: oklch(0.972 0.007 265); /* #F3F6FB porcelain */
+  --foreground: oklch(0.22 0.035 268);  /* #141A2B navy ink */
+
+  /* A card's edge: a hairline, and by day the faintest navy lift. */
+  --card-shadow: 0 1px 2px oklch(0.22 0.035 268 / 4%), 0 4px 16px -8px oklch(0.22 0.035 268 / 8%);
+
+  /* The sky behind the portal (`.portal-sky`): by day a dawn haze at the top. */
+  --sky-glow-a: oklch(0.85 0.06 222 / 35%);
+  --sky-glow-b: oklch(0.88 0.05 290 / 30%);
+  --sky-stars: transparent;
+  --sky-star-trail: transparent;
+
   /* Categorical series palette — identity, not magnitude. These slots colour
      SEPARATE things (one plan vs another, one trip vs another), so they are
      distinct hues in a fixed order, never a light-to-dark ramp of one hue.
-     The previous values were a cyan ramp (hue 207→223): two adjacent plans
-     came out ΔE 7.1 apart in normal vision — under the ≥15 floor, i.e. not
-     reliably distinguishable — and three slots sat under 3:1 on white.
-
-     Slot 1 keeps the brand cyan. The order was chosen by enumerating
+     Slot 1 is the brand cyan. The order was chosen by enumerating
      permutations and taking the best worst-adjacent separation, then verified
      with the dataviz validator (light surface #ffffff):
        CVD ΔE 16.3 (target ≥8) · normal-vision ΔE 19.6 (floor ≥15)
      Re-run the validator before touching any of these. */
   /* Category hues for Travel. Chosen for separation on a light surface:
-     worst adjacent pair ΔEok 0.137, every one ≥3:1 against white. Activity is
-     lime rather than emerald because emerald measured 0.056 against cruise's
-     teal, and it takes the 700 step because lime at 600 clears contrast at
-     only 3.06:1. */
+     worst adjacent pair ΔEok 0.137, every one ≥3:1 against white. */
   --trip-lodging: oklch(0.666 0.179 58.318);   /* amber  */
   --trip-flight: oklch(0.588 0.158 241.966);   /* sky    */
   --trip-cruise: oklch(0.6 0.118 184.704);     /* teal   */
@@ -196,53 +195,53 @@
   --chart-3: oklch(0.4331 0.1671 283.62); /* #4a3aa7 violet */
   --chart-4: oklch(0.7163 0.1412 357.39); /* #e87ba4 magenta */
   --chart-5: oklch(0.7644 0.1612 75.12);  /* #eda100 yellow */
-  /* Sidebar sits flush with the page background, separated only by its right
-     border — the shadcn docs look, rather than a tinted panel. */
-  --sidebar: oklch(0.962 0.005 286);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.57 0.18 255);
+  /* The sidebar is a pane of its own, a step off the page, so the sky reads
+     behind the content and the navigation stays quiet. */
+  --sidebar: oklch(0.985 0.004 265);
+  --sidebar-foreground: oklch(0.3 0.035 268);
+  --sidebar-primary: oklch(0.52 0.1 222);
   --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.91 0.006 286);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.9 0.005 286);
-  --sidebar-ring: oklch(0.57 0.18 255);
+  --sidebar-accent: oklch(0.94 0.02 225);
+  --sidebar-accent-foreground: oklch(0.22 0.035 268);
+  --sidebar-border: oklch(0.91 0.012 265);
+  --sidebar-ring: oklch(0.52 0.1 222);
 }
 
 .dark {
-  /* Dark theme — iOS dark: true black page (OLED), #1C1C1E cards, #2C2C2E
-     menus, the brighter dark-mode blue/red/green. */
-  --background: oklch(0 0 0);
-  --foreground: oklch(0.985 0 0);
+  /* The observatory at night: an indigo-black sky (never #000), cards a step
+     up, menus another. Ink 16:1 on a card, muted ink 7.6:1, cyan 9.4:1. */
+  --background: oklch(0.15 0.02 270);   /* #080B14 */
+  --foreground: oklch(0.965 0.008 265);
 
-  --card: oklch(0.22 0.004 286);        /* #1C1C1E secondarySystemGroupedBackground */
-  --card-foreground: oklch(0.985 0 0);
+  --card: oklch(0.2 0.025 270);         /* #121522 */
+  --card-foreground: oklch(0.965 0.008 265);
 
-  --popover: oklch(0.27 0.004 286);     /* #2C2C2E tertiary */
-  --popover-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.245 0.027 270);    /* #1B202E */
+  --popover-foreground: oklch(0.965 0.008 265);
 
-  --primary: oklch(0.67 0.19 255);      /* #0A84FF */
-  /* No one blue serves both jobs on black: #0A84FF reads at 5.5:1 as text on
-     a card but carries a white label at 3.1:1. Text, rings and indicators keep
-     it; a fill with a label takes the deeper blue, as Apple's web does. */
-  --primary-fill: oklch(0.57 0.18 255);
+  --primary: oklch(0.78 0.12 215);      /* #43CAE7 */
+  /* No one cyan serves both jobs on the night card: the bright one reads at
+     9.4:1 as text but carries a white label at 2:1. A fill with a label takes
+     the deeper cyan, 4.8:1 under white. */
+  --primary-fill: oklch(0.54 0.1 222);
   --primary-foreground: oklch(1 0 0);
 
-  --secondary: oklch(0.3 0.005 286);    /* #3A3A3C */
-  --secondary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.28 0.026 270);
+  --secondary-foreground: oklch(0.965 0.008 265);
 
-  --muted: oklch(0.27 0.004 286);
-  --muted-foreground: oklch(0.65 0.01 286);
+  --muted: oklch(0.25 0.025 270);
+  --muted-foreground: oklch(0.73 0.03 265);
 
-  --accent: oklch(0.32 0.005 286);
-  --accent-foreground: oklch(0.985 0 0);
+  --accent: oklch(0.29 0.03 265);
+  --accent-foreground: oklch(0.965 0.008 265);
 
-  --destructive: oklch(0.68 0.21 27);   /* #FF453A */
+  --destructive: oklch(0.68 0.21 27);   /* #FF453A-ish */
   --destructive-foreground: oklch(0.985 0 0);
 
-  --success: oklch(0.76 0.2 150);       /* #30D158 */
+  --success: oklch(0.76 0.2 150);
   --success-foreground: oklch(0.15 0 0);
 
-  --warning: oklch(0.78 0.17 66);       /* #FF9F0A */
+  --warning: oklch(0.78 0.17 66);
   --warning-foreground: oklch(0.2 0 0);
 
   --health-thriving: var(--success);
@@ -252,14 +251,20 @@
   --health-strained: var(--destructive);
   --health-underwater: oklch(0.64 0.24 355);
 
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.67 0.19 255);
-  /* Same five hues, re-stepped for the dark card surface (#343434) — a
-     selected dark palette, not an automatic flip of the light one. Verified:
-     CVD ΔE 13.2 (target ≥8) · normal-vision ΔE 19.3 (floor ≥15). */
+  --border: oklch(0.8 0.05 265 / 12%);
+  --input: oklch(0.8 0.05 265 / 16%);
+  --ring: oklch(0.78 0.12 215);
+
+  /* At night the edge is light catching the top of the card, not a shadow. */
+  --card-shadow: inset 0 1px 0 oklch(1 0 0 / 4%), 0 8px 24px -12px oklch(0 0 0 / 60%);
+
+  --sky-glow-a: oklch(0.55 0.12 222 / 16%);
+  --sky-glow-b: oklch(0.5 0.16 295 / 14%);
+  --sky-stars: oklch(0.95 0.02 265 / 55%);
+  --sky-star-trail: oklch(0.95 0.04 215 / 80%);
+
   /* The same hues re-stepped for a dark surface — chosen for it, not flipped
-     from the light set. Every one ≥4:1 against #0a0a0a. */
+     from the light set. Every one ≥4:1 against the night card. */
   --trip-lodging: oklch(0.828 0.189 84.429);
   --trip-flight: oklch(0.746 0.16 232.661);
   --trip-cruise: oklch(0.777 0.152 181.912);
@@ -267,21 +272,22 @@
   --trip-food: oklch(0.712 0.194 13.428);
   --trip-activity: oklch(0.841 0.238 128.85);
   --trip-shopping: oklch(0.74 0.238 322.16);
+  /* Same five hues, re-stepped for a dark surface. Verified: CVD ΔE 13.2
+     (target ≥8) · normal-vision ΔE 19.3 (floor ≥15); 4.6–6:1 on the night
+     card (#121522). */
   --chart-1: oklch(0.6599 0.1177 220.36); /* #12a2c4 cyan (brand) */
   --chart-2: oklch(0.6221 0.1726 40.11);  /* #d95926 orange */
   --chart-3: oklch(0.6696 0.1452 286.83); /* #9085e9 violet */
   --chart-4: oklch(0.6224 0.1712 0.84);   /* #d55181 magenta */
   --chart-5: oklch(0.6699 0.1425 73.23);  /* #c98500 yellow */
-  /* Match the page background in dark mode too, so the sidebar reads as part
-     of the shell instead of a lighter floating panel. */
-  --sidebar: oklch(0 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.67 0.19 255);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.22 0.004 286);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 12%);
-  --sidebar-ring: oklch(0.67 0.19 255);
+  --sidebar: oklch(0.165 0.022 270);
+  --sidebar-foreground: oklch(0.85 0.02 265);
+  --sidebar-primary: oklch(0.78 0.12 215);
+  --sidebar-primary-foreground: oklch(0.15 0.02 270);
+  --sidebar-accent: oklch(0.26 0.035 240);
+  --sidebar-accent-foreground: oklch(0.965 0.008 265);
+  --sidebar-border: oklch(0.8 0.05 265 / 10%);
+  --sidebar-ring: oklch(0.78 0.12 215);
 }
 
 /* * {
@@ -393,5 +399,66 @@ body {
   [data-marquee="true"]:hover > span {
     animation: trip-marquee var(--marquee-duration, 3s) ease-in-out infinite
       alternate;
+  }
+}
+
+/*
+ * The portal's sky: the one signature of the look. Two faint glows (cyan and
+ * violet, like the logo's shooting star) and, at night, a sparse field of
+ * stars, fixed behind everything so the cards float over it. A shooting star
+ * crosses it now and then; nothing moves for a reader who asked for less
+ * motion. Painted on a fixed pseudo-element, never the scrolling pane, so a
+ * phone does not repaint it on scroll.
+ */
+.portal-sky {
+  position: relative;
+  isolation: isolate;
+}
+.portal-sky::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(60rem 30rem at 85% -8%, var(--sky-glow-a), transparent 70%),
+    radial-gradient(50rem 28rem at -5% 105%, var(--sky-glow-b), transparent 70%),
+    radial-gradient(1px 1px at 20px 30px, var(--sky-stars), transparent 1px),
+    radial-gradient(1px 1px at 140px 90px, var(--sky-stars), transparent 1px),
+    radial-gradient(1.5px 1.5px at 90px 170px, var(--sky-stars), transparent 1.5px),
+    radial-gradient(1px 1px at 230px 210px, var(--sky-stars), transparent 1px),
+    var(--background);
+  background-size: 100% 100%, 100% 100%, 260px 260px, 260px 260px, 330px 330px, 330px 330px, 100% 100%;
+  background-repeat: no-repeat, no-repeat, repeat, repeat, repeat, repeat, no-repeat;
+}
+.portal-sky::after {
+  content: "";
+  position: fixed;
+  top: 12%;
+  left: -12rem;
+  z-index: -1;
+  width: 10rem;
+  height: 1px;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(90deg, transparent, var(--sky-star-trail));
+  transform: rotate(-14deg);
+}
+@keyframes shooting-star {
+  0%, 92% {
+    opacity: 0;
+    transform: translate(0, 0) rotate(-14deg);
+  }
+  94% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(60vw, -15vh) rotate(-14deg);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .portal-sky::after {
+    animation: shooting-star 24s cubic-bezier(0.32, 0.72, 0, 1) 6s infinite;
   }
 }

@@ -8,12 +8,29 @@
  * product area.
  */
 
+import {
+  AppWindow,
+  ArrowLeftRight,
+  CandlestickChart,
+  ChartSpline,
+  HeartPulse,
+  Kanban,
+  LayoutDashboard,
+  PieChart,
+  Plane,
+  Route,
+  Trophy,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
+
 import { moduleOfPath, type AppModule } from "@/lib/access/modules";
 import type { UserRole } from "@/types/user";
 
 export type NavLeaf = {
   title: string;
   url: string;
+  icon: LucideIcon;
   /** Renders disabled ("Coming soon") wherever it's shown. */
   disabled?: boolean;
   /** Its module is turned off for this account: shown greyed out, never a link. */
@@ -32,42 +49,42 @@ export type NavSection = {
 
 export const PORTAL_NAV: NavSection[] = [
   {
-    items: [{ title: "Dashboard", url: "/portal" }],
+    items: [{ title: "Dashboard", url: "/portal", icon: LayoutDashboard }],
   },
   {
     label: "Finance",
     items: [
-      { title: "Plans", url: "/portal/plans" },
-      { title: "Portfolio", url: "/portal/portfolio" },
-      { title: "Trading Journal", url: "/portal/trading" },
+      { title: "Plans", url: "/portal/plans", icon: ChartSpline },
+      { title: "Portfolio", url: "/portal/portfolio", icon: PieChart },
+      { title: "Trading Journal", url: "/portal/trading", icon: CandlestickChart },
     ],
   },
   {
     label: "Productivity",
     items: [
-      { title: "Board", url: "/portal/productivity/board" },
-      { title: "Road Paths", url: "/portal/productivity/road-paths" },
+      { title: "Board", url: "/portal/productivity/board", icon: Kanban },
+      { title: "Road Paths", url: "/portal/productivity/road-paths", icon: Route },
     ],
   },
   {
     label: "Entertainment",
     items: [
-      { title: "Travel Planner", url: "/portal/entertainment/travel-planner" },
-      { title: "Sports", url: "/portal/entertainment/sports" },
+      { title: "Travel Planner", url: "/portal/entertainment/travel-planner", icon: Plane },
+      { title: "Sports", url: "/portal/entertainment/sports", icon: Trophy },
     ],
   },
   {
     label: "Wellness",
     disabled: true,
-    items: [{ title: "Coming soon", url: "#", disabled: true }],
+    items: [{ title: "Coming soon", url: "#", disabled: true, icon: HeartPulse }],
   },
   {
     label: "Admin",
     adminOnly: true,
     items: [
-      { title: "More apps", url: "/portal/more-apps" },
-      { title: "Users", url: "/portal/admin/users" },
-      { title: "Transactions", url: "/portal/admin/transactions" },
+      { title: "More apps", url: "/portal/more-apps", icon: AppWindow },
+      { title: "Users", url: "/portal/admin/users", icon: Users },
+      { title: "Transactions", url: "/portal/admin/transactions", icon: ArrowLeftRight },
     ],
   },
 ];

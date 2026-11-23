@@ -201,16 +201,24 @@ to another offset.
   `space-y-*` and is fine to leave until it is touched — a half-converted
   file is worse than a consistent old one.
 
-## Surfaces & radius (the iOS look)
+## Surfaces & radius (the night-observatory look)
 
-- **One radius token.** `--radius` is 14px, so `rounded-md` (buttons, fields,
-  menu items) is 12px, `rounded-lg` (menus, tab tracks) 14px, `rounded-xl`
-  (cards) 18px and `rounded-2xl` (dialogs, bottom sheets) 22px. Never write a
+- **One radius token.** `--radius` is 16px, so `rounded-md` (buttons, fields,
+  menu items) is 14px, `rounded-lg` (menus, tab tracks) 16px, `rounded-xl`
+  (cards) 20px and `rounded-2xl` (dialogs, bottom sheets) 24px. Never write a
   pixel radius; pick the step that names the surface.
-- **Grouped surfaces.** The page is the cool grey `--background`
-  (systemGroupedBackground); cards, fields, dialogs and menus are the white
-  `--card` / `--popover`. Anything that must read as "on top of the page" uses
-  those, not `bg-background` — inside a card `bg-background` paints grey.
+- **Tinted surfaces.** Every neutral carries a little indigo: the page is
+  `--background` (porcelain by day, indigo-black at night), cards, fields,
+  dialogs and menus are `--card` / `--popover`, and the one accent is the
+  brand's orbit cyan (`--primary`). Anything that must read as "on top of the
+  page" uses those, not `bg-background` — inside a card `bg-background` paints
+  the page colour. A card's edge is `ring-border` plus `--card-shadow` (a
+  lift by day, a top highlight at night); do not add another shadow.
+- **The sky.** The portal shell carries `.portal-sky` (globals.css): two faint
+  glows and, at night, a star field on a fixed layer behind everything, with a
+  shooting star now and then (none under reduced motion). So the shell's panes
+  are transparent — `SidebarInset` and the desktop sidebar — and a new
+  full-height pane must be too, or it hides the sky.
 - **Press feedback.** `Button` dims and shrinks a touch on `:active`; do not add
   a second hover-only affordance on top of it.
 - **Control height is 40px** (`h-10`) for `Button`, `Input`, `SelectTrigger`

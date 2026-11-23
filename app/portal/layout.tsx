@@ -93,7 +93,7 @@ export default async function PortalLayout({
                       little taller than the window, so the mascot only
                       peeks in under the fold and the page's own content has
                       the screen. */}
-                  <div className="relative flex flex-1 flex-col has-[.ctxa]:min-h-[calc(100svh+4rem)]">
+                  <div className="relative flex flex-1 flex-col has-[[data-page-mascot]]:min-h-[calc(100svh+4rem)]">
                     <div aria-hidden className="portal-grid pointer-events-none absolute inset-0 -z-1" />
                     {children}
                   </div>

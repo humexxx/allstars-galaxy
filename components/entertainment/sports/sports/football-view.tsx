@@ -212,7 +212,10 @@ function LeagueMatches({
   const { picks } = useTeamPicks();
   const own = useMemo(() => new Set(matches.flatMap((m) => [m.homeTeamId, m.awayTeamId])), [matches]);
   const picked = picks.filter((id) => own.has(id));
-  const across = clubs && picked.length > 0 && sameTeams(picked, clubs.teamIds) ? clubs : null;
+  // A saved club the league no longer has (relegated, gone) must not hold the
+  // list back: both sides are compared over the league's own clubs.
+  const across =
+    clubs && picked.length > 0 && sameTeams(picked, clubs.teamIds.filter((id) => own.has(id))) ? clubs : null;
 
   const listed = useMemo((): Match[] => {
     if (!across) return matches;

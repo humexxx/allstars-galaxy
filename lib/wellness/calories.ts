@@ -98,6 +98,8 @@ export function macroSplit(targetKcal: number, weightKg: number): CalorieResult[
 /**
  * The floor only stops a deficit: maintaining or gaining already eats at or
  * above maintenance, and raising those to a floor would turn them into a gain.
+ * Nor may it turn a deficit into a surplus: when maintenance itself is under
+ * the floor, the safe answer to "lose" is to eat at maintenance.
  */
 export function calculateCalories(input: CalorieInput): CalorieResult {
   const bmr = Math.round(mifflinStJeor(input.sex, input.age, input.heightCm, input.weightKg));
@@ -107,7 +109,7 @@ export function calculateCalories(input: CalorieInput): CalorieResult {
   const floor = CALORIE_FLOOR[input.sex];
   const wanted = maintenance + adjustment;
   const clamped = input.goal === "lose" && wanted < floor;
-  const target = clamped ? floor : wanted;
+  const target = clamped ? Math.min(floor, maintenance) : wanted;
   const weeklyChangeKg = ((target - maintenance) * 7) / KCAL_PER_KG;
 
   return {

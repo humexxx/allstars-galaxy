@@ -1319,7 +1319,10 @@ function cupFrom(feed: NbaCupFeed, standings: NbaStanding[]): NbaCup | null {
     return days.length > 0 ? [{ label: round.label, from: days[0], to: days[days.length - 1] }] : [];
   });
   const groupNights = new Set(
-    feed.games.filter((g) => g.stage === "group" && !g.played).map((g) => g.startsAt.slice(0, 10))
+    // By the US night, as the knockout dates are: a 7:30pm ET tip is the next UTC day.
+    feed.games
+      .filter((g) => g.stage === "group" && !g.played)
+      .map((g) => isoDay(calendarDayInTimeZone(new Date(g.startsAt), "America/New_York")))
   );
   return {
     groups,

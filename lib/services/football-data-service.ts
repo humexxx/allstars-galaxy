@@ -927,7 +927,9 @@ async function fetchClubMatches(providerId: string): Promise<FootballClubMatches
   }
   const club = res.matches.flatMap((m) => [m.homeTeam, m.awayTeam]).find((t) => String(t.id) === providerId);
   const teamId = teamFromFd(club)?.id;
-  if (!teamId) throw new Error(`football-data: no games for team ${providerId}`);
+  // No games in the window is an answer, kept like one: thrown, it would be
+  // asked again on every render and spend the shared budget each time.
+  if (!teamId) return { teamIds: [], teams: [], matches: [] };
   return {
     teamIds: [teamId],
     teams: Array.from(teamsMap.values()),

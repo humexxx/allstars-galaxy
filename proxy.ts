@@ -64,6 +64,9 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // Every route but Next's own assets and the files in /public. Never skip
+    // by extension: a dynamic route answers "/portal/plans/x.png" too, and a
+    // request the proxy skips would keep a session header the browser forged.
+    '/((?!_next/static|_next/image|favicon\\.ico|favicon-(?:dark|light)\\.svg|images/|f1/teams/).*)',
   ],
 }

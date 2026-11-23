@@ -64,6 +64,9 @@ export async function getFootballCompetition(id: FootballLeagueId): Promise<Foot
   return withRegionalDerbies(data, live);
 }
 
+/** Clubs whose other competitions are asked of football-data live; the rest show their league's games. */
+const LIVE_CLUB_LOOKUPS = 3;
+
 /**
  * The clubs `teamIds` of the league on screen, in every competition the app
  * covers: a European club's league and Champions League games from one
@@ -82,12 +85,15 @@ export async function getFootballClubMatches(
     const others = await liveEspnAll(ESPN_FOOTBALL_LEAGUE_IDS.filter((o) => o !== id));
     return clubMatchesAcross(home, others, teamIds);
   }
+  // Only the league's own clubs, and a live lookup for the first few: each one
+  // is a request on football-data's ten a minute, which production shares.
+  const own = teamIds.filter((teamId) => home.teams.some((t) => t.id === teamId));
   const parts = await Promise.all(
-    teamIds.map(async (teamId) => {
-      const providerId = home.providerTeamIds?.[teamId];
+    own.map(async (teamId, i) => {
+      const providerId = i < LIVE_CLUB_LOOKUPS ? home.providerTeamIds?.[teamId] : undefined;
       const live = providerId ? await getFootballDataClubMatches(providerId) : null;
       return live && live.teamIds.includes(teamId) ? live : clubMatchesAcross(home, [], [teamId]);
     })
   );
-  return mergeClubMatches(teamIds, parts);
+  return mergeClubMatches(own, parts);
 }

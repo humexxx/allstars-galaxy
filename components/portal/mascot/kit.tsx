@@ -361,7 +361,7 @@ export function Stage({ styles, tone, ground, plain = false, mood, cycle, classN
     <div
       aria-hidden="true"
       data-mood={mood}
-      className={`ctxa mt-auto flex justify-center pt-4 pb-2 select-none ${className ?? ""}`}
+      className={`ctxa flex justify-center pt-4 pb-2 select-none ${className ?? ""}`}
       style={cycle ? ({ "--ctxa-cycle": `${cycle}s` } as CSSProperties) : undefined}
     >
       <style>{BASE_STYLES + styles}</style>

@@ -6,7 +6,7 @@ vi.mock("@supabase/ssr", () => ({
   createServerClient: vi.fn(() => ({ auth: { getClaims } })),
 }));
 
-import { proxy } from "./proxy";
+import { config, proxy } from "./proxy";
 import { decodeSessionUser, SESSION_USER_HEADER } from "@/lib/auth/session-header";
 
 const forwarded = (response: Response): string | null =>
@@ -40,5 +40,21 @@ describe("proxy", () => {
     });
     const response = await proxy(forged);
     expect(forwarded(response)).toBeNull();
+  });
+});
+
+describe("proxy matcher", () => {
+  const runs = (path: string): boolean => config.matcher.some((m) => new RegExp(`^${m}$`).test(path));
+
+  it("runs on every route a page or action can answer, whatever it ends in", () => {
+    for (const path of ["/portal", "/portal/plans/x.png", "/trips/abc.jpg", "/api/sports/assistant", "/news/f1/1.webp"]) {
+      expect(runs(path), path).toBe(true);
+    }
+  });
+
+  it("skips Next's assets and the files in /public", () => {
+    for (const path of ["/_next/static/a.js", "/images/landing/a.png", "/f1/teams/x.png", "/favicon-dark.svg"]) {
+      expect(runs(path), path).toBe(false);
+    }
   });
 });

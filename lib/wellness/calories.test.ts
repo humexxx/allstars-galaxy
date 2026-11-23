@@ -50,6 +50,23 @@ describe("calorie maths", () => {
   });
 
   it("never sets a deficit below the floor, and says so", () => {
+    const r = calculateCalories({
+      sex: "female",
+      age: 30,
+      heightCm: 160,
+      weightKg: 55,
+      activity: "sedentary",
+      goal: "lose",
+      paceKgPerWeek: 0.75,
+    });
+    expect(r.maintenance).toBeGreaterThan(1200);
+    expect(r.target).toBe(1200);
+    expect(r.clamped).toBe(true);
+    expect(r.weeklyChangeKg).toBeGreaterThan(-0.75);
+    expect(r.weeklyChangeKg).toBeLessThan(0);
+  });
+
+  it("never turns a deficit into a surplus when maintenance is under the floor", () => {
     const small: CalorieInput = {
       sex: "female",
       age: 60,
@@ -60,13 +77,10 @@ describe("calorie maths", () => {
       paceKgPerWeek: 0.75,
     };
     const r = calculateCalories(small);
-    expect(r.target).toBe(1200);
-    expect(r.floor).toBe(1200);
+    expect(r.maintenance).toBeLessThan(1200);
+    expect(r.target).toBe(r.maintenance);
     expect(r.clamped).toBe(true);
-    expect(r.weeklyChangeKg).toBeGreaterThan(-0.75);
-
-    const male = calculateCalories({ ...small, sex: "male" });
-    expect(male.target).toBeGreaterThanOrEqual(1500);
+    expect(r.weeklyChangeKg).toBe(0);
   });
 
   it("leaves maintaining and gaining alone even under the floor", () => {

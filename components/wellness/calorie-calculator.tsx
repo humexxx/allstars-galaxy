@@ -124,20 +124,28 @@ export function CalorieCalculator(): React.ReactElement {
     if (next !== "metric" && next !== "imperial") return;
     const v = getValues();
     if (next === v.units) return;
+    // Each side is converted only when it no longer says what the other
+    // does: going lb and back must not round 84 kg into 83.9.
+    const cm = parseNumber(v.heightCm);
+    const kg = parseNumber(v.weightKg);
+    const ft = parseNumber(v.heightFt);
+    const inch = parseNumber(v.heightIn) ?? 0;
+    const lb = parseNumber(v.weightLb);
+    const sameHeight = cm !== null && ft !== null && (() => {
+      const shown = cmToFeetInches(cm);
+      return shown.feet === ft && shown.inches === inch;
+    })();
+    const sameWeight = kg !== null && lb !== null && Math.round(kgToLb(kg)) === lb;
     if (next === "imperial") {
-      const cm = parseNumber(v.heightCm);
-      const kg = parseNumber(v.weightKg);
-      if (cm) {
+      if (cm && !sameHeight) {
         const { feet, inches } = cmToFeetInches(cm);
         setValue("heightFt", String(feet));
         setValue("heightIn", String(inches));
       }
-      if (kg) setValue("weightLb", String(Math.round(kgToLb(kg))));
+      if (kg && !sameWeight) setValue("weightLb", String(Math.round(kgToLb(kg))));
     } else {
-      const ft = parseNumber(v.heightFt);
-      const lb = parseNumber(v.weightLb);
-      if (ft) setValue("heightCm", String(Math.round(feetInchesToCm(ft, parseNumber(v.heightIn) ?? 0))));
-      if (lb) setValue("weightKg", String(one(lbToKg(lb))));
+      if (ft && !sameHeight) setValue("heightCm", String(Math.round(feetInchesToCm(ft, inch))));
+      if (lb && !sameWeight) setValue("weightKg", String(one(lbToKg(lb))));
     }
     setValue("units", next, { shouldValidate: false });
   };
@@ -435,7 +443,7 @@ function ResultCard({
           {result.clamped && (
             <Alert variant="warning">
               <ShieldAlert aria-hidden="true" />
-              <AlertTitle>Raised to the safe floor</AlertTitle>
+              <AlertTitle>{result.weeklyChangeKg < 0 ? "Raised to the safe floor" : "No safe deficit"}</AlertTitle>
               <AlertDescription>
                 {result.weeklyChangeKg < 0
                   ? `Losing ${metric ? `${input.paceKgPerWeek} kg` : `${one(kgToLb(input.paceKgPerWeek))} lb`} a week would mean ${kcal(result.maintenance + result.dailyAdjustment)} kcal, under the ${kcal(result.floor)} kcal a day that is the usual minimum for ${input.sex === "male" ? "men" : "women"} without a doctor's supervision. A slower pace or more activity gets you there safely.`
@@ -482,7 +490,12 @@ function ResultCard({
               {input.goal === "maintain"
                 ? "Maintaining eats exactly that."
                 : `A kilo of body weight is about ${kcal(KCAL_PER_KG)} kcal, so ${input.paceKgPerWeek} kg a week is ${kcal(Math.abs(result.dailyAdjustment))} kcal a day ${input.goal === "lose" ? "less" : "more"}`}
-              {input.goal !== "maintain" && (result.clamped ? `, held at the ${kcal(CALORIE_FLOOR[input.sex])} kcal floor.` : ".")}
+              {input.goal !== "maintain" &&
+                (!result.clamped
+                  ? "."
+                  : result.target < result.floor
+                    ? `, held at maintenance: it is already under the ${kcal(CALORIE_FLOOR[input.sex])} kcal floor.`
+                    : `, held at the ${kcal(CALORIE_FLOOR[input.sex])} kcal floor.`)}
             </Step>
             <Step title="Split into macros">
               Protein {PROTEIN_G_PER_KG} g per kg ({proteinG} g), fat {FAT_SHARE * 100}% of the calories ({fatG} g), and

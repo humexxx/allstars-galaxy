@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.23.0](https://github.com/humexxx/allstars-galaxy/compare/v0.22.0...v0.23.0) (2026-11-23)
+
+
+### Features
+
+* **portal:** backdrop grid, whole chart lines, wellness calories and CONCACAF cups ([20d6406](https://github.com/humexxx/allstars-galaxy/commit/20d64065e736866aaed833edc2ba746e49fbc4f5))
+* **portal:** backdrop grid, whole chart lines, wellness, CONCACAF cups, faster pages ([98aa747](https://github.com/humexxx/allstars-galaxy/commit/98aa747f5b7533a5abe7a7ad0c65d2fef6677e35))
+* **portal:** backdrop grid, whole chart lines, wellness, CONCACAF cups, faster pages ([d0b59b6](https://github.com/humexxx/allstars-galaxy/commit/d0b59b6124683a8c6a12a30fc4fb3e0747f3095b))
+
+
+### Bug Fixes
+
+* **auth:** run the proxy on every dynamic route so a forged session header never survives ([e4dddbf](https://github.com/humexxx/allstars-galaxy/commit/e4dddbf72b989557434435684806aa740ec2870d))
+
+
+### Performance
+
+* **auth:** verify the session once per request and read role and modules together ([ea7b61d](https://github.com/humexxx/allstars-galaxy/commit/ea7b61db8fe19ab33793e3b28540750f7808a8b0))
+
 ## [0.22.0](https://github.com/humexxx/allstars-galaxy/compare/v0.21.2...v0.22.0) (2026-11-23)
 
 
